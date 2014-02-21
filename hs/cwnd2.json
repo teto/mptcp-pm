@@ -1,0 +1,34 @@
+{
+	"name": "duo",
+	"sender": {
+		"snd_buffer": 40,
+		"capabilities": ["NR-SACK"]
+	},
+	"receiver": {
+		"rcv_buffer": 40,
+		"capabilities": ["NR-SACK"]
+	},
+	"capabilities": ["NR-SACK"],
+	"subflows": {
+		"a":
+		{
+			"cwnd": 20,
+			"mss": 1,
+			"var": 10,
+			"fowd": 10,
+			"bowd": 10,
+			"loss": 0.05,
+			"contribution": 0.5
+		},
+		"b":
+		{
+			"cwnd": 20,
+			"mss": 1,
+			"var": 10,
+			"fowd": 20,
+			"bowd": 20,
+			"loss": 0.05,
+			"contribution": 0.5
+		}
+	}
+}

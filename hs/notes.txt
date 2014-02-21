@@ -1,0 +1,18 @@
+Attributes = Map Int ByteString
+
+
+showMessageType 2 = "NLMSG_ERROR"
+
+
+HIE_HOOGLE_DATABASE
+CABAL_HELPER_DEBUG=1
+
+callCabal2nix in your Nix expression. This will invoke cabal2nix for you to create the Nix derivation automatically when Nix evaluates your Nix expression. This way you only need to keep your cabal file up to date; no need to manually regenerate Nix code.
+
+https://www.vividcortex.com/blog/2014/09/22/using-netlink-to-optimize-socket-statistics/
+
+How to debug:
+https://jvns.ca/blog/2017/09/03/debugging-netlink-requests/
+# create the network interface
+sudo ip link add  nlmon0 type nlmon
+sudo ip link set dev nlmon0 up

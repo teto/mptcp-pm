@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# TODO need to return sthg readable by haskell
+# correct number of cwnds
+
+# TODO echo
+if [ $# -ne 2 ]; then
+  echo "Usage: <filename> <subflowCount>"
+  exit 1
+fi
+
+val="error"
+
+
+SUBFLOW_0_CAP=30
+SUBFLOW_1_CAP=30
+SUBFLOW_COUNT="$2"
+case $SUBFLOW_COUNT in
+  0) val="passed 0 subflow"; exit 0;;
+  1) val="[$SUBFLOW_0_CAP]" ;;
+  2) val="[$SUBFLOW_0_CAP, $SUBFLOW_1_CAP]" ;;
+  *) val="does not support $SUBFLOW_COUNT count" ;;
+esac
+
+
+echo "$val"
+exit 0

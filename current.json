@@ -1,0 +1,40 @@
+{
+  "sender": {
+    "snd_buffer": 40,
+    "capabilities": {}
+  },
+  "name": "954168049",
+  "subflows": [
+    {
+      "dstIp": "202.214.86.51",
+      "snd_ssthresh": 3840,
+      "reordering": 768,
+      "rttvar": 21760,
+      "rmem": 69120,
+      "fowd": 944128,
+      "wmem": 0,
+      "rtt": 1888256,
+      "cc": "reno",
+      "snd_cwnd": 7680,
+      "srcIp": "192.168.0.128",
+      "bowd": 944128,
+      "rto": 53248000
+    },
+    {
+      "dstIp": "202.214.86.51",
+      "snd_ssthresh": 36352,
+      "reordering": 768,
+      "rttvar": 25600,
+      "rmem": 69120,
+      "fowd": 959872,
+      "wmem": 0,
+      "rtt": 1919744,
+      "cc": "reno",
+      "snd_cwnd": 7680,
+      "srcIp": "192.168.0.130",
+      "bowd": 959872,
+      "rto": 53248000
+    }
+  ],
+  "capabilities": {}
+}

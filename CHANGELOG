@@ -1,0 +1,13 @@
+0.0.3-dev:
+- add --filter flag to filter connections from a json file
+- add a --log-level flag
+
+0.0.2:
+- saves to .json (--out argument)
+- accepts path to run a 3rd-party program (--optimizer)
+- can filter connections
+- addition of 
+
+0.0.1:
+- addition of 100s of bugs
+- will mess up your mind
