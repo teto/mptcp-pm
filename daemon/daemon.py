@@ -25,28 +25,20 @@ logger.addHandler( handler )
 
 # PATH_TOWARDS_PROGRAM = "/home/teto/lig/process_lig_output.sh"
 
-ELC_REQUEST_RLOCS_FOR_EID= 0
-ELC_RESULTS =1
-ELC_SET_MAP_RESOLVER =2
-ELC_MAX=3
+MPTCP_GENL_EV_GRP_NAME = "mptcp_events"
+MPTCP_GENL_CMD_GRP_NAME  = "mptcp_commands"
+# MPTCP_GENL_VER		0x1
 
 
 
 LIG_GENL_VERSION=1
 LIG_GROUP_NAME	="lig_daemons"
-LIG_FAMILY_NAME	="LIG_FAMILY"
+# MPTCP_GENL_NAME		"mptcp"
+MPTCP_FAMILY_NAME	= "mptcp"
 
 
 
-# typedef enum {
-ELA_RLOCS_NUMBER = 1 #	/* number of rlocs u8 */
-ELA_MPTCP_TOKEN = 2 # to be able to retrieve correct socket */
-ELA_EID=3 #= an IP. Only v4 supported as an u32 */
-ELA_MAX=4 #
-
-
-
-logger.debug("Starting LIG DAEMON\n");
+logger.debug("Starting PM DAEMON\n");
 # print("level" , logging.getLevelName( logger.getEffectiveLevel() ) )
 
 
@@ -62,12 +54,10 @@ class LigDaemon:
 		# nl.nl_socket_drop_membership
 		pass
 
-	def __init__(self,lig_program, mapresolver=None,simulate=None):
+	def __init__(self, simulate=None):
 		self.done = 1;
 		# by default, should be possible to override
-		self.mapresolver 	= mapresolver or "153.16.49.112";
 		self.simulate 		= simulate
-		self.lig_program 	= lig_program
 
 
 		# TODO replace by Socket
@@ -80,16 +70,11 @@ class LigDaemon:
 		# allocates sockets
 		self.sk = nl.nl_socket_alloc_cb(tx_cb)
 
-
-
-
 		# set callback handers
 		# last parameter represents arguments to pass
 		logger.info("Setting callback functions")
 
 		# nl.py_nl_cb_err(self.rx_cb, nl.NL_CB_CUSTOM, error_handler, self);
-
-
 		# nl_cb_set( callback_set, type, kind, function,args )
 		nl.py_nl_cb_set(self.rx_cb, nl.NL_CB_FINISH, nl.NL_CB_VERBOSE, finish_handler, self);
 		nl.py_nl_cb_set(self.rx_cb, nl.NL_CB_ACK, nl.NL_CB_VERBOSE, ack_handler, self);
@@ -102,39 +87,35 @@ class LigDaemon:
 
 		# establish connection
 		genl.genl_connect(self.sk)
-		self.family_id = genl.genl_ctrl_resolve(self.sk, LIG_FAMILY_NAME)
+		self.family_id = genl.genl_ctrl_resolve(self.sk, MPTCP_FAMILY_NAME)
 
 		# register to the multicast group
 		# print( dir( sys.modules["netlink.genl.capi"]) )
 		# print( dir( sys.modules["netlink.capi"]) )
-		logger.info("family %s registered with number %d"%(LIG_FAMILY_NAME, self.family_id));
+		logger.info("family %s registered with number %d"%(MPTCP_FAMILY_NAME, self.family_id));
 
-		self.group_id = genl.genl_ctrl_resolve_grp (self.sk, LIG_FAMILY_NAME, LIG_GROUP_NAME);
-		if self.group_id  < 0 :
-			# should log it
-			logger.error("Could not find group group %s. Is the adequate module loaded ?"%LIG_FAMILY_NAME)
-			exit(1)
 
-		logger.info("Group id found: %d" % self.group_id);
-		logger.info("Using mapresolver %s"%self.mapresolver)
+                for grp_name in [ MPTCP_GENL_EV_GRP_NAME, MPTCP_GENL_CMD_GRP_NAME ]:
+                    group_id = genl.genl_ctrl_resolve_grp (self.sk, MPTCP_FAMILY_NAME, grp_name);
+                    if group_id  < 0 :
+                        logger.error("Could not find group %s. Is the adequate module loaded ?" grp_name)
+                        exit(1)
+
+                    logger.info("Group id found: %d" % group_id);
+                    logger.info("Using mapresolver %s" % self.mapresolver)
+                    ret = nl.nl_socket_add_membership(self.sk, group_id);
+
+                    if ret == 0:
+                        logger.info("Registration successful")
+                    else:
+                        logger.error("Could not register to group")
+                        exit(1)
+
 
 		if self.simulate:
-			logger.info("Simulation mode enabled %d"%self.simulate)
+                    logger.info("Simulation mode enabled %d"%self.simulate)
 		else:
-			logger.info("Real mode enabled")
-
-
-
-
-		ret = nl.nl_socket_add_membership(self.sk, self.group_id);
-
-		if ret == 0:
-			logger.info("Registration successful")
-		else:
-			logger.error("Could not register to group")
-			exit(1)
-			
-
+                    logger.info("Real mode enabled")
 
 
 	# send answer via netlink 
@@ -145,14 +126,14 @@ class LigDaemon:
 
 		# returns void*
 		genl.genlmsg_put(msg,
-						0, # port
-						0, # seq nb
-						self.family_id, # family_id
-						0, # length of user header
-						0, # optional flags
-						ELC_RESULTS, 	 # cmd
-						LIG_GENL_VERSION # version
-						)
+                    0, # port
+                    0, # seq nb
+                    self.family_id, # family_id
+                    0, # length of user header
+                    0, # optional flags
+                    ELC_RESULTS, 	 # cmd
+                    LIG_GENL_VERSION # version
+                )
 
 		nl.nla_put_u32(msg, ELA_RLOCS_NUMBER, nb_of_rlocs );
 		nl.nla_put_u32(msg, ELA_MPTCP_TOKEN , token );
@@ -171,36 +152,34 @@ class LigDaemon:
 		err = 0
 		# cbd.done > 0 and not err < 0
 		while True:
-			# expects handle / cb configuration
-			# see nl.c:965
-			err = nl.nl_recvmsgs(self.sk, self.rx_cb)
-			# err = nl.nl_recvmsgs_default(self.sk)
-			if err < 0:
-				logger.error( "Error for nl_recvmsgs: %d: %s"% (err, nl.nl_geterror(err)) )
-				break;
+                    # expects handle / cb configuration
+                    # see nl.c:965
+                    err = nl.nl_recvmsgs(self.sk, self.rx_cb)
+                    # err = nl.nl_recvmsgs_default(self.sk)
+                    if err < 0:
+                        logger.error( "Error for nl_recvmsgs: %d: %s"% (err, nl.nl_geterror(err)) )
+                        break;
 
 
-	def retrieve_number_of_rlocs(self,eid):
+	#def retrieve_number_of_rlocs(self,eid):
 
-		print("retrieve_number_of_rlocs")
-		# if in simulation mode, always return the same answer
-		if self.simulate:
-			logger.info("Simulation mode returning %d for eid %s"%(self.simulate, eid) )
-			return self.simulate
+	#	print("retrieve_number_of_rlocs")
+	#	# if in simulation mode, always return the same answer
+	#	if self.simulate:
+	#		logger.info("Simulation mode returning %d for eid %s"%(self.simulate, eid) )
+	#		return self.simulate
 
-
-
-		try:
-			#number_of_rlocs=$(lig -m $mapresolver $eid 2>&1 | grep -c up)
-			#PATH_TOWARDS_PROGRAM
-			cmd= self.lig_program + " -m " + self.mapresolver + eid +" 2>&1" + "| grep -c up" 
-			# args = [ self.lig_program,"-m", self.mapresolver, eid , "2>&1" ]
-			output = subprocess.check_output( cmd , shell=True);
-			print( "Result: ", output.decode() )
-			return int( output.decode() );
-		except  subprocess.CalledProcessError as e:
-			logger.error("Could not retrieve the correct number of rlocs. Return code: %d"%e.returncode)
-			return -1
+	#	try:
+	#		#number_of_rlocs=$(lig -m $mapresolver $eid 2>&1 | grep -c up)
+	#		#PATH_TOWARDS_PROGRAM
+	#		cmd= self.lig_program + " -m " + self.mapresolver + eid +" 2>&1" + "| grep -c up" 
+	#		# args = [ self.lig_program,"-m", self.mapresolver, eid , "2>&1" ]
+	#		output = subprocess.check_output( cmd , shell=True);
+	#		print( "Result: ", output.decode() )
+	#		return int( output.decode() );
+	#	except  subprocess.CalledProcessError as e:
+	#		logger.error("Could not retrieve the correct number of rlocs. Return code: %d"%e.returncode)
+	#		return -1
 
 
 	def handle(self, m):
