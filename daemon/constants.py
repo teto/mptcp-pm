@@ -89,7 +89,7 @@ from enum import IntEnum, auto
 #      Check if this token is linked to an existing socket.
 
 # EVENT and commands
-class MptcpCommands(IntEnum):
+class Commands(IntEnum):
     MPTCP_CMD_UNSPEC = 0
     MPTCP_EVENT_CREATED = 1
     MPTCP_EVENT_ESTABLISHED = auto()
@@ -122,23 +122,23 @@ class MptcpCommands(IntEnum):
 
 # ATTR types defined for MPTCP
 class MptcpAttr(IntEnum):
-        MPTCP_ATTR_UNSPEC = 0,
+    MPTCP_ATTR_UNSPEC = 0,
 
-        MPTCP_ATTR_TOKEN = auto()       # u32 */
-        MPTCP_ATTR_FAMILY = auto()      # u16 */
-        MPTCP_ATTR_LOC_ID = auto()      # u8 */
-        MPTCP_ATTR_REM_ID = auto()      # u8 */
-        MPTCP_ATTR_SADDR4 = auto()      # u32 */
-        MPTCP_ATTR_SADDR6 = auto()      # struct in6_addr */
-        MPTCP_ATTR_DADDR4 = auto()      # u32 */
-        MPTCP_ATTR_DADDR6 = auto()      # struct in6_addr */
-        MPTCP_ATTR_SPORT = auto()       # u16 */
-        MPTCP_ATTR_DPORT = auto()       # u16 */
-        MPTCP_ATTR_BACKUP = auto()      # u8 */
-        MPTCP_ATTR_ERROR = auto()       # u8 */
-        MPTCP_ATTR_FLAGS = auto()       # u16 */
-        MPTCP_ATTR_TIMEOUT = auto()     # u32 */
-        MPTCP_ATTR_IF_IDX = auto()      # s32 */
+    MPTCP_ATTR_TOKEN = auto()       # u32 */
+    MPTCP_ATTR_FAMILY = auto()      # u16 */
+    MPTCP_ATTR_LOC_ID = auto()      # u8 */
+    MPTCP_ATTR_REM_ID = auto()      # u8 */
+    MPTCP_ATTR_SADDR4 = auto()      # u32 */
+    MPTCP_ATTR_SADDR6 = auto()      # struct in6_addr */
+    MPTCP_ATTR_DADDR4 = auto()      # u32 */
+    MPTCP_ATTR_DADDR6 = auto()      # struct in6_addr */
+    MPTCP_ATTR_SPORT = auto()       # u16 */
+    MPTCP_ATTR_DPORT = auto()       # u16 */
+    MPTCP_ATTR_BACKUP = auto()      # u8 */
+    MPTCP_ATTR_ERROR = auto()       # u8 */
+    MPTCP_ATTR_FLAGS = auto()       # u16 */
+    MPTCP_ATTR_TIMEOUT = auto()     # u32 */
+    MPTCP_ATTR_IF_IDX = auto()      # s32 */
 
         # remove
         # __MPTCP_ATTR_AFTER_LAST

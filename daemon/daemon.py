@@ -10,6 +10,7 @@ import socket
 import subprocess
 import signal
 import binascii
+from constants import Commands, MptcpAttr
 
 logger = logging.getLogger( __name__ )
 logger.setLevel( logging.DEBUG )
@@ -24,7 +25,7 @@ logger.addHandler( handler )
 
 MPTCP_GENL_EV_GRP_NAME = "mptcp_events"
 MPTCP_GENL_CMD_GRP_NAME  = "mptcp_commands"
-MPTCP_GENL_VER       = 1
+MPTCP_GENL_VERSION       = 1
 
 MPTCP_FAMILY_NAME   = MPTCP_GENL_NAME = "mptcp"
 
@@ -32,8 +33,11 @@ logger.debug("Starting MPTCP PM DAEMON\n");
 # print("level" , logging.getLevelName( logger.getEffectiveLevel() ) )
 
 
-# TODO
+# command/event
+# dispatcher = {
+# }
 
+# TODO
 def sigint_handler(signum, frame):
     print( 'Stop pressing the CTRL+C!' )
 
@@ -117,22 +121,26 @@ class PathManager:
         # and ask for its updates in order to 
         interval in ms or number of times of smallest rtt ?
         """
-        logger.info("Sending rlocs nb of '%d' for token %d with seq nb %d"%(nb_of_rlocs,token,seq_nb))
+        logger.info("Monitoring connection with token '%d' " % (token,))
+
         msg = nl.nlmsg_alloc()
 
-        # returns void*
-        genl.genlmsg_put(msg,
-                    0, # port
-                    0, # seq nb
-                    self.family_id, # family_id
-                    0, # length of user header
-                    0, # optional flags
-                    ELC_RESULTS,     # cmd
-                    MPTCP_GENL_VERSION # version
-                )
+        interval = min_interval # min()
 
-        nl.nla_put_u32(msg, ELA_RLOCS_NUMBER, nb_of_rlocs );
-        nl.nla_put_u32(msg, ELA_MPTCP_TOKEN , token );
+        # returns void*
+        genl.genlmsg_put(
+            msg,
+            0, # port
+            0, # seq nb
+            self.family_id, # family_id
+            0, # length of user header
+            0, # optional flags
+            Commands.MPTCP_CMD_MONITOR, # cmd
+            MPTCP_GENL_VERSION # version
+        )
+
+        nl.nla_put_u32(msg, MptcpAttr.MPTCP_ATTR_TOKEN, token );
+        nl.nla_put_u32(msg, MptcpAttr.MPTCP_ATTR_TIMEOUT, interval);
 
         err = nl.nl_send_auto_complete(self.sk, msg);
         if err < 0:
@@ -195,7 +203,7 @@ class PathManager:
             # TODO loop
             # TODO check which one maps to a RST event
             # TODO MPTCP_EVENT_SUB_CLOSED / MPTCP_EVENT_REMOVED / MPTCP_EVENT_CLOSED
-            if genlhdr.cmd == MPTCP_EVENT_ESTABLISHED:
+            if genlhdr.cmd == Commands.MPTCP_EVENT_ESTABLISHED:
                 logger.info(" received establisehd event")
 
                 # attrs = None
@@ -204,32 +212,29 @@ class PathManager:
                 errorCode, attrs = genl.py_genlmsg_parse(
                     nlmsghdr, 
                     0, # will be returned as an attribute
-                    ELA_MAX, 
+                    # max number of attributes we support
+                    # http://lists.infradead.org/pipermail/libnl/2013-July/001022.html
+                    200, 
                     None
                     )
 
-                if err < 0:
+                if errorCode < 0:
                     logger.error("An error happened while parsing attributes")
                     return nl.NL_STOP;
 
-
                 logger.info("Looking for ELA")
-                if ELA_EID in attrs:
-                    print ("hello", attrs[ELA_EID])
-                    eid     = nl.nla_get_u32(attrs[ELA_EID]);
-                    print ("eid", eid)
-
-                    print ("token", attrs[ELA_MPTCP_TOKEN])
-                    token   = nl.nla_get_u32(attrs[ELA_MPTCP_TOKEN]);
-                    print("token", token)
+                if MptcpAttr.MPTCP_ATTR_TOKEN in attrs:
+                    print ("hello", attrs[MptcpAttr.MPTCP_ATTR_TOKEN])
+                    token   = nl.nla_get_u32(attrs[MptcpAttr.MPTCP_ATTR_TOKEN])
+                    print ("token", token)
 
                     # print("Requested EID ",eid, " for token ",binascii.hexlify( token ))
-
                     # I => unsigned int
-                    packed_value = struct.pack('I', eid)
-                    addr = socket.inet_ntoa(packed_value)
+                    # packed_value = struct.pack('I', eid)
+                    # addr = socket.inet_ntoa(packed_value)
 
-                    nb = self.retrieve_number_of_rlocs( addr )
+                    nb = 1
+                    # nb = self.retrieve_number_of_rlocs( addr )
                     if nb < 0:
                         logger.warning("An error happened while retrieveing nb of rlocs")
                         return nl.NL_STOP
@@ -252,9 +257,10 @@ class PathManager:
             return nl.NL_SKIP
 
         except Exception as e:
-            (t,v,tb) = sys.exc_info()
-            print( "test", v.message,e )
-            traceback.print_tb(tb)
+            # (t,v,tb) = sys.exc_info()
+            # print( "test", v.message, e )
+            # traceback.print_tb(tb)
+            logging.exception("Error ")
 
             return nl.NL_SKIP
 
@@ -291,7 +297,7 @@ def msg_handler(m, arg):
 ###############################
 ## TO TEST LIBNL (remove later)
 ###############################
-msg_handler = "hello world"
+# msg_handler = "hello world"
 ack_handler = None
 
 if __name__ == '__main__':
@@ -316,13 +322,10 @@ if __name__ == '__main__':
     try:
         # could pass mr, or simulate mode
         daemon = PathManager(
-                lig_program="/home/teto/lig/lig" ,
-                mapresolver=args.mapresolver, 
-                simulate=(args.number_of_subflows or None) 
-                )
+            simulate=(args.number_of_subflows or None) 
+        )
 
         daemon.run();
-
 
     except Exception as e:
     # (type, value, traceback)
