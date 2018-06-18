@@ -1,4 +1,5 @@
-#!/usr/bin/env python
+#!/usr/bin/env nix-shell
+#!nix-shell shell-netlink.nix -i python
 import sys
 import netlink.capi as nl
 import netlink.genl.capi as genl
