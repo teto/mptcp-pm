@@ -45,3 +45,6 @@ Optional: In case you modify the python code without modifying the bindings, you
 The "--simulate" flag is used to bypass the default system which is described in our paper (lig retrieves the number of LISP paths)
 
 
+### Haskell experiment
+
+nix-shell shell-haskell.nix

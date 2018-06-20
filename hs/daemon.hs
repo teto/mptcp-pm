@@ -1,5 +1,5 @@
 -- !/usr/bin/env nix-shell
--- !nix-shell shell-haskell.nix -i ghc
+-- !nix-shell ../shell-haskell.nix -i ghc
 module Main where
 
 import Prelude hiding (length, concat)
