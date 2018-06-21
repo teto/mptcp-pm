@@ -4,31 +4,57 @@ module Main where
 
 import Prelude hiding (length, concat)
 
-import Control.Applicative ((<$>))
-import Control.Exception (throwIO)
-import Data.ByteString (ByteString, length, unpack, pack, concat)
-import Data.Bits ((.|.))
-import Data.Map (fromList, empty)
-import Data.Char (ord)
+-- import Control.Applicative ((<$>))
+-- import Control.Exception (throwIO)
+-- import Data.ByteString (ByteString, length, unpack, pack, concat)
+-- import Data.Bits ((.|.))
+-- import Data.Map (fromList, empty)
+-- import Data.Char (ord)
 
-import System.Linux.Netlink.Internal
+import System.Environment (getArgs)
 
+import System.Linux.Netlink hiding (makeSocket)
+import System.Linux.Netlink.GeNetlink (makeSocket)
+import System.Linux.Netlink.Constants
+
+mptcp_genl_ev_grp_name = "mptcp_events"
+
+-- MPTCP_GENL_CMD_GRP_NAME  = "mptcp_commands"
+-- MPTCP_GENL_VERSION       = 1
+-- MPTCP_FAMILY_NAME   = MPTCP_GENL_NAME = "mptcp"
+
+-- NetlinkSocket
+-- makeSocketGeneric
+-- let active = take 1 args == ["--active"] 
+
+mptcpNetlink :: IO NetlinkSocket
+mptcpNetlink = makeSocket >>= \sock ->
+                  joinMulticastGroup sock mptcp_genl_ev_grp_name
+                  >> pure sock
+
+-- s'inspirer de
+-- https://github.com/vdorr/linux-live-netinfo/blob/24ead3dd84d6847483aed206ec4b0e001bfade02/System/Linux/NetInfo.hs
+main :: IO ()
 main = do
-    sock <- makeSocket
+  -- args <- getArgs
+  sock <- mptcpNetlink
+  putStrLn "shel"
 
-    let flags   = foldr (.|.) 0 [fNLM_F_REQUEST]
-        header  = Header eRTM_GETLINK flags 42 0
-        message = LinkMsg 0 2 0
-        attrs   = empty
-    iface <- queryOne sock (Packet header message attrs)
-    print (packetMessage iface)
-    let attrs = packetAttributes iface
-    print $ getLinkAddress attrs
-    print $ getLinkBroadcast attrs
-    print $ getLinkName attrs
-    print $ getLinkMTU attrs
-    print $ getLinkQDisc attrs
-    print $ getLinkTXQLen attrs
+    -- self.family_id = genl.genl_ctrl_resolve(self.sk, MPTCP_FAMILY_NAME)
 
-dumpNumeric :: ByteString -> IO ()
-dumpNumeric b = print $ unpack b
+    -- let flags   = foldr (.|.) 0 [fNLM_F_REQUEST]
+    --     header  = Header eRTM_GETLINK flags 42 0
+    --     message = LinkMsg 0 2 0
+    --     attrs   = empty
+    -- iface <- queryOne sock (Packet header message attrs)
+    -- print (packetMessage iface)
+    -- let attrs = packetAttributes iface
+    -- print $ getLinkAddress attrs
+    -- print $ getLinkBroadcast attrs
+    -- print $ getLinkName attrs
+    -- print $ getLinkMTU attrs
+    -- print $ getLinkQDisc attrs
+    -- print $ getLinkTXQLen attrs
+
+-- dumpNumeric :: ByteString -> IO ()
+-- dumpNumeric b = print $ unpack b
