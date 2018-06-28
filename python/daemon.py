@@ -95,7 +95,6 @@ class PathManager:
                 exit(1)
 
             logger.info("Group id found: %d" % group_id);
-            logger.info("Using mapresolver %s" % self.mapresolver)
             ret = nl.nl_socket_add_membership(self.sk, group_id);
 
             if ret == 0:
@@ -106,7 +105,7 @@ class PathManager:
 
 
         if self.simulate:
-            logger.info("Simulation mode enabled %d"%self.simulate)
+            logger.info("Simulation mode enabled %d" % self.simulate)
         else:
             logger.info("Real mode enabled")
 
@@ -173,7 +172,6 @@ class PathManager:
     #   if self.simulate:
     #       logger.info("Simulation mode returning %d for eid %s"%(self.simulate, eid) )
     #       return self.simulate
-
     #   try:
     #       #number_of_rlocs=$(lig -m $mapresolver $eid 2>&1 | grep -c up)
     #       #PATH_TOWARDS_PROGRAM
@@ -205,7 +203,7 @@ class PathManager:
             # TODO check which one maps to a RST event
             # TODO MPTCP_EVENT_SUB_CLOSED / MPTCP_EVENT_REMOVED / MPTCP_EVENT_CLOSED
             if genlhdr.cmd == Commands.MPTCP_EVENT_ESTABLISHED:
-                logger.info(" received establisehd event")
+                logger.info(" received established event")
 
                 # attrs = None
                 print("Message handler got called");
@@ -309,8 +307,8 @@ if __name__ == '__main__':
 
     # run tests
     parser = argparse.ArgumentParser(
-            description='Daemon listeling for mptcp netlink requests'
-            )
+        description='Daemon listeling for mptcp netlink requests'
+        )
 
     # parser.add_argument('mapresolver', nargs="?", default="153.16.49.112", #DEFAULT_MAPRESOLVER, 
             # help="Choose")
