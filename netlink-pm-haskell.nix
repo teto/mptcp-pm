@@ -5,6 +5,11 @@ mkDerivation {
   src = ./hs;
   isLibrary = false;
   isExecutable = true;
+  # libraryHaskellDepends = [ ];
   executableHaskellDepends = [ base netlink stack ];
+  # testHaskellDepends = [ ];
+  # homepage= 
+  # description
+  # license
   license = stdenv.lib.licenses.gpl3;
 }
