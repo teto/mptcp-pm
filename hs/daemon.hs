@@ -17,6 +17,9 @@ import System.Linux.Netlink hiding (makeSocket)
 import System.Linux.Netlink.GeNetlink (makeSocket)
 import System.Linux.Netlink.Constants
 
+import System.Linux.Netlink.GeNetlink.Control as C
+
+
 mptcp_genl_ev_grp_name = "mptcp_events"
 
 -- MPTCP_GENL_CMD_GRP_NAME  = "mptcp_commands"
@@ -28,7 +31,9 @@ mptcp_genl_ev_grp_name = "mptcp_events"
 -- let active = take 1 args == ["--active"] 
 
 mptcpNetlink :: IO NetlinkSocket
-mptcpNetlink = makeSocket >>= \sock ->
+mptcpNetlink = let family_id = getFamilyId mptcp_genl_ev_grp_name
+          in
+          makeSocket >>= \sock ->
                   joinMulticastGroup sock mptcp_genl_ev_grp_name
                   >> pure sock
 

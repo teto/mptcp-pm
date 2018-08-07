@@ -1,4 +1,6 @@
-{ mkDerivation, stack, base, netlink, stdenv }:
+{ mkDerivation, stack, base, netlink, stdenv
+, ghc-mod, hindent, hlint
+}:
 mkDerivation {
   pname = "netlink-pm";
   version = "1.0.0";
@@ -6,7 +8,15 @@ mkDerivation {
   isLibrary = false;
   isExecutable = true;
   # libraryHaskellDepends = [ ];
-  executableHaskellDepends = [ base netlink stack ];
+  executableHaskellDepends = [ base netlink 
+    # stack
+  ];
+
+  # 
+  buildDepends = [ ghc-mod 
+    # hindent 
+    hlint 
+  ];
   # testHaskellDepends = [ ];
   # homepage= 
   # description

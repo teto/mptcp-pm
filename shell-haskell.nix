@@ -13,8 +13,12 @@
 #   buildInputs = [ ghc ];
 #   shellHook = "eval $(egrep ^export ${ghc}/bin/ghc)";
 # }
+
+# cool link http://www.kuznero.com/posts/nixos/haskell-devexp-in-nixos.html
 let
   pkgs = import <nixpkgs> { };
+  drv = pkgs.haskellPackages.callPackage ./netlink-pm-haskell.nix { };
+
 in
-  { project1 = pkgs.haskellPackages.callPackage ./netlink-pm-haskell.nix { };
-  }
+
+  if pkgs.lib.inNixShell then drv.env else drv
