@@ -4,7 +4,7 @@ let
 
   inherit (nixpkgs) pkgs;
 
-  f = { mkDerivation, base, netlink, stdenv, ghc-mod, hlint, hdevtools }:
+  f = { mkDerivation, base, netlink, stdenv, ghc-mod, hlint, hdevtools, hasktags }:
       mkDerivation {
         pname = "netlink-pm";
         version = "1.0.0";
@@ -14,7 +14,8 @@ let
         # by default ghc-mod, hlint, and hdevtools
         # 
         # ghc-mod fait foirer la compilation
-        executableHaskellDepends = [ base netlink hlint hdevtools ];
+        executableHaskellDepends = [ base netlink hlint hdevtools 
+          (pkgs.haskell.lib.dontCheck hasktags) ];
         license = stdenv.lib.licenses.gpl3;
       };
 

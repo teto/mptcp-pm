@@ -20,7 +20,7 @@ import System.Linux.Netlink.Constants
 import System.Linux.Netlink.GeNetlink.Control as C
 
 
-mptcp_genl_ev_grp_name = "mptcp_events"
+mptcpGenlEvGrpName = "mptcp_events"
 
 -- MPTCP_GENL_CMD_GRP_NAME  = "mptcp_commands"
 -- MPTCP_GENL_VERSION       = 1
@@ -31,35 +31,13 @@ mptcp_genl_ev_grp_name = "mptcp_events"
 -- let active = take 1 args == ["--active"] 
 
 mptcpNetlink :: IO NetlinkSocket
-mptcpNetlink = let family_id = getFamilyId mptcp_genl_ev_grp_name
+mptcpNetlink = 
+  let family_id = getFamilyId mptcpGenlEvGrpName
           in
           makeSocket >>= \sock ->
-                  joinMulticastGroup sock mptcp_genl_ev_grp_name
+                  joinMulticastGroup sock mptcpGenlEvGrpName
                   >> pure sock
 
--- /**
---  * Resolve Generic Netlink family group name
---  * @arg sk		Generic Netlink socket
---  * @arg family_name	Name of Generic Netlink family
---  * @arg grp_name	Name of group to resolve
---  *
---  * Looks up the family object and resolves the group name to the numeric
---  * group identifier.
---  *
---  * @return Numeric group identifier or a negative error code.
---  */
--- int genl_ctrl_resolve_grp(struct nl_sock *sk, const char *family_name,
--- 			  const char *grp_name)
--- {
--- https://github.com/thom311/libnl/blob/17f0459c8d1891473c315315c0f5c25f38b24d6b/lib/genl/ctrl.c#L471
--- 	struct genl_family *family;
--- 	int err;
-
--- 	family = genl_ctrl_probe_by_name(sk, family_name);
--- 	if (family == NULL) {
--- 		err = -NLE_OBJ_NOTFOUND;
--- 		goto errout;
--- 	}
 
 -- 	err = genl_ctrl_grp_by_name(family, grp_name);
 -- 	genl_family_put(family);
