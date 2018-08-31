@@ -16,7 +16,7 @@ let
       # Don't enforce package's version constraints
       # bar = pkgs.haskell.lib.doJailbreak pkgs.haskellPackages.bar;
       
-      StateVar = pkgs.haskell.lib.doJailbreak pkgs.haskellPackages.StateVar;
+      # StateVar = pkgs.haskell.lib.doJailbreak pkgs.haskellPackages.StateVar;
 
       #
       # To discover more functions that can be used to modify haskell
@@ -39,12 +39,10 @@ let
 };
 in 
   #nix-shell -p 'haskell.packages.ghc821.ghcWithPackages (p: with p; [ghc-mod hlint (haskellPackages.developPackage { root = ./.; })])' -j4 --run 'zsh
-  # pkg
-  # or pkgs.haskellPackages.ghcWitHoogle
-  # pkgs.haskellPackages.ghcWitHoogle
-  # ghc861
-  pkgs.haskell.packages.ghc843.ghcWithPackages 
-  (p: with p; [ghc-mod hlint devPkg])
+  devPkg
+
+  # pkgs.haskell.packages.ghc843.ghcWithPackages 
+  # (p: with p; [ghc-mod hlint devPkg])
 
    # pkg.overrideAttrs(attr: {
    #   # add cabal ?
