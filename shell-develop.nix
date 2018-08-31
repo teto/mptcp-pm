@@ -39,10 +39,10 @@ let
 };
 in 
   #nix-shell -p 'haskell.packages.ghc821.ghcWithPackages (p: with p; [ghc-mod hlint (haskellPackages.developPackage { root = ./.; })])' -j4 --run 'zsh
-  devPkg
+  # devPkg
 
-  # pkgs.haskell.packages.ghc843.ghcWithPackages 
-  # (p: with p; [ghc-mod hlint devPkg])
+  pkgs.haskellPackages.ghcWithPackages 
+  (p: with p; [ghc-mod hlint devPkg])
 
    # pkg.overrideAttrs(attr: {
    #   # add cabal ?
