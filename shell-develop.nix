@@ -1,9 +1,5 @@
 
-# https://github.com/peti/nixpkgs/tree/haskell-updates
-# 6f916e5209155c89c273ac08a242c058a95404b0 seems to work well
-# "https://github.com/NixOS/nixpkgs/archive/<nixpkgs_commit_hash>.tar.gz"
 { pkgs ? import <nixpkgs> {} }: 
-# { pkgs ? import (builtins.fetchTarball "https://github.com/peti/nixpkgs/archive/6f916e5209155c89c273ac08a242c058a95404b0.tar.gz" ) {} }: 
 
 let 
   
@@ -15,10 +11,7 @@ let
       #
       # Don't enforce package's version constraints
       # bar = pkgs.haskell.lib.doJailbreak pkgs.haskellPackages.bar;
-      
       # StateVar = pkgs.haskell.lib.doJailbreak pkgs.haskellPackages.StateVar;
-
-      #
       # To discover more functions that can be used to modify haskell
       # packages, run "nix-repl", type "pkgs.haskell.lib.", then hit
       # <TAB> to get a tab-completed list of functions.
@@ -35,16 +28,11 @@ let
   #    #     sha256 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
   #    #   };
   #  };
-
+  returnShellEnv = false;
 };
 in 
-  #nix-shell -p 'haskell.packages.ghc821.ghcWithPackages (p: with p; [ghc-mod hlint (haskellPackages.developPackage { root = ./.; })])' -j4 --run 'zsh
-  # devPkg
-
-  pkgs.haskellPackages.ghcWithPackages 
-  (p: with p; [ghc-mod hlint devPkg])
-
-   # pkg.overrideAttrs(attr: {
-   #   # add cabal ?
-   #   buildInputs = [zlib];
-   # })
+  pkgs.haskellPackages.ghcWithPackages (p: with p; [
+    hdevtools hlint 
+    netlink
+    # devPkg.env 
+  ])
