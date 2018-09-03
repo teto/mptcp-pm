@@ -1,4 +1,3 @@
-
 { pkgs ? import <nixpkgs> {} }: 
 
 let 
@@ -30,9 +29,19 @@ let
   #  };
   returnShellEnv = false;
 };
-in 
-  pkgs.haskellPackages.ghcWithPackages (p: with p; [
+  ghcEnv = pkgs.haskellPackages.ghcWithPackages (p: with p; [
     hdevtools hlint 
     netlink
     # devPkg.env 
-  ])
+    ]);
+in 
+  pkgs.mkShell {
+    
+    buildInputs = [ 
+      ghcEnv
+  ];
+
+  shellHook= ''
+
+    '';
+}

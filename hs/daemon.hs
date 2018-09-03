@@ -96,11 +96,13 @@ opts = info (sample <**> helper)
 
 -- inspired by makeNL80211Socket Create a 'NL80211Socket' this opens a genetlink 
 -- socket and gets the family id
-makeMptcpSocket :: IO MptcpSocket
+-- makeMptcpSocket :: IO MptcpSocket
+makeMptcpSocket :: IO (NetlinkSocket, Word16)
 makeMptcpSocket = do
   sock <- makeSocket
   fid <- getFamilyId sock mptcp_genl_name
-  return $NLS sock fid
+  -- return $NLS sock fid
+  return ( sock, fid)
 
 
 -- 	err = genl_ctrl_grp_by_name(family, grp_name);
@@ -115,9 +117,10 @@ main :: IO ()
 main = do
   -- args <- getArgs
   options <- execParser opts
-  sock <- makeMptcpSocket
-  putStrLn "shel"
-
+  (sock, fid) <- makeMptcpSocket
+  putStrLn "socket created" >> print fid
+  (mid, mcastGroup ) <- getFamilyWithMulticasts sock mptcp_genl_ev_grp_name
+  putStrLn "finished"
     -- self.family_id = genl.genl_ctrl_resolve(self.sk, MPTCP_FAMILY_NAME)
 
     -- let flags   = foldr (.|.) 0 [fNLM_F_REQUEST]
