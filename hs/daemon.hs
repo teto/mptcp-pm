@@ -39,10 +39,10 @@ data MptcpSocket = NLS NetlinkSocket Word16
 
 
 -- en fait y a 2 multicast groups
-mptcp_genl_ev_grp_name = "mptcp_events"
-mptcp_genl_cmd_grp_name = "mptcp_commands"
+mptcpGenlEvGrpName = "mptcp_events"
+mptcpGenlCmdGrpName = "mptcp_commands"
 
-mptcp_genl_name="mptcp"
+mptcpGenlName="mptcp"
 
 data Sample = Sample
   { hello      :: String
@@ -100,7 +100,7 @@ opts = info (sample <**> helper)
 makeMptcpSocket :: IO (NetlinkSocket, Word16)
 makeMptcpSocket = do
   sock <- makeSocket
-  fid <- getFamilyId sock mptcp_genl_name
+  fid <- getFamilyId sock mptcpGenlName
   -- return $NLS sock fid
   return ( sock, fid)
 
@@ -119,7 +119,7 @@ main = do
   options <- execParser opts
   (sock, fid) <- makeMptcpSocket
   putStrLn "socket created" >> print fid
-  (mid, mcastGroup ) <- getFamilyWithMulticasts sock mptcp_genl_ev_grp_name
+  (mid, mcastGroup ) <- getFamilyWithMulticasts sock mptcpGenlEvGrpName
   putStrLn "finished"
     -- self.family_id = genl.genl_ctrl_resolve(self.sk, MPTCP_FAMILY_NAME)
 
