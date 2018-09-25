@@ -1,6 +1,7 @@
 mptcpnetlink
 ============
 
+
 Follow up of repository http://github.com/teto/mptcpnetlink:
 hosts 2 components that allow to control from userspace the MPTCP kernel (http://multipath-tcp.org) path management system:
 
@@ -48,3 +49,6 @@ The "--simulate" flag is used to bypass the default system which is described in
 ### Haskell experiment
 
 nix-shell shell-haskell.nix
+
+
+For now launch with nix-shell -p 'haskellPackages.ghcWithHoogle(p: with p; [netlink optparse-applicative])'
