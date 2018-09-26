@@ -56,5 +56,7 @@ https://jvns.ca/blog/2017/09/03/debugging-netlink-requests/
 
 nix-shell shell-haskell.nix
 
+You can test with
+$ wget http://www.amiusingmptcp.de/index.html -O /dev/null
 
 For now launch with nix-shell -p 'haskellPackages.ghcWithHoogle(p: with p; [netlink optparse-applicative])'

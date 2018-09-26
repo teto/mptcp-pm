@@ -16,26 +16,22 @@ import Prelude hiding (length, concat)
 import Options.Applicative
 import Data.Semigroup ((<>))
 
--- import Control.Applicative ((<$>))
--- import Control.Exception (throwIO)
 -- import Data.ByteString (ByteString, length, unpack, pack, concat)
--- import Data.Bits ((.|.))
--- import Data.Map (fromList, empty)
--- import Data.Char (ord)
 
 import System.Environment (getArgs)
 
 import System.Linux.Netlink hiding (makeSocket)
-import System.Linux.Netlink.GeNetlink (makeSocket)
-import System.Linux.Netlink.Constants
+import System.Linux.Netlink.GeNetlink (makeSocket, GenlPacket )
+-- import System.Linux.Netlink.Constants
+-- import System.Linux.Netlink.Utils
 
 import System.Linux.Netlink.GeNetlink.Control as C
-import Data.Word (Word32, Word16, Word8)
+import Data.Word (Word16, Word8)
 
 -- The Netlink socket with Family Id, so we don't need as many arguments
 -- everywhere
 -- |Wrapper for 'NetlinkSocket' we also need the family id for messages we construct
-data MptcpSocket = NLS NetlinkSocket Word16
+-- data MptcpSocket = NLS NetlinkSocket Word16
 
 
 data Command = MPTCP_CMD_ANNOUNCE | MPTCP_CMD_REMOVE | MPTCP_CMD_SUB_CREATE 
@@ -43,9 +39,12 @@ data Command = MPTCP_CMD_ANNOUNCE | MPTCP_CMD_REMOVE | MPTCP_CMD_SUB_CREATE
 
 -- en fait y a 2 multicast groups
 -- genl_multicast_group 
-mptcpGenlEvGrpName = "mptcp_events"
-mptcpGenlCmdGrpName = "mptcp_commands"
 
+mptcpGenlEvGrpName :: String
+mptcpGenlEvGrpName = "mptcp_events"
+mptcpGenlCmdGrpName :: String
+mptcpGenlCmdGrpName = "mptcp_commands"
+mptcpGenlName :: String
 mptcpGenlName="mptcp"
 
 data Sample = Sample
@@ -115,9 +114,39 @@ makeMptcpSocket = do
 -- errout:
 -- 	return err;
 
+
+inspectPacket :: GenlPacket NoData -> IO ()
+inspectPacket packet = do
+
+  putStrLn $show packet
+  -- return IO
+  -- case pack of
+  --   DoneMsg -> putStrLn "Done Msg"
+  --   System.Linux.Netlink.ErrorMsg -> error "error msg"
+  --   Packet -> putStrLn $ packetHeader pack
+
 -- CtrlAttrMcastGroup
+-- copied from utils/GenlInfo.hs
+doDumpLoop :: NetlinkSocket -> IO ()
+doDumpLoop sock = do
+  -- type GenlPacket a = Packet (GenlData a) 
+  -- with data GenlData A wrapper around GenlHeader
+  -- genlDataHeader
+  pack <- (recvOne sock :: IO [GenlPacket NoData])
+  -- ca me retourne un tas de paquet en fait ?
+  _ <- mapM inspectPacket  pack
+
+  -- putStrLn $show pack
+  doDumpLoop sock
 
 -- regarder dans query/joinMulticastGroup/recvOne
+-- doDumpLoop / dumpGeneric
+listenToEvents :: NetlinkSocket -> CtrlAttrMcastGroup -> IO ()
+listenToEvents sock group = do
+  -- joinMulticastGroup  returns IO ()
+  joinMulticastGroup sock (grpId group) 
+  doDumpLoop sock
+  putStrLn $ "Joined grp " ++ (grpName group)
 
 -- s'inspirer de
 -- https://github.com/vdorr/linux-live-netinfo/blob/24ead3dd84d6847483aed206ec4b0e001bfade02/System/Linux/NetInfo.hs
@@ -129,7 +158,19 @@ main = do
   -- (mid, mcastGroup ) <- getFamilyWithMulticasts sock mptcpGenlEvGrpName
   mcastGroups <- getMulticastGroups sock fid
 
-  map (\x -> joinMulticastGroup sock (grpId x))
+  -- listenToEvents sock 
+  -- case mcastGroups of
+  --   Just (_, grps) -> do
+  -- let gid = getMulticast grp mcastGroups
+  -- case gid of
+  --   Just x -> joinMulticastGroup sock x >> doDumpLoop sock
+  --   Nothing -> error "Could not find the specified multicast group"
+  --   -- Nothing -> error "Could not find the specified family"
+
+  -- case 
+  -- map (\x -> joinMulticastGroup sock (grpId x)) mcastGroups
+  -- mapM to ignore 
+  mapM (\x -> listenToEvents sock x) mcastGroups
   -- putStrLn $ " Groups: " ++ unwords ( map grpName mcastGroups)
   putStrLn "finished"
 
