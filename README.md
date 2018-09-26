@@ -46,6 +46,12 @@ Optional: In case you modify the python code without modifying the bindings, you
 The "--simulate" flag is used to bypass the default system which is described in our paper (lig retrieves the number of LISP paths)
 
 
+
+### How to debug netlink ?
+Run `genl ctrl list` to list
+http://0x90.at/post/netlink-debugging
+https://jvns.ca/blog/2017/09/03/debugging-netlink-requests/
+
 ### Haskell experiment
 
 nix-shell shell-haskell.nix

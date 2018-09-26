@@ -38,7 +38,11 @@ import Data.Word (Word32, Word16, Word8)
 data MptcpSocket = NLS NetlinkSocket Word16
 
 
+data Command = MPTCP_CMD_ANNOUNCE | MPTCP_CMD_REMOVE | MPTCP_CMD_SUB_CREATE 
+  deriving  (Enum)
+
 -- en fait y a 2 multicast groups
+-- genl_multicast_group 
 mptcpGenlEvGrpName = "mptcp_events"
 mptcpGenlCmdGrpName = "mptcp_commands"
 
@@ -111,17 +115,23 @@ makeMptcpSocket = do
 -- errout:
 -- 	return err;
 
+-- CtrlAttrMcastGroup
+
+-- regarder dans query/joinMulticastGroup/recvOne
+
 -- s'inspirer de
 -- https://github.com/vdorr/linux-live-netinfo/blob/24ead3dd84d6847483aed206ec4b0e001bfade02/System/Linux/NetInfo.hs
 main :: IO ()
 main = do
-  -- args <- getArgs
-  options <- execParser opts
+  -- options <- execParser opts
   (sock, fid) <- makeMptcpSocket
-  putStrLn "socket created" >> print fid
-  (mid, mcastGroup ) <- getFamilyWithMulticasts sock mptcpGenlEvGrpName
+  putStr "socket created: " >> print fid
+  -- (mid, mcastGroup ) <- getFamilyWithMulticasts sock mptcpGenlEvGrpName
+  mcastGroups <- getMulticastGroups sock fid
+
+  map (\x -> joinMulticastGroup sock (grpId x))
+  -- putStrLn $ " Groups: " ++ unwords ( map grpName mcastGroups)
   putStrLn "finished"
-    -- self.family_id = genl.genl_ctrl_resolve(self.sk, MPTCP_FAMILY_NAME)
 
     -- let flags   = foldr (.|.) 0 [fNLM_F_REQUEST]
     --     header  = Header eRTM_GETLINK flags 42 0
