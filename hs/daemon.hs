@@ -7,12 +7,14 @@ Maintainer  : matt
 Stability   : testing
 Portability : Linux
 
+
 This module providis utility functions for NL80211 subsystem.
 For more information see /usr/include/linux/nl80211.h
 -}
 module Main where
 
 import Prelude hiding (length, concat)
+import Prelude.Enum
 import Options.Applicative
 import Data.Semigroup ((<>))
 
@@ -35,6 +37,57 @@ import Data.Word (Word16, Word8)
 
 
 data Command = MPTCP_CMD_ANNOUNCE | MPTCP_CMD_REMOVE | MPTCP_CMD_SUB_CREATE 
+  deriving  (Enum)
+
+data MptcpGenlEvent =	MPTCP_CMD_UNSPEC |
+
+	MPTCP_EVENT_CREATED|
+	MPTCP_EVENT_ESTABLISHED|
+	MPTCP_EVENT_CLOSED|
+
+	MPTCP_CMD_ANNOUNCE|
+	MPTCP_CMD_REMOVE|
+	MPTCP_EVENT_ANNOUNCED|
+	MPTCP_EVENT_REMOVED|
+
+	MPTCP_CMD_SUB_CREATE|
+	MPTCP_CMD_SUB_DESTROY|
+	MPTCP_EVENT_SUB_CREATED|
+	MPTCP_EVENT_SUB_ESTABLISHED|
+	MPTCP_EVENT_SUB_CLOSED|
+
+	MPTCP_CMD_SUB_PRIORITY|
+	MPTCP_EVENT_SUB_PRIORITY|
+
+	MPTCP_CMD_RESET|
+	MPTCP_CMD_SET_FILTER|
+	MPTCP_CMD_SUB_TIMEOUT|
+	MPTCP_CMD_DUMP|
+
+	MPTCP_CMD_EXIST|
+
+	MPTCP_EVENT_SUB_ERROR|
+
+  deriving  (Enum)
+
+
+-- data MptcpGenlGrp = MPTCP_GENL_EV_GRP_NAME | MPTCP_GENL_CMD_GRP_NAME
+data MptcpAttr = 
+	MPTCP_ATTR_TOKEN|	
+	MPTCP_ATTR_FAMILY|
+	MPTCP_ATTR_LOC_ID|
+	MPTCP_ATTR_REM_ID|
+	MPTCP_ATTR_SADDR4|
+	MPTCP_ATTR_SADDR6|
+	MPTCP_ATTR_DADDR4|
+	MPTCP_ATTR_DADDR6|
+	MPTCP_ATTR_SPORT|	
+	MPTCP_ATTR_DPORT|	
+	MPTCP_ATTR_BACKUP|
+	MPTCP_ATTR_ERROR|	
+	MPTCP_ATTR_FLAGS|	
+	MPTCP_ATTR_TIMEOUT|	
+	MPTCP_ATTR_IF_IDX
   deriving  (Enum)
 
 -- en fait y a 2 multicast groups
@@ -114,7 +167,6 @@ makeMptcpSocket = do
 -- errout:
 -- 	return err;
 
-
 inspectPacket :: GenlPacket NoData -> IO ()
 inspectPacket packet = do
 
@@ -125,6 +177,14 @@ inspectPacket packet = do
   --   System.Linux.Netlink.ErrorMsg -> error "error msg"
   --   Packet -> putStrLn $ packetHeader pack
 
+-- return une fonction ?
+-- genlVersion
+dispatchPacket :: GenlPacket NoData -> IO ()
+dispatchPacket packet
+case packet.genlCmd  of
+  MptcpGenlEvent  -> putStrLn "Connection created !!"
+
+
 -- CtrlAttrMcastGroup
 -- copied from utils/GenlInfo.hs
 doDumpLoop :: NetlinkSocket -> IO ()
@@ -134,7 +194,11 @@ doDumpLoop sock = do
   -- genlDataHeader
   pack <- (recvOne sock :: IO [GenlPacket NoData])
   -- ca me retourne un tas de paquet en fait ?
-  _ <- mapM inspectPacket  pack
+  -- _ <- pack.genlCmd
+  _ <- mapM dispatchPacket  pack
+
+  -- what does it do already ?
+  -- _ <- mapM inspectPacket  pack
 
   -- putStrLn $show pack
   doDumpLoop sock
