@@ -1,5 +1,3 @@
--- !/usr/bin/env nix-shell
--- !nix-shell ../shell-haskell.nix -i ghc
 {-|
 Module      : System.Linux.Netlink.GeNetlink.NL80211
 Description : Implementation of mptcp netlink path manager
@@ -11,19 +9,22 @@ Portability : Linux
 This module providis utility functions for NL80211 subsystem.
 For more information see /usr/include/linux/nl80211.h
 -}
+
+-- !/usr/bin/env nix-shell
+-- !nix-shell ../shell-haskell.nix -i ghc
 module Main where
 
 import Prelude hiding (length, concat)
-import Prelude.Enum
 import Options.Applicative
-import Data.Semigroup ((<>))
+-- import Data.Semigroup ((<>))
 
 -- import Data.ByteString (ByteString, length, unpack, pack, concat)
 
 import System.Environment (getArgs)
 
 import System.Linux.Netlink hiding (makeSocket)
-import System.Linux.Netlink.GeNetlink (makeSocket, GenlPacket )
+-- (makeSocket, GenlPacket, getGenlHeader )
+import System.Linux.Netlink.GeNetlink
 -- import System.Linux.Netlink.Constants
 -- import System.Linux.Netlink.Utils
 
@@ -36,58 +37,65 @@ import Data.Word (Word16, Word8)
 -- data MptcpSocket = NLS NetlinkSocket Word16
 
 
-data Command = MPTCP_CMD_ANNOUNCE | MPTCP_CMD_REMOVE | MPTCP_CMD_SUB_CREATE 
+-- data Command = MPTCP_CMD_ANNOUNCE | MPTCP_CMD_REMOVE | MPTCP_CMD_SUB_CREATE 
+--   deriving  (Enum)
+
+
+--  as an alternative to enums
+-- newtype MessageType = MessageType Int deriving (Eq, Enum, Integral, Num, Ord, Real, Show)
+
+-- showMessageType :: (Num a) => (Show a) => (Eq a) => a -> String
+-- showMessageType 1 = "NLMSG_NOOP"
+-- showMessageType 2 = "NLMSG_ERROR"
+-- showMessageType 94 = "RTM_GETSTATS"
+-- showMessageType i = "MessageType #" ++ (show i)
+
+data MptcpGenlEvent = MPTCP_CMD_UNSPEC |
+  MPTCP_EVENT_CREATED|
+  MPTCP_EVENT_ESTABLISHED|
+  MPTCP_EVENT_CLOSED|
+  MPTCP_CMD_ANNOUNCE|
+  MPTCP_CMD_REMOVE|
+  MPTCP_EVENT_ANNOUNCED|
+  MPTCP_EVENT_REMOVED|
+  MPTCP_CMD_SUB_CREATE|
+  MPTCP_CMD_SUB_DESTROY|
+  MPTCP_EVENT_SUB_CREATED|
+  MPTCP_EVENT_SUB_ESTABLISHED|
+  MPTCP_EVENT_SUB_CLOSED|
+
+  MPTCP_CMD_SUB_PRIORITY|
+  MPTCP_EVENT_SUB_PRIORITY|
+
+  MPTCP_CMD_RESET|
+  MPTCP_CMD_SET_FILTER|
+  MPTCP_CMD_SUB_TIMEOUT|
+  MPTCP_CMD_DUMP|
+
+  MPTCP_CMD_EXIST|
+  MPTCP_EVENT_SUB_ERROR
   deriving  (Enum)
 
-data MptcpGenlEvent =	MPTCP_CMD_UNSPEC |
-
-	MPTCP_EVENT_CREATED|
-	MPTCP_EVENT_ESTABLISHED|
-	MPTCP_EVENT_CLOSED|
-
-	MPTCP_CMD_ANNOUNCE|
-	MPTCP_CMD_REMOVE|
-	MPTCP_EVENT_ANNOUNCED|
-	MPTCP_EVENT_REMOVED|
-
-	MPTCP_CMD_SUB_CREATE|
-	MPTCP_CMD_SUB_DESTROY|
-	MPTCP_EVENT_SUB_CREATED|
-	MPTCP_EVENT_SUB_ESTABLISHED|
-	MPTCP_EVENT_SUB_CLOSED|
-
-	MPTCP_CMD_SUB_PRIORITY|
-	MPTCP_EVENT_SUB_PRIORITY|
-
-	MPTCP_CMD_RESET|
-	MPTCP_CMD_SET_FILTER|
-	MPTCP_CMD_SUB_TIMEOUT|
-	MPTCP_CMD_DUMP|
-
-	MPTCP_CMD_EXIST|
-
-	MPTCP_EVENT_SUB_ERROR|
-
-  deriving  (Enum)
 
 
 -- data MptcpGenlGrp = MPTCP_GENL_EV_GRP_NAME | MPTCP_GENL_CMD_GRP_NAME
 data MptcpAttr = 
-	MPTCP_ATTR_TOKEN|	
-	MPTCP_ATTR_FAMILY|
-	MPTCP_ATTR_LOC_ID|
-	MPTCP_ATTR_REM_ID|
-	MPTCP_ATTR_SADDR4|
-	MPTCP_ATTR_SADDR6|
-	MPTCP_ATTR_DADDR4|
-	MPTCP_ATTR_DADDR6|
-	MPTCP_ATTR_SPORT|	
-	MPTCP_ATTR_DPORT|	
-	MPTCP_ATTR_BACKUP|
-	MPTCP_ATTR_ERROR|	
-	MPTCP_ATTR_FLAGS|	
-	MPTCP_ATTR_TIMEOUT|	
-	MPTCP_ATTR_IF_IDX
+  MPTCP_ATTR_TOKEN|
+  MPTCP_ATTR_FAMILY|
+  MPTCP_ATTR_LOC_ID|
+  MPTCP_ATTR_REM_ID|
+  MPTCP_ATTR_SADDR4|
+  MPTCP_ATTR_SADDR6|
+  MPTCP_ATTR_DADDR4|
+  MPTCP_ATTR_DADDR6|
+  MPTCP_ATTR_SPORT|
+  MPTCP_ATTR_DPORT|
+  MPTCP_ATTR_BACKUP|
+  MPTCP_ATTR_ERROR| 
+  MPTCP_ATTR_FLAGS| 
+  MPTCP_ATTR_TIMEOUT| 
+
+  MPTCP_ATTR_IF_IDX
   deriving  (Enum)
 
 -- en fait y a 2 multicast groups
@@ -121,6 +129,7 @@ sample = Sample
          <> showDefault
          <> value 1
          <> metavar "INT" )
+
 
 opts :: ParserInfo Sample
 opts = info (sample <**> helper)
@@ -180,9 +189,18 @@ inspectPacket packet = do
 -- return une fonction ?
 -- genlVersion
 dispatchPacket :: GenlPacket NoData -> IO ()
-dispatchPacket packet
-case packet.genlCmd  of
-  MptcpGenlEvent  -> putStrLn "Connection created !!"
+dispatchPacket packet = let 
+    -- todo not the good call
+    genlHeader = getGenlHeader 
+    -- header = packetHeader packet
+  in
+    case (toEnum $ genlCmd genlHeader) of
+      MPTCP_EVENT_CREATED -> putStrLn "Connection created !!"
+      --
+      --
+    -- case (messageType header) of
+    --   MPTCP_EVENT_CREATED -> putStrLn "Connection created !!"
+    --   MPTCP_CMD_UNSPEC -> putStrLn "UNKNOWN COMMAND ERROR "
 
 
 -- CtrlAttrMcastGroup
@@ -204,11 +222,12 @@ doDumpLoop sock = do
   doDumpLoop sock
 
 -- regarder dans query/joinMulticastGroup/recvOne
+--
 -- doDumpLoop / dumpGeneric
 listenToEvents :: NetlinkSocket -> CtrlAttrMcastGroup -> IO ()
 listenToEvents sock group = do
   -- joinMulticastGroup  returns IO ()
-  joinMulticastGroup sock (grpId group) 
+  joinMulticastGroup sock (grpId group)
   doDumpLoop sock
   putStrLn $ "Joined grp " ++ (grpName group)
 
