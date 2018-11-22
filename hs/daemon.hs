@@ -20,7 +20,7 @@ import Options.Applicative
 
 -- import Data.ByteString (ByteString, length, unpack, pack, concat)
 
-import System.Environment (getArgs)
+-- import System.Environment (getArgs)
 
 import System.Linux.Netlink hiding (makeSocket)
 -- (makeSocket, GenlPacket, getGenlHeader )
@@ -29,7 +29,7 @@ import System.Linux.Netlink.GeNetlink
 -- import System.Linux.Netlink.Utils
 
 import System.Linux.Netlink.GeNetlink.Control as C
-import Data.Word (Word16, Word8)
+import Data.Word (Word16)
 
 -- The Netlink socket with Family Id, so we don't need as many arguments
 -- everywhere
@@ -191,17 +191,20 @@ inspectPacket packet = do
 dispatchPacket :: GenlPacket NoData -> IO ()
 dispatchPacket packet = let 
     -- todo not the good call
-    genlHeader = getGenlHeader 
+    -- genlHeader = packetHeader packet
+    genlData = packetCustom packet
+-- genlDataHeader 
     -- header = packetHeader packet
   in
-    case (toEnum $ genlCmd genlHeader) of
+    case (toEnum $ genlCmd genlData) of
+    -- case (toEnum 2) of
       MPTCP_EVENT_CREATED -> putStrLn "Connection created !!"
-      --
-      --
+
     -- case (messageType header) of
     --   MPTCP_EVENT_CREATED -> putStrLn "Connection created !!"
     --   MPTCP_CMD_UNSPEC -> putStrLn "UNKNOWN COMMAND ERROR "
 
+    -- putStrLn "FAKE"
 
 -- CtrlAttrMcastGroup
 -- copied from utils/GenlInfo.hs
@@ -253,7 +256,7 @@ main = do
   -- case 
   -- map (\x -> joinMulticastGroup sock (grpId x)) mcastGroups
   -- mapM to ignore 
-  mapM (\x -> listenToEvents sock x) mcastGroups
+  _ <- mapM (\x -> listenToEvents sock x) mcastGroups
   -- putStrLn $ " Groups: " ++ unwords ( map grpName mcastGroups)
   putStrLn "finished"
 
