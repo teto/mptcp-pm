@@ -13,7 +13,7 @@ in
 haskellPackages.shellFor {
   packages = p: with p; [ haskellPackages.netlink-pm ];
   withHoogle = true;
-  nativeBuildInputs = [ hie haskellPackages.stack ];
+  nativeBuildInputs = [ hie haskellPackages.stack haskellPackages.cabal-install ];
 
   # export HIE_HOOGLE_DATABASE=$NIX_GHC_DOCDIR as DOCDIR doesn't exist it won't work
   shellHook = ''
