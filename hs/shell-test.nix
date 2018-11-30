@@ -16,7 +16,7 @@ haskellPackages.shellFor {
   # haskellPackages.stack 
   nativeBuildInputs = [ 
     hie 
-    # haskellPackages.cabal-install 
+    haskellPackages.cabal-install 
   ];
 
   # export HIE_HOOGLE_DATABASE=$NIX_GHC_DOCDIR as DOCDIR doesn't exist it won't work

@@ -188,17 +188,23 @@ inspectPacket packet = do
 
 -- return une fonction ?
 -- genlVersion
+-- type GenlPacket a = Packet (GenlData a)
 dispatchPacket :: GenlPacket NoData -> IO ()
 dispatchPacket packet = let 
     -- todo not the good call
     -- genlHeader = packetHeader packet
-    genlData = packetCustom packet
--- genlDataHeader 
+    temp_data = packetCustom packet
+    genl_header = genlDataHeader temp_data
     -- header = packetHeader packet
+    -- `cmd` of type Word8
+    cmd = genlCmd genl_header
   in
-    case (toEnum $ genlCmd genlData) of
+    -- expects an Int
+    case (toEnum (fromIntegral cmd)) of
     -- case (toEnum 2) of
       MPTCP_EVENT_CREATED -> putStrLn "Connection created !!"
+      MPTCP_EVENT_ESTABLISHED -> putStrLn "Connection created !!"
+      _ -> undefined
 
     -- case (messageType header) of
     --   MPTCP_EVENT_CREATED -> putStrLn "Connection created !!"
