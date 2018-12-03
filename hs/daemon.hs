@@ -30,6 +30,8 @@ import System.Linux.Netlink.GeNetlink
 
 import System.Linux.Netlink.GeNetlink.Control as C
 import Data.Word (Word16)
+import Data.List (intercalate)
+import qualified Data.Map as Map
 
 -- The Netlink socket with Family Id, so we don't need as many arguments
 -- everywhere
@@ -186,6 +188,22 @@ inspectPacket packet = do
   --   System.Linux.Netlink.ErrorMsg -> error "error msg"
   --   Packet -> putStrLn $ packetHeader pack
 
+--
+-- import Data.Map (Map, keys)
+-- type Attributes = Map Int ByteString
+-- https://lotz84.github.io/haskellbyexample/ex/maps
+showAttributes :: Attributes -> IO ()
+showAttributes attrs =
+  let 
+    f k v = [show k, " = ", show v]
+    -- mapped = Map.mapWithKey f attrs
+    mapped = Map.foldrWithKey (\k v -> (print (k, v) >>)) attrs
+  in 
+    -- putStrLn $ intercalate "," $ mapped
+    putStrLn "toto"
+  -- map (\x -> 
+  -- putStrLn
+
 -- return une fonction ?
 -- genlVersion
 -- type GenlPacket a = Packet (GenlData a)
@@ -195,22 +213,28 @@ dispatchPacket packet = let
     -- genlHeader = packetHeader packet
     temp_data = packetCustom packet
     genl_header = genlDataHeader temp_data
+    attributes = packetAttributes packet
+    genl_data = genlDataData temp_data
     -- header = packetHeader packet
     -- `cmd` of type Word8
     cmd = genlCmd genl_header
+    version = genlVersion genl_header
   in
     -- expects an Int
     case (toEnum (fromIntegral cmd)) of
     -- case (toEnum 2) of
-      MPTCP_EVENT_CREATED -> putStrLn "Connection created !!"
+      MPTCP_EVENT_CREATED -> putStrLn $ "Connection created !!" ++ show attributes
       MPTCP_EVENT_ESTABLISHED -> putStrLn "Connection created !!"
-      _ -> undefined
+      MPTCP_EVENT_CLOSED -> putStrLn "Connection closed"
+      MPTCP_EVENT_SUB_CREATED -> putStrLn "Subflow created"
+      MPTCP_EVENT_SUB_ESTABLISHED -> putStrLn "Subflow established"
+      MPTCP_EVENT_SUB_CLOSED -> putStrLn "Subflow closed"
+      _ -> putStrLn "undefined event !!"
 
+      -- putStrLn $show genl_data
     -- case (messageType header) of
     --   MPTCP_EVENT_CREATED -> putStrLn "Connection created !!"
     --   MPTCP_CMD_UNSPEC -> putStrLn "UNKNOWN COMMAND ERROR "
-
-    -- putStrLn "FAKE"
 
 -- CtrlAttrMcastGroup
 -- copied from utils/GenlInfo.hs
@@ -236,9 +260,10 @@ doDumpLoop sock = do
 listenToEvents :: NetlinkSocket -> CtrlAttrMcastGroup -> IO ()
 listenToEvents sock group = do
   -- joinMulticastGroup  returns IO ()
+  -- TODO should check it works correctly !
   joinMulticastGroup sock (grpId group)
-  doDumpLoop sock
   putStrLn $ "Joined grp " ++ (grpName group)
+  doDumpLoop sock
 
 -- s'inspirer de
 -- https://github.com/vdorr/linux-live-netinfo/blob/24ead3dd84d6847483aed206ec4b0e001bfade02/System/Linux/NetInfo.hs

@@ -6,6 +6,6 @@ cabal-version: >= 1.18
 build-type: Simple
 
 executable project1
-    build-depends: base < 5, netlink
+    build-depends: base < 5, netlink, optparse-applicative
     main-is: daemon.hs
     default-language: Haskell2010
