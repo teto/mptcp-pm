@@ -31,6 +31,8 @@ import System.Linux.Netlink.GeNetlink
 import System.Linux.Netlink.GeNetlink.Control as C
 import Data.Word (Word16)
 import Data.List (intercalate)
+-- import Data.String
+import Data.ByteString hiding (putStrLn, putStr)
 import qualified Data.Map as Map
 
 -- The Netlink socket with Family Id, so we don't need as many arguments
@@ -181,12 +183,24 @@ makeMptcpSocket = do
 inspectPacket :: GenlPacket NoData -> IO ()
 inspectPacket packet = do
 
-  putStrLn $show packet
+  Prelude.putStrLn $show packet
   -- return IO
   -- case pack of
   --   DoneMsg -> putStrLn "Done Msg"
   --   System.Linux.Netlink.ErrorMsg -> error "error msg"
   --   Packet -> putStrLn $ packetHeader pack
+
+
+dumpAttribute :: Int -> ByteString -> String
+dumpAttribute attr value = 
+    -- case (toEnum (fromIntegral cmd)) of
+    case (attr) of
+      MPTCP_ATTR_TOKEN -> show attr ++ "TOKEN"
+      MPTCP_ATTR_IF_IDX -> show attr ++ "ifId"
+      MPTCP_ATTR_TIMEOUT -> show attr ++ show value;
+
+
+    
 
 --
 -- import Data.Map (Map, keys)
@@ -198,7 +212,7 @@ showAttributes attrs =
     -- f k v = [show k, " = ", show v]
     -- mapped = Map.mapWithKey f attrs
   -- ++ "=" ++ (show v))
-    mapped = Map.foldrWithKey (\k v -> ((show k) ++) ) " " attrs
+    mapped = Map.foldrWithKey (\k v -> (dumpAttribute k v ++ ) ) " " attrs
   in 
     -- putStrLn $ intercalate "," $ mapped
     -- "toto"
