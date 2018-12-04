@@ -192,15 +192,17 @@ inspectPacket packet = do
 -- import Data.Map (Map, keys)
 -- type Attributes = Map Int ByteString
 -- https://lotz84.github.io/haskellbyexample/ex/maps
-showAttributes :: Attributes -> IO ()
+showAttributes :: Attributes -> String
 showAttributes attrs =
   let 
-    f k v = [show k, " = ", show v]
+    -- f k v = [show k, " = ", show v]
     -- mapped = Map.mapWithKey f attrs
-    mapped = Map.foldrWithKey (\k v -> (print (k, v) >>)) attrs
+  -- ++ "=" ++ (show v))
+    mapped = Map.foldrWithKey (\k v -> ((show k) ++) ) " " attrs
   in 
     -- putStrLn $ intercalate "," $ mapped
-    putStrLn "toto"
+    -- "toto"
+    mapped
   -- map (\x -> 
   -- putStrLn
 
@@ -223,8 +225,8 @@ dispatchPacket packet = let
     -- expects an Int
     case (toEnum (fromIntegral cmd)) of
     -- case (toEnum 2) of
-      MPTCP_EVENT_CREATED -> putStrLn $ "Connection created !!" ++ show attributes
-      MPTCP_EVENT_ESTABLISHED -> putStrLn "Connection created !!"
+      MPTCP_EVENT_CREATED -> putStrLn $ "Connection created !!" ++ (showAttributes attributes)
+      MPTCP_EVENT_ESTABLISHED -> putStrLn "Connection established !"
       MPTCP_EVENT_CLOSED -> putStrLn "Connection closed"
       MPTCP_EVENT_SUB_CREATED -> putStrLn "Subflow created"
       MPTCP_EVENT_SUB_ESTABLISHED -> putStrLn "Subflow established"
