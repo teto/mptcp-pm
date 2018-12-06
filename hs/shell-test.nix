@@ -11,12 +11,18 @@ let
 
 in
 haskellPackages.shellFor {
-  packages = p: with p; [ haskellPackages.netlink-pm ];
+  # the dependencies of packages listed in `packages`, not the
+  packages = p: with p; [
+    netlink-pm 
+  ];
   withHoogle = true;
   # haskellPackages.stack 
   nativeBuildInputs = [ 
     hie 
     haskellPackages.cabal-install 
+    haskellPackages.bytestring-conversion
+
+    # for https://hackage.haskell.org/package/bytestring-conversion-0.2/candidate/docs/Data-ByteString-Conversion-From.html
   ];
 
   # export HIE_HOOGLE_DATABASE=$NIX_GHC_DOCDIR as DOCDIR doesn't exist it won't work

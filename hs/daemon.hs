@@ -32,8 +32,10 @@ import System.Linux.Netlink.GeNetlink.Control as C
 import Data.Word (Word16)
 import Data.List (intercalate)
 -- import Data.String
-import Data.ByteString hiding (putStrLn, putStr)
+import Data.ByteString as BS hiding (putStrLn, putStr, map, intercalate)
 import qualified Data.Map as Map
+-- import Data.ByteString.Char8 as C8 hiding (putStrLn, putStr)
+ -- (unpack)
 
 -- The Netlink socket with Family Id, so we don't need as many arguments
 -- everywhere
@@ -84,6 +86,7 @@ data MptcpGenlEvent = MPTCP_CMD_UNSPEC |
 
 -- data MptcpGenlGrp = MPTCP_GENL_EV_GRP_NAME | MPTCP_GENL_CMD_GRP_NAME
 data MptcpAttr = 
+  MPTCP_ATTR_UNSPEC|
   MPTCP_ATTR_TOKEN|
   MPTCP_ATTR_FAMILY|
   MPTCP_ATTR_LOC_ID|
@@ -190,14 +193,46 @@ inspectPacket packet = do
   --   System.Linux.Netlink.ErrorMsg -> error "error msg"
   --   Packet -> putStrLn $ packetHeader pack
 
+toIpv4 :: ByteString -> String
+toIpv4 value = Data.List.intercalate "." ( map show (BS.unpack value))
+
+
+-- TODO convert port
+-- t = BS.pack [ 232, 229 ]
+-- Data.ByteString.Conversion.fromByteString t :: Maybe Data.Word.Word16
 
 dumpAttribute :: Int -> ByteString -> String
-dumpAttribute attr value = 
-    -- case (toEnum (fromIntegral cmd)) of
-    case (attr) of
-      MPTCP_ATTR_TOKEN -> show attr ++ "TOKEN"
-      MPTCP_ATTR_IF_IDX -> show attr ++ "ifId"
-      MPTCP_ATTR_TIMEOUT -> show attr ++ show value;
+dumpAttribute attr value = let
+
+  -- ip = C8.unpack value
+  -- Data.ByteString.Char8 
+  -- ip = 
+  -- ip = case C8.unpack value of 
+  --   Nothing -> "no Ip"
+  --   Just x -> show x
+  attrStr = case (toEnum (fromIntegral attr)) of
+      MPTCP_ATTR_TOKEN -> "TOKEN: " ++ show value
+      MPTCP_ATTR_IF_IDX -> "ifId: " ++ show value 
+      MPTCP_ATTR_TIMEOUT -> "timeout:" ++ show value
+      MPTCP_ATTR_SADDR4 -> "ipv4.src: " ++ show value
+      MPTCP_ATTR_SADDR6 -> "ipv6.src: " ++ show value
+      -- Data.ByteString.Char8.readInt b
+      -- 
+      MPTCP_ATTR_DADDR4 -> "ipv4.dest: " ++ toIpv4 value
+      MPTCP_ATTR_DADDR6 -> "ipv6.dest: " ++ show value
+      MPTCP_ATTR_LOC_ID -> "Locator id: " ++ show value
+      MPTCP_ATTR_REM_ID -> "Remote id: " ++ show value
+      MPTCP_ATTR_ERROR -> "Error : " ++ show value
+      MPTCP_ATTR_FLAGS -> "Flags : " ++ show value
+      MPTCP_ATTR_SPORT -> "sport" ++ show value
+      MPTCP_ATTR_DPORT -> "dport" ++ show value
+
+      MPTCP_ATTR_BACKUP -> "backup"
+      MPTCP_ATTR_UNSPEC -> "UNSPECIFIED"
+      _ -> "unhandled case"
+  in
+
+    attrStr ++ "\n"
 
 
     

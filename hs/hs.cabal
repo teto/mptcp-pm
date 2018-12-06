@@ -6,7 +6,7 @@ cabal-version: >= 1.18
 build-type: Simple
 
 executable project1
-    build-depends: base < 5, netlink, optparse-applicative, 
+    build-depends: base < 5, netlink, optparse-applicative, bytestring-conversion
     main-is: daemon.hs
     default-language: Haskell2010
 	exposed-modules:   Data.ByteString
