@@ -35,6 +35,8 @@ import Data.Binary
 
 -- import Data.String
 import Data.ByteString as BS hiding (putStrLn, putStr, map, intercalate)
+import qualified Data.ByteString.Lazy as BSL
+
 import qualified Data.Map as Map
 -- import Data.ByteString.Char8 as C8 hiding (putStrLn, putStr)
  -- (unpack)
@@ -204,7 +206,8 @@ toIpv4 value = Data.List.intercalate "." ( map show (BS.unpack value))
 -- Data.ByteString.Conversion.fromByteString t :: Maybe Data.Word.Word16
 
 getPort :: ByteString -> Word16
-getPort = (decode :: Word16)
+getPort value = 
+  decode (BSL.fromStrict value) :: Word16
 
 dumpAttribute :: Int -> ByteString -> String
 dumpAttribute attr value = let
@@ -219,7 +222,7 @@ dumpAttribute attr value = let
       MPTCP_ATTR_TOKEN -> "TOKEN: " ++ show value
       MPTCP_ATTR_IF_IDX -> "ifId: " ++ show value 
       MPTCP_ATTR_TIMEOUT -> "timeout:" ++ show value
-      MPTCP_ATTR_SADDR4 -> "ipv4.src: " ++ show value
+      MPTCP_ATTR_SADDR4 -> "ipv4.src: " ++ toIpv4 value
       MPTCP_ATTR_SADDR6 -> "ipv6.src: " ++ show value
       -- Data.ByteString.Char8.readInt b
       -- 
@@ -229,8 +232,8 @@ dumpAttribute attr value = let
       MPTCP_ATTR_REM_ID -> "Remote id: " ++ show value
       MPTCP_ATTR_ERROR -> "Error : " ++ show value
       MPTCP_ATTR_FLAGS -> "Flags : " ++ show value
-      MPTCP_ATTR_SPORT -> "sport" ++ show value
-      MPTCP_ATTR_DPORT -> "dport" ++ show value
+      MPTCP_ATTR_SPORT -> "sport" ++ show (getPort value)
+      MPTCP_ATTR_DPORT -> "dport" ++ show (getPort value)
 
       MPTCP_ATTR_BACKUP -> "backup"
       MPTCP_ATTR_UNSPEC -> "UNSPECIFIED"
