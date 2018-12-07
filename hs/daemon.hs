@@ -31,6 +31,8 @@ import System.Linux.Netlink.GeNetlink
 import System.Linux.Netlink.GeNetlink.Control as C
 import Data.Word (Word16)
 import Data.List (intercalate)
+import Data.Binary
+
 -- import Data.String
 import Data.ByteString as BS hiding (putStrLn, putStr, map, intercalate)
 import qualified Data.Map as Map
@@ -201,6 +203,9 @@ toIpv4 value = Data.List.intercalate "." ( map show (BS.unpack value))
 -- t = BS.pack [ 232, 229 ]
 -- Data.ByteString.Conversion.fromByteString t :: Maybe Data.Word.Word16
 
+getPort :: ByteString -> Word16
+getPort = (decode :: Word16)
+
 dumpAttribute :: Int -> ByteString -> String
 dumpAttribute attr value = let
 
@@ -233,7 +238,6 @@ dumpAttribute attr value = let
   in
 
     attrStr ++ "\n"
-
 
     
 
