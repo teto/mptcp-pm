@@ -238,6 +238,7 @@ dumpAttribute attr value = let
   -- ip = case C8.unpack value of 
   --   Nothing -> "no Ip"
   --   Just x -> show x
+
   attrStr = case (toEnum (fromIntegral attr)) of
       -- nla_put_u32(msg, MPTCP_ATTR_TOKEN, mpcb->mptcp_loc_token);
       MPTCP_ATTR_TOKEN -> "TOKEN: " ++ show (readToken value)
@@ -245,8 +246,8 @@ dumpAttribute attr value = let
       MPTCP_ATTR_TIMEOUT -> "timeout:" ++ show value
       MPTCP_ATTR_SADDR4 -> "ipv4.src: " ++ toIpv4 value
       MPTCP_ATTR_SADDR6 -> "ipv6.src: " ++ show value
+
       -- Data.ByteString.Char8.readInt b
-      -- 
       MPTCP_ATTR_DADDR4 -> "ipv4.dest: " ++ toIpv4 value
       MPTCP_ATTR_DADDR6 -> "ipv6.dest: " ++ show value
 
@@ -284,10 +285,25 @@ showAttributes attrs =
     mapped
 
 
+
+createNewSubflow ::
+createNewSubflow =
+
+  -- need to prepare a request
+
+
 -- onNewConnection :: IO ()
 onNewConnection = do
-    putStrLn "What do you want to do ?"
+    putStrLn "What do you want to do ? (c.reate subflow, d.elete connection)"
     answer <- Prelude.getLine
+    case answer of 
+      "c" -> do
+        putStrLn "Creating new subflow !!"
+        createNewSubflow 
+        return ()
+      "d" -> putStrLn "Not implemented"
+      -- wrong answer, repeat
+      _ -> onNewConnection
     return ()
 
 
