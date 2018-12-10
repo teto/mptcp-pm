@@ -29,9 +29,9 @@ import System.Linux.Netlink.GeNetlink
 -- import System.Linux.Netlink.Utils
 
 import System.Linux.Netlink.GeNetlink.Control as C
-import Data.Word (Word16)
+import Data.Word (Word16, Word32)
 import Data.List (intercalate)
-import Data.Binary
+import Data.Binary.Get
 
 -- import Data.String
 import Data.ByteString as BS hiding (putStrLn, putStr, map, intercalate)
@@ -207,11 +207,28 @@ toIpv4 value = Data.List.intercalate "." ( map show (BS.unpack value))
 
 getPort :: ByteString -> Word16
 getPort value = 
-  decode (BSL.fromStrict value) :: Word16
+  -- decode (BSL.fromStrict value) :: Word16
+  -- BS.unpack value
+  42
+
+readToken :: ByteString -> Word32
+readToken val = 
+  runGet getWord32le (BSL.fromStrict val)
+
+-- readToken :: ByteString -> Int
+-- readToken val = 
+--   -- Maybe (Int, BS)
+--   let 
+--     res = BS.readInt (BSL.fromStrict val)
+--   in 
+--    case res of 
+--     Nothing -> error "could not read token"
+--     Just x -> show x
 
 dumpAttribute :: Int -> ByteString -> String
 dumpAttribute attr value = let
 
+  -- fromJust :: Maybe a -> a
   -- ip = C8.unpack value
   -- Data.ByteString.Char8 
   -- ip = 
@@ -219,7 +236,8 @@ dumpAttribute attr value = let
   --   Nothing -> "no Ip"
   --   Just x -> show x
   attrStr = case (toEnum (fromIntegral attr)) of
-      MPTCP_ATTR_TOKEN -> "TOKEN: " ++ show value
+      -- nla_put_u32(msg, MPTCP_ATTR_TOKEN, mpcb->mptcp_loc_token);
+      MPTCP_ATTR_TOKEN -> "TOKEN: " ++ show (readToken value)
       MPTCP_ATTR_IF_IDX -> "ifId: " ++ show value 
       MPTCP_ATTR_TIMEOUT -> "timeout:" ++ show value
       MPTCP_ATTR_SADDR4 -> "ipv4.src: " ++ toIpv4 value
@@ -232,8 +250,8 @@ dumpAttribute attr value = let
       MPTCP_ATTR_REM_ID -> "Remote id: " ++ show value
       MPTCP_ATTR_ERROR -> "Error : " ++ show value
       MPTCP_ATTR_FLAGS -> "Flags : " ++ show value
-      MPTCP_ATTR_SPORT -> "sport" ++ show (getPort value)
-      MPTCP_ATTR_DPORT -> "dport" ++ show (getPort value)
+      MPTCP_ATTR_SPORT -> "sport" ++ show (getPort value) ++ " (raw: " ++ show (value)
+      MPTCP_ATTR_DPORT -> "dport" ++ show (getPort value)++ " (raw: " ++ show (value)
 
       MPTCP_ATTR_BACKUP -> "backup"
       MPTCP_ATTR_UNSPEC -> "UNSPECIFIED"
