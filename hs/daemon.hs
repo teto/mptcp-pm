@@ -208,8 +208,7 @@ toIpv4 value = Data.List.intercalate "." ( map show (BS.unpack value))
 getPort :: ByteString -> Word16
 getPort value = 
   -- decode (BSL.fromStrict value) :: Word16
-  -- BS.unpack value
-  42
+  runGet getWord16le (BSL.fromStrict value)
 
 readToken :: ByteString -> Word32
 readToken val = 
