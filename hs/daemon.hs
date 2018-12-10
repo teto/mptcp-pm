@@ -103,6 +103,7 @@ data MptcpAttr =
   MPTCP_ATTR_DPORT|
   MPTCP_ATTR_BACKUP|
   MPTCP_ATTR_ERROR| 
+  -- used to filter events we are interested in
   MPTCP_ATTR_FLAGS| 
   MPTCP_ATTR_TIMEOUT| 
 
@@ -224,6 +225,9 @@ readToken val =
 --     Nothing -> error "could not read token"
 --     Just x -> show x
 
+
+-- MPTCP_CMD_SUB_CREATE
+
 dumpAttribute :: Int -> ByteString -> String
 dumpAttribute attr value = let
 
@@ -245,14 +249,16 @@ dumpAttribute attr value = let
       -- 
       MPTCP_ATTR_DADDR4 -> "ipv4.dest: " ++ toIpv4 value
       MPTCP_ATTR_DADDR6 -> "ipv6.dest: " ++ show value
-      MPTCP_ATTR_LOC_ID -> "Locator id: " ++ show value
-      MPTCP_ATTR_REM_ID -> "Remote id: " ++ show value
+
+      -- u8 ?
+      MPTCP_ATTR_LOC_ID -> "Locator id: " ++ show (value)
+      MPTCP_ATTR_REM_ID -> "Remote id: " ++ show (value)
       MPTCP_ATTR_ERROR -> "Error : " ++ show value
       MPTCP_ATTR_FLAGS -> "Flags : " ++ show value
-      MPTCP_ATTR_SPORT -> "sport" ++ show (getPort value) ++ " (raw: " ++ show (value)
-      MPTCP_ATTR_DPORT -> "dport" ++ show (getPort value)++ " (raw: " ++ show (value)
+      MPTCP_ATTR_SPORT -> "sport" ++ show (getPort value)
+      MPTCP_ATTR_DPORT -> "dport" ++ show (getPort value)
 
-      MPTCP_ATTR_BACKUP -> "backup"
+      MPTCP_ATTR_BACKUP -> "backup" ++ show value
       MPTCP_ATTR_UNSPEC -> "UNSPECIFIED"
       _ -> "unhandled case"
   in
@@ -276,8 +282,14 @@ showAttributes attrs =
     -- putStrLn $ intercalate "," $ mapped
     -- "toto"
     mapped
-  -- map (\x -> 
-  -- putStrLn
+
+
+-- onNewConnection :: IO ()
+onNewConnection = do
+    putStrLn "What do you want to do ?"
+    answer <- Prelude.getLine
+    return ()
+
 
 -- return une fonction ?
 -- genlVersion
@@ -298,7 +310,9 @@ dispatchPacket packet = let
     -- expects an Int
     case (toEnum (fromIntegral cmd)) of
     -- case (toEnum 2) of
-      MPTCP_EVENT_CREATED -> putStrLn $ "Connection created !!" ++ (showAttributes attributes)
+      MPTCP_EVENT_CREATED -> do
+            putStrLn $ "Connection created !!" ++ (showAttributes attributes)
+            onNewConnection
       MPTCP_EVENT_ESTABLISHED -> putStrLn "Connection established !"
       MPTCP_EVENT_CLOSED -> putStrLn "Connection closed"
       MPTCP_EVENT_SUB_CREATED -> putStrLn "Subflow created"
