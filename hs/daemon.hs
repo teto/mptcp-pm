@@ -22,16 +22,18 @@ import Options.Applicative
 
 -- import System.Environment (getArgs)
 
+--  
 import System.Linux.Netlink hiding (makeSocket)
--- (makeSocket, GenlPacket, getGenlHeader )
+import System.Linux.Netlink (query)
 import System.Linux.Netlink.GeNetlink
--- import System.Linux.Netlink.Constants
+import System.Linux.Netlink.Constants
 -- import System.Linux.Netlink.Utils
 
 import System.Linux.Netlink.GeNetlink.Control as C
 import Data.Word (Word16, Word32)
 import Data.List (intercalate)
 import Data.Binary.Get
+import Data.Serialize.Put
 
 -- import Data.String
 import Data.ByteString as BS hiding (putStrLn, putStr, map, intercalate)
@@ -44,7 +46,7 @@ import qualified Data.Map as Map
 -- The Netlink socket with Family Id, so we don't need as many arguments
 -- everywhere
 -- |Wrapper for 'NetlinkSocket' we also need the family id for messages we construct
--- data MptcpSocket = NLS NetlinkSocket Word16
+data MptcpSocket = MptcpSocket NetlinkSocket Word16
 
 
 -- data Command = MPTCP_CMD_ANNOUNCE | MPTCP_CMD_REMOVE | MPTCP_CMD_SUB_CREATE 
@@ -173,13 +175,13 @@ opts = info (sample <**> helper)
 
 -- inspired by makeNL80211Socket Create a 'NL80211Socket' this opens a genetlink 
 -- socket and gets the family id
--- makeMptcpSocket :: IO MptcpSocket
-makeMptcpSocket :: IO (NetlinkSocket, Word16)
+makeMptcpSocket :: MptcpSocket
+-- makeMptcpSocket :: IO (NetlinkSocket, Word16)
 makeMptcpSocket = do
   sock <- makeSocket
   fid <- getFamilyId sock mptcpGenlName
   -- return $NLS sock fid
-  return ( sock, fid)
+  return MptcpSocket sock fid
 
 
 -- 	err = genl_ctrl_grp_by_name(family, grp_name);
@@ -188,12 +190,22 @@ makeMptcpSocket = do
 -- errout:
 -- 	return err;
 
-inspectPacket :: GenlPacket NoData -> IO ()
-inspectPacket packet = do
+-- inspectPacket :: GenlPacket NoData -> IO ()
+-- inspectPacket = Prelude.putStrLn show 
+-- inspectPacket packet = Prelude.putStrLn $show packet
 
-  Prelude.putStrLn $show packet
-  -- return IO
-  -- case pack of
+-- fid = family id
+-- MptcpAttr Word8 
+-- TODO
+getRequestPacket :: Word16 -> MptcpAttr -> Bool -> Attributes -> Packet NoData
+getRequestPacket fid cmd dump attrs =
+  let header = Header (fromIntegral fid) flags 0 0
+      geheader = GenlHeader word8Cmd 0 in
+    Packet header (GenlData geheader NoData) attrs
+  where 
+    flags = if dump then fNLM_F_REQUEST .|. fNLM_F_MATCH .|. fNLM_F_ROOT else fNLM_F_REQUEST
+    word8Cmd = toEnum (fromIntegral cmd)
+
   --   DoneMsg -> putStrLn "Done Msg"
   --   System.Linux.Netlink.ErrorMsg -> error "error msg"
   --   Packet -> putStrLn $ packetHeader pack
@@ -239,7 +251,7 @@ dumpAttribute attr value = let
   --   Nothing -> "no Ip"
   --   Just x -> show x
 
-  attrStr = case (toEnum (fromIntegral attr)) of
+  attrStr = case toEnum (fromIntegral attr) of
       -- nla_put_u32(msg, MPTCP_ATTR_TOKEN, mpcb->mptcp_loc_token);
       MPTCP_ATTR_TOKEN -> "TOKEN: " ++ show (readToken value)
       MPTCP_ATTR_IF_IDX -> "ifId: " ++ show value 
@@ -252,8 +264,8 @@ dumpAttribute attr value = let
       MPTCP_ATTR_DADDR6 -> "ipv6.dest: " ++ show value
 
       -- u8 ?
-      MPTCP_ATTR_LOC_ID -> "Locator id: " ++ show (value)
-      MPTCP_ATTR_REM_ID -> "Remote id: " ++ show (value)
+      MPTCP_ATTR_LOC_ID -> "Locator id: " ++ show value
+      MPTCP_ATTR_REM_ID -> "Remote id: " ++ show value
       MPTCP_ATTR_ERROR -> "Error : " ++ show value
       MPTCP_ATTR_FLAGS -> "Flags : " ++ show value
       MPTCP_ATTR_SPORT -> "sport" ++ show (getPort value)
@@ -263,7 +275,6 @@ dumpAttribute attr value = let
       MPTCP_ATTR_UNSPEC -> "UNSPECIFIED"
       _ -> "unhandled case"
   in
-
     attrStr ++ "\n"
 
     
@@ -285,33 +296,78 @@ showAttributes attrs =
     mapped
 
 
-
-createNewSubflow ::
-createNewSubflow =
-
-  -- need to prepare a request
+-- if (!info->attrs[MPTCP_ATTR_TOKEN] || !info->attrs[MPTCP_ATTR_FAMILY] ||
+--     !info->attrs[MPTCP_ATTR_LOC_ID] || !info->attrs[MPTCP_ATTR_REM_ID])
+-- 	return -EINVAL;
 
 
--- onNewConnection :: IO ()
-onNewConnection = do
+-- - MPTCP_CMD_SUB_CREATE: token, family, loc_id, rem_id, [saddr4 | saddr6,
+--                         daddr4 | daddr6, dport [, sport, backup, if_idx]]
+--     Create a new subflow.
+--  one can look at  Route.hs for "putMessage"
+-- putMessage :: Message -> Put
+-- putMessage (NLinkMsg ty idx flags) = do
+--     p8 eAF_UNSPEC >> p8 0
+--     p16 (fromIntegral ty)
+--     p32 idx
+--     p32 flags
+--     p32 0xFFFFFFFF
+
+-- data NewSubflowRequest =
+--   MPTCP_ATTR_TOKEN
+
+createNewSubflow :: MptcpSocket -> IO ()
+createNewSubflow sock = putStrLn "createNewSubflow TODO"
+
+-- need to prepare a request
+-- putPacket 
+-- putAttributes
+resetTheConnection :: MptcpSocket -> Word32 -> IO ()
+resetTheConnection (MptcpSocket socket fid) token = let
+    m0 = Map.empty
+    m1 = Map.insert MPTCP_ATTR_TOKEN token
+    attributes = m1
+    -- putAttributes m1
+    -- ‘CtrlPacket’ (imported from System.Linux.Netlink.GeNetlink.Control
+    -- bytestringArr = putPacket (GenlPacket attributes)
+    -- ctrlPackettoGenl 
+    -- pkt = CtrlPacket attributes
+
+    -- getRequestPacket fid cmd dump attrs =
+    pkt = getRequestPacket fid (toEnum (fromIntegral MPTCP_CMD_RESET)) False attributes
+  in
+    -- GenlPacket a with a acting as genlDataData
+    -- sendmsg is an internal function
+    -- query or queryOne
+    -- Packet
+
+    query socket pkt
+  
+
+onNewConnection :: MptcpSocket -> IO ()
+onNewConnection socket = do
     putStrLn "What do you want to do ? (c.reate subflow, d.elete connection)"
     answer <- Prelude.getLine
     case answer of 
       "c" -> do
         putStrLn "Creating new subflow !!"
-        createNewSubflow 
+        createNewSubflow socket
         return ()
       "d" -> putStrLn "Not implemented"
+      "r" -> putStrLn "Reset the connection" >>
+        -- TODO expects token 
+        resetTheConnection socket 42
+        -- MPTCP_CMD_RESET: token,
       -- wrong answer, repeat
-      _ -> onNewConnection
+      _ -> onNewConnection socket
     return ()
 
 
 -- return une fonction ?
 -- genlVersion
 -- type GenlPacket a = Packet (GenlData a)
-dispatchPacket :: GenlPacket NoData -> IO ()
-dispatchPacket packet = let 
+dispatchPacket :: MptcpSocket -> GenlPacket NoData -> IO ()
+dispatchPacket sock packet = let 
     -- todo not the good call
     -- genlHeader = packetHeader packet
     temp_data = packetCustom packet
@@ -324,11 +380,11 @@ dispatchPacket packet = let
     version = genlVersion genl_header
   in
     -- expects an Int
-    case (toEnum (fromIntegral cmd)) of
+    case toEnum (fromIntegral cmd) of
     -- case (toEnum 2) of
       MPTCP_EVENT_CREATED -> do
-            putStrLn $ "Connection created !!" ++ (showAttributes attributes)
-            onNewConnection
+            putStrLn $ "Connection created !!" ++ showAttributes attributes
+            onNewConnection sock
       MPTCP_EVENT_ESTABLISHED -> putStrLn "Connection established !"
       MPTCP_EVENT_CLOSED -> putStrLn "Connection closed"
       MPTCP_EVENT_SUB_CREATED -> putStrLn "Subflow created"
@@ -343,56 +399,48 @@ dispatchPacket packet = let
 
 -- CtrlAttrMcastGroup
 -- copied from utils/GenlInfo.hs
-doDumpLoop :: NetlinkSocket -> IO ()
-doDumpLoop sock = do
+doDumpLoop :: MptcpSocket -> IO ()
+doDumpLoop (MptcpSocket simpleSock fid) = do
   -- type GenlPacket a = Packet (GenlData a) 
   -- with data GenlData A wrapper around GenlHeader
   -- genlDataHeader
-  pack <- (recvOne sock :: IO [GenlPacket NoData])
+  pack <- (recvOne simpleSock :: IO [GenlPacket NoData])
   -- ca me retourne un tas de paquet en fait ?
   -- _ <- pack.genlCmd
-  _ <- mapM dispatchPacket  pack
-
+  -- sock
+  -- For a version that ignores the results see mapM_.
+  _ <- mapM_ (dispatchPacket mptcpSocket) pack
   -- what does it do already ?
   -- _ <- mapM inspectPacket  pack
-
   -- putStrLn $show pack
-  doDumpLoop sock
+  doDumpLoop mptcpSocket
+  where 
+    mptcpSocket = MptcpSocket simpleSock fid
 
 -- regarder dans query/joinMulticastGroup/recvOne
 --
 -- doDumpLoop / dumpGeneric
-listenToEvents :: NetlinkSocket -> CtrlAttrMcastGroup -> IO ()
-listenToEvents sock group = do
+listenToEvents :: MptcpSocket -> CtrlAttrMcastGroup -> IO ()
+listenToEvents (MptcpSocket sock fid) group = do
   -- joinMulticastGroup  returns IO ()
   -- TODO should check it works correctly !
   joinMulticastGroup sock (grpId group)
-  putStrLn $ "Joined grp " ++ (grpName group)
-  doDumpLoop sock
+  putStrLn $ "Joined grp " ++ grpName group
+  doDumpLoop mptcpSocket
+  where
+    mptcpSocket = MptcpSocket sock fid
 
 -- s'inspirer de
 -- https://github.com/vdorr/linux-live-netinfo/blob/24ead3dd84d6847483aed206ec4b0e001bfade02/System/Linux/NetInfo.hs
 main :: IO ()
 main = do
   -- options <- execParser opts
-  (sock, fid) <- makeMptcpSocket
+  (MptcpSocket sock  fid) <- makeMptcpSocket
   putStr "socket created: " >> print fid
   -- (mid, mcastGroup ) <- getFamilyWithMulticasts sock mptcpGenlEvGrpName
   mcastGroups <- getMulticastGroups sock fid
 
-  -- listenToEvents sock 
-  -- case mcastGroups of
-  --   Just (_, grps) -> do
-  -- let gid = getMulticast grp mcastGroups
-  -- case gid of
-  --   Just x -> joinMulticastGroup sock x >> doDumpLoop sock
-  --   Nothing -> error "Could not find the specified multicast group"
-  --   -- Nothing -> error "Could not find the specified family"
-
-  -- case 
-  -- map (\x -> joinMulticastGroup sock (grpId x)) mcastGroups
-  -- mapM to ignore 
-  _ <- mapM (\x -> listenToEvents sock x) mcastGroups
+  _ <- mapM_ (listenToEvents (MptcpSocket sock fid)) mcastGroups
   -- putStrLn $ " Groups: " ++ unwords ( map grpName mcastGroups)
   putStrLn "finished"
 
