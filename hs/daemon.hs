@@ -17,12 +17,10 @@ module Main where
 import Prelude hiding (length, concat)
 import Options.Applicative
 -- import Data.Semigroup ((<>))
-
 -- import Data.ByteString (ByteString, length, unpack, pack, concat)
-
 -- import System.Environment (getArgs)
 
---  
+import Data.Bits ((.|.))
 import System.Linux.Netlink hiding (makeSocket)
 import System.Linux.Netlink (query)
 import System.Linux.Netlink.GeNetlink
@@ -30,7 +28,7 @@ import System.Linux.Netlink.Constants
 -- import System.Linux.Netlink.Utils
 
 import System.Linux.Netlink.GeNetlink.Control as C
-import Data.Word (Word16, Word32)
+import Data.Word (Word8, Word16, Word32)
 import Data.List (intercalate)
 import Data.Binary.Get
 import Data.Serialize.Put
@@ -48,11 +46,20 @@ import qualified Data.Map as Map
 -- |Wrapper for 'NetlinkSocket' we also need the family id for messages we construct
 data MptcpSocket = MptcpSocket NetlinkSocket Word16
 
+data NoDataMptcp = NoDataMptcp deriving (Eq, Show)
+  --
+-- |typedef for messages send by this mdoule
+-- type NL80211Packet = GenlPacket NoData80211
+
+-- instance Show NL80211Packet where
+--   showList xs = ((intercalate "===\n" . map show $xs) ++)
+--   show (Packet _ cus attrs) =
+--     "NL80211Packet: " ++ showNL80211Command cus ++ "\n" ++
+--     "Attrs: \n" ++ concatMap showNL80211Attr (M.toList attrs) ++ "\n"
+--   show p = showPacket p
 
 -- data Command = MPTCP_CMD_ANNOUNCE | MPTCP_CMD_REMOVE | MPTCP_CMD_SUB_CREATE 
 --   deriving  (Enum)
-
-
 --  as an alternative to enums
 -- newtype MessageType = MessageType Int deriving (Eq, Enum, Integral, Num, Ord, Real, Show)
 
@@ -175,13 +182,13 @@ opts = info (sample <**> helper)
 
 -- inspired by makeNL80211Socket Create a 'NL80211Socket' this opens a genetlink 
 -- socket and gets the family id
-makeMptcpSocket :: MptcpSocket
+makeMptcpSocket :: IO (MptcpSocket)
 -- makeMptcpSocket :: IO (NetlinkSocket, Word16)
 makeMptcpSocket = do
   sock <- makeSocket
   fid <- getFamilyId sock mptcpGenlName
   -- return $NLS sock fid
-  return MptcpSocket sock fid
+  return (MptcpSocket sock fid)
 
 
 -- 	err = genl_ctrl_grp_by_name(family, grp_name);
@@ -197,18 +204,17 @@ makeMptcpSocket = do
 -- fid = family id
 -- MptcpAttr Word8 
 -- TODO
-getRequestPacket :: Word16 -> MptcpAttr -> Bool -> Attributes -> Packet NoData
+getRequestPacket :: Word16 -> MptcpGenlEvent -> Bool -> Attributes -> GenlPacket NoData
 getRequestPacket fid cmd dump attrs =
-  let header = Header (fromIntegral fid) flags 0 0
-      geheader = GenlHeader word8Cmd 0 in
-    Packet header (GenlData geheader NoData) attrs
-  where 
+  let 
+    header = Header (fromIntegral fid) flags 0 0
+    geheader = GenlHeader word8Cmd 0 
     flags = if dump then fNLM_F_REQUEST .|. fNLM_F_MATCH .|. fNLM_F_ROOT else fNLM_F_REQUEST
-    word8Cmd = toEnum (fromIntegral cmd)
+    word8Cmd = fromIntegral (fromEnum cmd) :: Word8
+  in
+    Packet header (GenlData geheader NoData) attrs
 
-  --   DoneMsg -> putStrLn "Done Msg"
   --   System.Linux.Netlink.ErrorMsg -> error "error msg"
-  --   Packet -> putStrLn $ packetHeader pack
 
 toIpv4 :: ByteString -> String
 toIpv4 value = Data.List.intercalate "." ( map show (BS.unpack value))
@@ -279,7 +285,6 @@ dumpAttribute attr value = let
 
     
 
---
 -- import Data.Map (Map, keys)
 -- type Attributes = Map Int ByteString
 -- https://lotz84.github.io/haskellbyexample/ex/maps
@@ -319,28 +324,29 @@ showAttributes attrs =
 createNewSubflow :: MptcpSocket -> IO ()
 createNewSubflow sock = putStrLn "createNewSubflow TODO"
 
+
+convertToken :: Word32 -> ByteString
+convertToken val =
+  runPut $ putWord32le val
+
 -- need to prepare a request
--- putPacket 
--- putAttributes
-resetTheConnection :: MptcpSocket -> Word32 -> IO ()
+  --unPut $ putWord32be w32
+-- type GenlPacket a = Packet (GenlData a)
+resetTheConnection :: MptcpSocket -> Word32 -> IO (GenlPacket NoData)
 resetTheConnection (MptcpSocket socket fid) token = let
     m0 = Map.empty
-    m1 = Map.insert MPTCP_ATTR_TOKEN token
+    m1 = Map.insert intCmd (convertToken token) m0
     attributes = m1
-    -- putAttributes m1
-    -- ‘CtrlPacket’ (imported from System.Linux.Netlink.GeNetlink.Control
-    -- bytestringArr = putPacket (GenlPacket attributes)
-    -- ctrlPackettoGenl 
-    -- pkt = CtrlPacket attributes
+    intCmd = fromIntegral cmd :: Int
+    cmd = MPTCP_CMD_RESET
 
     -- getRequestPacket fid cmd dump attrs =
-    pkt = getRequestPacket fid (toEnum (fromIntegral MPTCP_CMD_RESET)) False attributes
+    -- getRequestPacket :: Word16 -> MptcpGenlEvent -> Bool -> Attributes -> GenlPacket NoData
+    pkt = getRequestPacket fid cmd False attributes
   in
     -- GenlPacket a with a acting as genlDataData
-    -- sendmsg is an internal function
     -- query or queryOne
-    -- Packet
-
+    -- System.Linux.Netlink query :: (Convertable a, Eq a, Show a) => NetlinkSocket -> Packet a -> IO [Packet a]
     query socket pkt
   
 
@@ -348,15 +354,17 @@ onNewConnection :: MptcpSocket -> IO ()
 onNewConnection socket = do
     putStrLn "What do you want to do ? (c.reate subflow, d.elete connection)"
     answer <- Prelude.getLine
-    case answer of 
+    case answer of
       "c" -> do
         putStrLn "Creating new subflow !!"
         createNewSubflow socket
         return ()
       "d" -> putStrLn "Not implemented"
-      "r" -> putStrLn "Reset the connection" >>
+      "r" -> putStrLn "Reset the connection"
         -- TODO expects token 
-        resetTheConnection socket 42
+        -- TODO discard result
+          resetTheConnection socket 42
+          putStrLn "Test"
         -- MPTCP_CMD_RESET: token,
       -- wrong answer, repeat
       _ -> onNewConnection socket

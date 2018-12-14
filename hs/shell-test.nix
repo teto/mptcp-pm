@@ -20,7 +20,8 @@ haskellPackages.shellFor {
   nativeBuildInputs = [ 
     hie 
     haskellPackages.cabal-install 
-    haskellPackages.bytestring-conversion
+    # haskellPackages.bytestring-conversion
+    haskellPackages.gutenhasktags
 
     # for https://hackage.haskell.org/package/bytestring-conversion-0.2/candidate/docs/Data-ByteString-Conversion-From.html
   ];
