@@ -332,12 +332,12 @@ convertToken val =
 -- need to prepare a request
   --unPut $ putWord32be w32
 -- type GenlPacket a = Packet (GenlData a)
-resetTheConnection :: MptcpSocket -> Word32 -> IO (GenlPacket NoData)
+resetTheConnection :: MptcpSocket -> Word32 -> IO [GenlPacket NoData]
 resetTheConnection (MptcpSocket socket fid) token = let
     m0 = Map.empty
     m1 = Map.insert intCmd (convertToken token) m0
     attributes = m1
-    intCmd = fromIntegral cmd :: Int
+    intCmd = fromEnum cmd
     cmd = MPTCP_CMD_RESET
 
     -- getRequestPacket fid cmd dump attrs =
@@ -360,10 +360,10 @@ onNewConnection socket = do
         createNewSubflow socket
         return ()
       "d" -> putStrLn "Not implemented"
-      "r" -> putStrLn "Reset the connection"
+      "r" -> putStrLn "Reset the connection" >>
         -- TODO expects token 
         -- TODO discard result
-          resetTheConnection socket 42
+          resetTheConnection socket 42 >>
           putStrLn "Test"
         -- MPTCP_CMD_RESET: token,
       -- wrong answer, repeat
@@ -381,7 +381,7 @@ dispatchPacket sock packet = let
     temp_data = packetCustom packet
     genl_header = genlDataHeader temp_data
     attributes = packetAttributes packet
-    genl_data = genlDataData temp_data
+    -- genl_data = genlDataData temp_data
     -- header = packetHeader packet
     -- `cmd` of type Word8
     cmd = genlCmd genl_header
