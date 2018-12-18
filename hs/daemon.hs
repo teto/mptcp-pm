@@ -80,11 +80,20 @@ data MptcpGenlEvent = MPTCP_CMD_UNSPEC |
   -- eventually derive "Bounded"
   deriving  (Enum, Show)
 
-instance Show MptcpGenlEvent where
+-- instance Show MptcpGenlEvent where
 --   show MPTCP_EVENT_CREATED = "MPTCP_EVENT_CREATED"
   -- show MPTCP_CMD_RESET = "RESET " ++ fromEnum MPTCP_CMD_RESET
   -- show x = x
 
+-- dumpEnum
+dumpCommand :: MptcpGenlEvent -> String
+dumpCommand x = (show x) ++ " = " ++ (show $ fromEnum x)
+-- dumpCommand MPTCP_CMD_UNSPEC  = " MPTCP_CMD_UNSPEC  0"
+-- dumpCommand MPTCP_EVENT_SUB_ERROR = show MPTCP_EVENT_SUB_ERROR + show fromEnum MPTCP_EVENT_SUB_ERROR 
+
+dumpMptcpCommands :: MptcpGenlEvent -> String
+dumpMptcpCommands MPTCP_EVENT_SUB_ERROR = dumpCommand MPTCP_EVENT_SUB_ERROR 
+dumpMptcpCommands x = dumpCommand x ++ "\n" ++ dumpMptcpCommands (succ x)
 
 -- data MptcpGenlGrp = MPTCP_GENL_EV_GRP_NAME | MPTCP_GENL_CMD_GRP_NAME
 data MptcpAttr = 
@@ -194,8 +203,10 @@ makeMptcpSocket = do
 getRequestPacket :: Word16 -> MptcpGenlEvent -> Bool -> Attributes -> GenlPacket NoData
 getRequestPacket fid cmd dump attrs =
   let 
-    myHeader = Header (fromIntegral fid) flags 0 0
+    myHeader = Header (fromIntegral fid) (flags .|. fNLM_F_ACK) 0 0
     geheader = GenlHeader word8Cmd 0 
+    -- NLM_F_ACK
+    -- https://elixir.bootlin.com/linux/latest/source/include/uapi/linux/netlink.h#L54
     flags = if dump then fNLM_F_REQUEST .|. fNLM_F_MATCH .|. fNLM_F_ROOT else fNLM_F_REQUEST
     word8Cmd = fromIntegral (fromEnum cmd) :: Word8
   in
@@ -221,20 +232,6 @@ readToken maybeVal = case maybeVal of
   Nothing -> error "Missing token"
   Just val -> runGet getWord32le (BSL.fromStrict val)
 
--- readToken :: ByteString -> Int
--- readToken val = 
---   -- Maybe (Int, BS)
---   let 
---     res = BS.readInt (BSL.fromStrict val)
---   in 
---    case res of 
---     Nothing -> error "could not read token"
---     Just x -> show x
-
-
--- MPTCP_CMD_SUB_CREATE
--- dumpCommands :: String
--- dumpCommands = map (
 
 dumpAttribute :: Int -> ByteString -> String
 dumpAttribute attr value = let
@@ -248,28 +245,24 @@ dumpAttribute attr value = let
   --   Just x -> show x
 
   attrStr = case toEnum (fromIntegral attr) of
-      -- nla_put_u32(msg, MPTCP_ATTR_TOKEN, mpcb->mptcp_loc_token);
+      MPTCP_ATTR_UNSPEC -> "UNSPECIFIED"
       MPTCP_ATTR_TOKEN -> "TOKEN: " ++ show (readToken $ Just value)
-      MPTCP_ATTR_IF_IDX -> "ifId: " ++ show value 
-      MPTCP_ATTR_TIMEOUT -> "timeout:" ++ show value
-      MPTCP_ATTR_SADDR4 -> "ipv4.src: " ++ toIpv4 value
-      MPTCP_ATTR_SADDR6 -> "ipv6.src: " ++ show value
-
-      -- Data.ByteString.Char8.readInt b
-      MPTCP_ATTR_DADDR4 -> "ipv4.dest: " ++ toIpv4 value
-      MPTCP_ATTR_DADDR6 -> "ipv6.dest: " ++ show value
-
-      -- u8 ?
+      MPTCP_ATTR_FAMILY -> "family: " ++ show value
       MPTCP_ATTR_LOC_ID -> "Locator id: " ++ show value
       MPTCP_ATTR_REM_ID -> "Remote id: " ++ show value
-      MPTCP_ATTR_ERROR -> "Error : " ++ show value
-      MPTCP_ATTR_FLAGS -> "Flags : " ++ show value
+      MPTCP_ATTR_SADDR4 -> "ipv4.src: " ++ toIpv4 value
+      MPTCP_ATTR_SADDR6 -> "ipv6.src: " ++ show value
+      MPTCP_ATTR_DADDR4 -> "ipv4.dest: " ++ toIpv4 value
+      MPTCP_ATTR_DADDR6 -> "ipv6.dest: " ++ show value
       MPTCP_ATTR_SPORT -> "sport" ++ show (getPort value)
       MPTCP_ATTR_DPORT -> "dport" ++ show (getPort value)
-
       MPTCP_ATTR_BACKUP -> "backup" ++ show value
-      MPTCP_ATTR_UNSPEC -> "UNSPECIFIED"
-      _ -> "unhandled case"
+      MPTCP_ATTR_ERROR -> "Error : " ++ show value
+      MPTCP_ATTR_FLAGS -> "Flags : " ++ show value
+      MPTCP_ATTR_TIMEOUT -> "timeout:" ++ show value
+      MPTCP_ATTR_IF_IDX -> "ifId: " ++ show value 
+
+      -- _ -> "unhandled case"
   in
     attrStr ++ "\n"
 
@@ -283,17 +276,11 @@ showAttributes attrs =
   let 
     -- f k v = [show k, " = ", show v]
     -- mapped = Map.mapWithKey f attrs
-  -- ++ "=" ++ (show v))
     mapped = Map.foldrWithKey (\k v -> (dumpAttribute k v ++ ) ) " " attrs
   in 
     -- putStrLn $ intercalate "," $ mapped
-    -- "toto"
     mapped
 
-
--- if (!info->attrs[MPTCP_ATTR_TOKEN] || !info->attrs[MPTCP_ATTR_FAMILY] ||
---     !info->attrs[MPTCP_ATTR_LOC_ID] || !info->attrs[MPTCP_ATTR_REM_ID])
--- 	return -EINVAL;
 
 
 -- - MPTCP_CMD_SUB_CREATE: token, family, loc_id, rem_id, [saddr4 | saddr6,
@@ -308,9 +295,6 @@ showAttributes attrs =
 --     p32 flags
 --     p32 0xFFFFFFFF
 
--- data NewSubflowRequest =
---   MPTCP_ATTR_TOKEN
-
 createNewSubflow :: MptcpSocket -> IO ()
 createNewSubflow _ = putStrLn "createNewSubflow TODO"
 
@@ -322,7 +306,7 @@ convertToken val =
 -- need to prepare a request
   --unPut $ putWord32be w32
 -- type GenlPacket a = Packet (GenlData a)
-resetTheConnection :: MptcpSocket -> Word32 -> IO [GenlPacket NoData]
+resetTheConnection :: MptcpSocket -> MptcpToken -> IO [GenlPacket NoData]
 resetTheConnection (MptcpSocket socket fid) token = let
     m0 = Map.empty
     m1 = Map.insert intCmd (convertToken token) m0
@@ -338,7 +322,14 @@ resetTheConnection (MptcpSocket socket fid) token = let
     -- query or queryOne
     -- System.Linux.Netlink query :: (Convertable a, Eq a, Show a) => NetlinkSocket -> Packet a -> IO [Packet a]
     query socket pkt
+
+inspectAnswers :: [GenlPacket NoData] -> IO ()
+inspectAnswers packets = do
+  _ <- mapM_ inspectAnswer packets
+  putStrLn "Finished inspecting answers"
   
+inspectAnswer :: GenlPacket NoData -> IO ()
+inspectAnswer packet = putStrLn $ show packet
 
 onNewConnection :: MptcpSocket -> MptcpToken -> IO ()
 onNewConnection socket token = do
@@ -353,8 +344,8 @@ onNewConnection socket token = do
       "r" -> putStrLn "Reset the connection" >>
         -- TODO expects token 
         -- TODO discard result
-          resetTheConnection socket 42 >>
-          putStrLn "Test"
+          resetTheConnection socket token >>= inspectAnswers >>
+          putStrLn "Finished resetting"
         -- MPTCP_CMD_RESET: token,
       -- wrong answer, repeat
       _ -> onNewConnection socket token
@@ -383,7 +374,7 @@ dispatchPacket sock packet = let
     case toEnum (fromIntegral cmd) of
     -- case (toEnum 2) of
       MPTCP_EVENT_CREATED -> do
-            putStrLn $ "Connection created !!" ++ showAttributes attributes
+            putStrLn $ "Connection created !!\n" ++ showAttributes attributes
             -- TODO pass the token
             onNewConnection sock token
       MPTCP_EVENT_ESTABLISHED -> putStrLn "Connection established !"
@@ -439,6 +430,7 @@ main = do
   -- options <- execParser opts
   putStrLn "dumping important values:"
   putStrLn $ "RESET" ++ (show MPTCP_CMD_RESET)
+  putStrLn $ dumpMptcpCommands MPTCP_CMD_UNSPEC 
   (MptcpSocket sock  fid) <- makeMptcpSocket
   putStr "socket created. Family id " >> print fid
   -- (mid, mcastGroup ) <- getFamilyWithMulticasts sock mptcpGenlEvGrpName
