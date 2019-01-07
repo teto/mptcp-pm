@@ -7,7 +7,9 @@ let
     # sha256 = "0wgm7sk9fca38a50hrsqwz6q79z35gqgb9nw80xz7pfdr4jy9pf7";
   };
   #  haskellPackages.hie
-  hie = (import hie_remote {} ).hie84;
+
+  # todo make it automatic depending on nixpkgs' ghc
+  hie = (import hie_remote {} ).hie86;
 
 in
 haskellPackages.shellFor {
