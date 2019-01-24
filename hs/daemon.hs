@@ -53,30 +53,30 @@ type MptcpToken = Word32
 
 -- https://stackoverflow.com/questions/18606827/how-to-write-customised-show-function-in-haskell
 -- TODO could use templateHaskell
-data MptcpGenlEvent = MPTCP_CMD_UNSPEC |
+data MptcpGenlEvent = 
+  MPTCP_CMD_UNSPEC |
+
   MPTCP_EVENT_CREATED|
   MPTCP_EVENT_ESTABLISHED|
   MPTCP_EVENT_CLOSED|
+
   MPTCP_CMD_ANNOUNCE|
   MPTCP_CMD_REMOVE|
   MPTCP_EVENT_ANNOUNCED|
   MPTCP_EVENT_REMOVED|
+
   MPTCP_CMD_SUB_CREATE|
   MPTCP_CMD_SUB_DESTROY|
-  MPTCP_EVENT_SUB_CREATED|
   MPTCP_EVENT_SUB_ESTABLISHED|
   MPTCP_EVENT_SUB_CLOSED|
 
   MPTCP_CMD_SUB_PRIORITY|
   MPTCP_EVENT_SUB_PRIORITY|
 
-  MPTCP_CMD_RESET|
   MPTCP_CMD_SET_FILTER|
-  MPTCP_CMD_SUB_TIMEOUT|
-  MPTCP_CMD_DUMP|
 
-  MPTCP_CMD_EXIST|
-  MPTCP_EVENT_SUB_ERROR
+  MPTCP_CMD_EXIST
+
   -- eventually derive "Bounded"
   deriving  (Enum, Show)
 
@@ -92,7 +92,7 @@ dumpCommand x = (show x) ++ " = " ++ (show $ fromEnum x)
 -- dumpCommand MPTCP_EVENT_SUB_ERROR = show MPTCP_EVENT_SUB_ERROR + show fromEnum MPTCP_EVENT_SUB_ERROR 
 
 dumpMptcpCommands :: MptcpGenlEvent -> String
-dumpMptcpCommands MPTCP_EVENT_SUB_ERROR = dumpCommand MPTCP_EVENT_SUB_ERROR 
+-- dumpMptcpCommands MPTCP_EVENT_SUB_ERROR = dumpCommand MPTCP_EVENT_SUB_ERROR 
 dumpMptcpCommands x = dumpCommand x ++ "\n" ++ dumpMptcpCommands (succ x)
 
 -- data MptcpGenlGrp = MPTCP_GENL_EV_GRP_NAME | MPTCP_GENL_CMD_GRP_NAME
@@ -113,8 +113,8 @@ data MptcpAttr =
   -- used to filter events we are interested in
   MPTCP_ATTR_FLAGS| 
   MPTCP_ATTR_TIMEOUT| 
-
   MPTCP_ATTR_IF_IDX
+  -- __MPTCP_ATTR_AFTER_LAST
   deriving  (Enum)
 
 -- en fait y a 2 multicast groups
