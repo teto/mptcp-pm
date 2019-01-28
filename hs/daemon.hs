@@ -48,6 +48,9 @@ data MptcpSocket = MptcpSocket NetlinkSocket Word16
 data NoDataMptcp = NoDataMptcp deriving (Eq, Show)
 
 type MptcpToken = Word32
+type MptcpLocId    = Word8
+type MptcpFamily    = Word16
+
 -- |typedef for messages send by this mdoule
 -- type NL80211Packet = GenlPacket NoData80211
 
@@ -60,6 +63,7 @@ data MptcpGenlEvent =
   MPTCP_EVENT_ESTABLISHED|
   MPTCP_EVENT_CLOSED|
 
+  -- mptcp_nl_genl_announce
   MPTCP_CMD_ANNOUNCE|
   MPTCP_CMD_REMOVE|
   MPTCP_EVENT_ANNOUNCED|
@@ -82,7 +86,6 @@ data MptcpGenlEvent =
 
 -- instance Show MptcpGenlEvent where
 --   show MPTCP_EVENT_CREATED = "MPTCP_EVENT_CREATED"
-  -- show MPTCP_CMD_RESET = "RESET " ++ fromEnum MPTCP_CMD_RESET
   -- show x = x
 
 -- dumpEnum
@@ -180,6 +183,7 @@ opts = info (sample <**> helper)
 
 -- inspired by makeNL80211Socket Create a 'NL80211Socket' this opens a genetlink 
 -- socket and gets the family id
+-- TODO should record the token too
 makeMptcpSocket :: IO (MptcpSocket)
 makeMptcpSocket = do
   sock <- makeSocket
@@ -299,9 +303,47 @@ createNewSubflow :: MptcpSocket -> IO ()
 createNewSubflow _ = putStrLn "createNewSubflow TODO"
 
 
+removeSubflow :: MptcpSocket -> MptcpToken -> IO [GenlPacket NoData]
+removeSubflow (MptcpSocket socket fid) token = let
+    m0 = Map.empty
+    -- TODO I should add the command at some point here
+    m1 = Map.insert (fromEnum MPTCP_ATTR_TOKEN) (convertToken token) m0
+    -- the loc id should exist :/
+    m2 = Map.insert (fromEnum MPTCP_ATTR_LOC_ID) (convertToken token) m1
+    -- MPTCP_ATTR_IF_IDX and MPTCP_ATTR_BACKUP should be optional
+    --
+    attributes = m2
+    -- intCmd = fromEnum cmd
+    cmd = MPTCP_CMD_REMOVE
+    pkt = getRequestPacket fid cmd False attributes
+  in
+    query socket pkt
+
+
+--announceSubflow :: MptcpSocket -> MptcpToken -> IO [GenlPacket NoData]
+--announceSubflow (MptcpSocket socket fid) token = let
+--    m0 = Map.empty
+--    -- TODO I should add the command at some point here
+--    m1 = Map.insert MPTCP_ATTR_TOKEN (convertToken token) m0
+--    -- the loc id should exist :/
+--    m2 = Map.insert MPTCP_ATTR_LOC_ID (convertToken token) m1
+--    -- MPTCP_ATTR_IF_IDX and MPTCP_ATTR_BACKUP should be optional
+--    --
+--    attributes = m1
+--    intCmd = fromEnum cmd
+--    cmd = MPTCP_CMD_ANNOUNCE
+--    pkt = getRequestPacket fid cmd False attributes
+--  in
+--    query socket pkt
+
+
+
 convertToken :: Word32 -> ByteString
 convertToken val =
   runPut $ putWord32le val
+
+-- removeSubflow :: MptcpSocket -> MptcpToken -> SubflowId -> IO [GenlPacket NoData]
+-- resetTheConnection (MptcpSocket socket fid) token = let
 
 -- need to prepare a request
   --unPut $ putWord32be w32
@@ -312,7 +354,7 @@ resetTheConnection (MptcpSocket socket fid) token = let
     m1 = Map.insert intCmd (convertToken token) m0
     attributes = m1
     intCmd = fromEnum cmd
-    cmd = MPTCP_CMD_RESET
+    cmd = MPTCP_CMD_REMOVE
 
     -- getRequestPacket fid cmd dump attrs =
     -- getRequestPacket :: Word16 -> MptcpGenlEvent -> Bool -> Attributes -> GenlPacket NoData
@@ -334,21 +376,24 @@ inspectAnswer packet = putStrLn $ show packet
 onNewConnection :: MptcpSocket -> MptcpToken -> IO ()
 onNewConnection socket token = do
     putStrLn "What do you want to do ? (c.reate subflow, d.elete connection, r.eset connection)"
-    answer <- Prelude.getLine
-    case answer of
-      "c" -> do
-        putStrLn "Creating new subflow !!"
-        createNewSubflow socket
-        return ()
-      "d" -> putStrLn "Not implemented"
-      "r" -> putStrLn "Reset the connection" >>
-        -- TODO expects token 
-        -- TODO discard result
-          resetTheConnection socket token >>= inspectAnswers >>
-          putStrLn "Finished resetting"
-        -- MPTCP_CMD_RESET: token,
-      -- wrong answer, repeat
-      _ -> onNewConnection socket token
+    removeSubflow socket token >>= inspectAnswers >> putStrLn "Finished announcing"
+    -- announceSubflow socket token >>= inspectAnswers >> putStrLn "Finished announcing"
+
+    -- answer <- Prelude.getLine
+    -- case answer of
+    --   "c" -> do
+    --     putStrLn "Creating new subflow !!"
+    --     createNewSubflow socket
+    --     return ()
+    --   "d" -> putStrLn "Not implemented"
+    --   "r" -> putStrLn "Reset the connection" >>
+    --     -- TODO expects token 
+    --     -- TODO discard result
+    --       resetTheConnection socket token >>= inspectAnswers >>
+    --       putStrLn "Finished resetting"
+    --     -- MPTCP_CMD_RESET: token,
+    --   -- wrong answer, repeat
+    --   _ -> onNewConnection socket token
     return ()
 
 
@@ -379,7 +424,6 @@ dispatchPacket sock packet = let
             onNewConnection sock token
       MPTCP_EVENT_ESTABLISHED -> putStrLn "Connection established !"
       MPTCP_EVENT_CLOSED -> putStrLn "Connection closed"
-      MPTCP_EVENT_SUB_CREATED -> putStrLn "Subflow created"
       MPTCP_EVENT_SUB_ESTABLISHED -> putStrLn "Subflow established"
       MPTCP_EVENT_SUB_CLOSED -> putStrLn "Subflow closed"
       _ -> putStrLn "undefined event !!"
@@ -429,7 +473,7 @@ main :: IO ()
 main = do
   -- options <- execParser opts
   putStrLn "dumping important values:"
-  putStrLn $ "RESET" ++ (show MPTCP_CMD_RESET)
+  putStrLn $ "RESET" ++ (show MPTCP_CMD_REMOVE)
   putStrLn $ dumpMptcpCommands MPTCP_CMD_UNSPEC 
   (MptcpSocket sock  fid) <- makeMptcpSocket
   putStr "socket created. Family id " >> print fid
