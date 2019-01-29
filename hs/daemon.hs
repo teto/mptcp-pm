@@ -95,7 +95,7 @@ dumpCommand x = (show x) ++ " = " ++ (show $ fromEnum x)
 -- dumpCommand MPTCP_EVENT_SUB_ERROR = show MPTCP_EVENT_SUB_ERROR + show fromEnum MPTCP_EVENT_SUB_ERROR 
 
 dumpMptcpCommands :: MptcpGenlEvent -> String
--- dumpMptcpCommands MPTCP_EVENT_SUB_ERROR = dumpCommand MPTCP_EVENT_SUB_ERROR 
+dumpMptcpCommands MPTCP_CMD_EXIST = dumpCommand MPTCP_CMD_EXIST 
 dumpMptcpCommands x = dumpCommand x ++ "\n" ++ dumpMptcpCommands (succ x)
 
 -- data MptcpGenlGrp = MPTCP_GENL_EV_GRP_NAME | MPTCP_GENL_CMD_GRP_NAME
@@ -317,6 +317,7 @@ removeSubflow (MptcpSocket socket fid) token = let
     cmd = MPTCP_CMD_REMOVE
     pkt = getRequestPacket fid cmd False attributes
   in
+    putStrLn "Remove subflow " >>=
     query socket pkt
 
 
