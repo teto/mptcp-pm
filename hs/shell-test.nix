@@ -15,7 +15,8 @@ in
 haskellPackages.shellFor {
   # the dependencies of packages listed in `packages`, not the
   packages = p: with p; [
-    netlink-pm 
+    # netlink-pm 
+    (import ./. )
   ];
   withHoogle = true;
   # haskellPackages.stack 

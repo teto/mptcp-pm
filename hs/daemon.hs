@@ -48,7 +48,7 @@ data MptcpSocket = MptcpSocket NetlinkSocket Word16
 data NoDataMptcp = NoDataMptcp deriving (Eq, Show)
 
 type MptcpToken = Word32
-type MptcpLocId    = Word8
+type LocId    = Word8
 type MptcpFamily    = Word16
 
 -- |typedef for messages send by this mdoule
@@ -184,7 +184,7 @@ opts = info (sample <**> helper)
 -- inspired by makeNL80211Socket Create a 'NL80211Socket' this opens a genetlink 
 -- socket and gets the family id
 -- TODO should record the token too
-makeMptcpSocket :: IO (MptcpSocket)
+makeMptcpSocket :: IO MptcpSocket
 makeMptcpSocket = do
   sock <- makeSocket
   fid <- getFamilyId sock mptcpGenlName
@@ -207,13 +207,18 @@ makeMptcpSocket = do
 getRequestPacket :: Word16 -> MptcpGenlEvent -> Bool -> Attributes -> GenlPacket NoData
 getRequestPacket fid cmd dump attrs =
   let 
+    -- The message type/ flag / sequence number / pid  (0 => from the kernel)
     myHeader = Header (fromIntegral fid) (flags .|. fNLM_F_ACK) 0 0
+    -- GenlHeader <cmd> <version>
     geheader = GenlHeader word8Cmd 0 
     -- NLM_F_ACK
     -- https://elixir.bootlin.com/linux/latest/source/include/uapi/linux/netlink.h#L54
     flags = if dump then fNLM_F_REQUEST .|. fNLM_F_MATCH .|. fNLM_F_ROOT else fNLM_F_REQUEST
     word8Cmd = fromIntegral (fromEnum cmd) :: Word8
   in
+
+    -- inspired by System/Linux/Netlink/GeNetlink/NL80211.hs
+    -- Packet header (GenlData geheader NoData80211) attrs
     Packet myHeader (GenlData geheader NoData) attrs
 
   --   System.Linux.Netlink.ErrorMsg -> error "error msg"
@@ -272,7 +277,6 @@ dumpAttribute attr value = let
 
     
 
--- import Data.Map (Map, keys)
 -- type Attributes = Map Int ByteString
 -- https://lotz84.github.io/haskellbyexample/ex/maps
 showAttributes :: Attributes -> String
@@ -303,13 +307,13 @@ createNewSubflow :: MptcpSocket -> IO ()
 createNewSubflow _ = putStrLn "createNewSubflow TODO"
 
 
-removeSubflow :: MptcpSocket -> MptcpToken -> IO [GenlPacket NoData]
-removeSubflow (MptcpSocket socket fid) token = let
+removeSubflow :: MptcpSocket -> MptcpToken -> LocId -> IO [GenlPacket NoData]
+removeSubflow (MptcpSocket socket fid) token locId = let
     m0 = Map.empty
     -- TODO I should add the command at some point here
     m1 = Map.insert (fromEnum MPTCP_ATTR_TOKEN) (convertToken token) m0
     -- the loc id should exist :/
-    m2 = Map.insert (fromEnum MPTCP_ATTR_LOC_ID) (convertToken token) m1
+    m2 = Map.insert (fromEnum MPTCP_ATTR_LOC_ID) (convertLocId locId) m1
     -- MPTCP_ATTR_IF_IDX and MPTCP_ATTR_BACKUP should be optional
     --
     attributes = m2
@@ -317,8 +321,7 @@ removeSubflow (MptcpSocket socket fid) token = let
     cmd = MPTCP_CMD_REMOVE
     pkt = getRequestPacket fid cmd False attributes
   in
-    putStrLn "Remove subflow " >>=
-    query socket pkt
+    putStrLn "Remove subflow " >> query socket pkt
 
 
 --announceSubflow :: MptcpSocket -> MptcpToken -> IO [GenlPacket NoData]
@@ -338,21 +341,21 @@ removeSubflow (MptcpSocket socket fid) token = let
 --    query socket pkt
 
 
+convertLocId :: Word8 -> ByteString
+convertLocId val = 
 
 convertToken :: Word32 -> ByteString
 convertToken val =
   runPut $ putWord32le val
 
--- removeSubflow :: MptcpSocket -> MptcpToken -> SubflowId -> IO [GenlPacket NoData]
--- resetTheConnection (MptcpSocket socket fid) token = let
-
 -- need to prepare a request
   --unPut $ putWord32be w32
 -- type GenlPacket a = Packet (GenlData a)
-resetTheConnection :: MptcpSocket -> MptcpToken -> IO [GenlPacket NoData]
-resetTheConnection (MptcpSocket socket fid) token = let
+resetTheConnection :: MptcpSocket -> Attributes -> IO [GenlPacket NoData]
+resetTheConnection (MptcpSocket socket fid) receivedAttributes = let
     m0 = Map.empty
     m1 = Map.insert intCmd (convertToken token) m0
+    token = readToken $ Map.lookup (fromEnum MPTCP_ATTR_TOKEN) receivedAttributes
     attributes = m1
     intCmd = fromEnum cmd
     cmd = MPTCP_CMD_REMOVE
@@ -374,10 +377,10 @@ inspectAnswers packets = do
 inspectAnswer :: GenlPacket NoData -> IO ()
 inspectAnswer packet = putStrLn $ show packet
 
-onNewConnection :: MptcpSocket -> MptcpToken -> IO ()
-onNewConnection socket token = do
-    putStrLn "What do you want to do ? (c.reate subflow, d.elete connection, r.eset connection)"
-    removeSubflow socket token >>= inspectAnswers >> putStrLn "Finished announcing"
+onNewConnection :: MptcpSocket -> Attributes -> IO ()
+onNewConnection socket attrs = do
+    -- putStrLn "What do you want to do ? (c.reate subflow, d.elete connection, r.eset connection)"
+    removeSubflow socket attrs >>= inspectAnswers >> putStrLn "Finished announcing"
     -- announceSubflow socket token >>= inspectAnswers >> putStrLn "Finished announcing"
 
     -- answer <- Prelude.getLine
@@ -422,7 +425,7 @@ dispatchPacket sock packet = let
       MPTCP_EVENT_CREATED -> do
             putStrLn $ "Connection created !!\n" ++ showAttributes attributes
             -- TODO pass the token
-            onNewConnection sock token
+            onNewConnection sock attributes
       MPTCP_EVENT_ESTABLISHED -> putStrLn "Connection established !"
       MPTCP_EVENT_CLOSED -> putStrLn "Connection closed"
       MPTCP_EVENT_SUB_ESTABLISHED -> putStrLn "Subflow established"

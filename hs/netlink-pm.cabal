@@ -1,12 +1,11 @@
 name: netlink-pm
 version: 1.0.0
 license: GPL-3
-license-file: LICENSE
+license-file: gpl-3.0.txt
 cabal-version: >= 1.18
 build-type: Simple
 
-executable project1
-    build-depends: base < 5, netlink, optparse-applicative, bytestring-conversion
+executable daemon
+    build-depends: base, netlink, optparse-applicative, bytestring-conversion, binary, containers, bytestring, cereal
     main-is: daemon.hs
     default-language: Haskell2010
-	exposed-modules:   Data.ByteString
