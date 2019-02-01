@@ -25,12 +25,19 @@ haskellPackages.shellFor {
     haskellPackages.cabal-install 
     # haskellPackages.bytestring-conversion
     haskellPackages.gutenhasktags
+    haskellPackages.haskdogs # seems to build on hasktags/ recursively import things
+    haskellPackages.hasktags
 
     # for https://hackage.haskell.org/package/bytestring-conversion-0.2/candidate/docs/Data-ByteString-Conversion-From.html
   ];
 
   # export HIE_HOOGLE_DATABASE=$NIX_GHC_DOCDIR as DOCDIR doesn't exist it won't work
   shellHook = ''
+    # check if it's still needed ?
     export HIE_HOOGLE_DATABASE="$NIX_GHC_LIBDIR/../../share/doc/hoogle/index.html"
+    # export runghc=" "
+    function rundaemon() {
+      sudo setcap cap_net_admin+ep hs/dist-newstyle/build/x86_64-linux/ghc-8.6.3/netlink-pm-1.0.0/x/daemon/build/daemon/daemon
+    } 
   '';
 }

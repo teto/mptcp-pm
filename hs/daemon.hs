@@ -8,6 +8,10 @@ Portability : Linux
 
 This module providis utility functions for NL80211 subsystem.
 For more information see /usr/include/linux/nl80211.h
+
+To interact 
+GENL_ADMIN_PERM
+The operation requires the CAP_NET_ADMIN privilege
 -}
 
 -- !/usr/bin/env nix-shell
@@ -36,6 +40,8 @@ import Data.Serialize.Put
 import Data.ByteString as BS hiding (putStrLn, putStr, map, intercalate)
 import qualified Data.ByteString.Lazy as BSL
 
+import Debug.Trace
+
 import qualified Data.Map as Map
 -- import Data.ByteString.Char8 as C8 hiding (putStrLn, putStr)
  -- (unpack)
@@ -53,6 +59,7 @@ type MptcpFamily    = Word16
 
 -- |typedef for messages send by this mdoule
 -- type NL80211Packet = GenlPacket NoData80211
+mptcp_genl_ver = 1
 
 -- https://stackoverflow.com/questions/18606827/how-to-write-customised-show-function-in-haskell
 -- TODO could use templateHaskell
@@ -191,9 +198,6 @@ makeMptcpSocket = do
   return (MptcpSocket sock fid)
 
 
--- 	err = genl_ctrl_grp_by_name(family, grp_name);
--- 	genl_family_put(family);
---
 -- errout:
 -- 	return err;
 
@@ -201,16 +205,13 @@ makeMptcpSocket = do
 -- inspectPacket = Prelude.putStrLn show 
 -- inspectPacket packet = Prelude.putStrLn $show packet
 
--- fid = family id
--- MptcpAttr Word8 
--- TODO
 getRequestPacket :: Word16 -> MptcpGenlEvent -> Bool -> Attributes -> GenlPacket NoData
 getRequestPacket fid cmd dump attrs =
   let 
     -- The message type/ flag / sequence number / pid  (0 => from the kernel)
     myHeader = Header (fromIntegral fid) (flags .|. fNLM_F_ACK) 0 0
     -- GenlHeader <cmd> <version>
-    geheader = GenlHeader word8Cmd 0 
+    geheader = GenlHeader word8Cmd mptcp_genl_ver
     -- NLM_F_ACK
     -- https://elixir.bootlin.com/linux/latest/source/include/uapi/linux/netlink.h#L54
     flags = if dump then fNLM_F_REQUEST .|. fNLM_F_MATCH .|. fNLM_F_ROOT else fNLM_F_REQUEST
@@ -241,6 +242,10 @@ readToken maybeVal = case maybeVal of
   Nothing -> error "Missing token"
   Just val -> runGet getWord32le (BSL.fromStrict val)
 
+readLocId :: Maybe ByteString -> LocId
+readLocId maybeVal = case maybeVal of 
+  Nothing -> error "Missing locator id"
+  Just val -> runGet getWord8 (BSL.fromStrict val)
 
 dumpAttribute :: Int -> ByteString -> String
 dumpAttribute attr value = let
@@ -257,7 +262,7 @@ dumpAttribute attr value = let
       MPTCP_ATTR_UNSPEC -> "UNSPECIFIED"
       MPTCP_ATTR_TOKEN -> "TOKEN: " ++ show (readToken $ Just value)
       MPTCP_ATTR_FAMILY -> "family: " ++ show value
-      MPTCP_ATTR_LOC_ID -> "Locator id: " ++ show value
+      MPTCP_ATTR_LOC_ID -> "Locator id: " ++ show (readLocId $ Just value)
       MPTCP_ATTR_REM_ID -> "Remote id: " ++ show value
       MPTCP_ATTR_SADDR4 -> "ipv4.src: " ++ toIpv4 value
       MPTCP_ATTR_SADDR6 -> "ipv6.src: " ++ show value
@@ -303,16 +308,24 @@ showAttributes attrs =
 --     p32 flags
 --     p32 0xFFFFFFFF
 
-createNewSubflow :: MptcpSocket -> IO ()
-createNewSubflow _ = putStrLn "createNewSubflow TODO"
+createNewSubflow :: MptcpSocket -> MptcpToken -> Attributes -> IO ()
+createNewSubflow (MptcpSocket socket fid) token attrs = let
+  localId = readLocId $ Map.lookup (fromEnum MPTCP_ATTR_LOC_ID) attrs
+  remoteId = readLocId $ Map.lookup (fromEnum MPTCP_ATTR_REM_ID) attrs
+  in
+  putStrLn "createNewSubflow TODO"
+  -- if (!info->attrs[MPTCP_ATTR_TOKEN] || !info->attrs[MPTCP_ATTR_FAMILY] ||
+  --     !info->attrs[MPTCP_ATTR_LOC_ID] || !info->attrs[MPTCP_ATTR_REM_ID])
 
 
-removeSubflow :: MptcpSocket -> MptcpToken -> LocId -> IO [GenlPacket NoData]
-removeSubflow (MptcpSocket socket fid) token locId = let
+-- removeSubflow :: MptcpSocket -> MptcpToken -> LocId -> IO [GenlPacket NoData]
+-- removeSubflow (MptcpSocket socket fid) token locId = let
+
+
+removeLocId :: MptcpSocket -> MptcpToken -> LocId -> IO [GenlPacket NoData]
+removeLocId (MptcpSocket socket fid) token locId = let
     m0 = Map.empty
-    -- TODO I should add the command at some point here
     m1 = Map.insert (fromEnum MPTCP_ATTR_TOKEN) (convertToken token) m0
-    -- the loc id should exist :/
     m2 = Map.insert (fromEnum MPTCP_ATTR_LOC_ID) (convertLocId locId) m1
     -- MPTCP_ATTR_IF_IDX and MPTCP_ATTR_BACKUP should be optional
     --
@@ -321,8 +334,19 @@ removeSubflow (MptcpSocket socket fid) token locId = let
     cmd = MPTCP_CMD_REMOVE
     pkt = getRequestPacket fid cmd False attributes
   in
-    putStrLn "Remove subflow " >> query socket pkt
+    putStrLn ("Remove subflow " ++ showAttributes attributes)
+      >> query socket pkt
 
+
+checkIfSocketExists :: MptcpSocket -> MptcpToken  -> IO [GenlPacket NoData]
+checkIfSocketExists (MptcpSocket socket fid) token = let
+    attributes = Map.insert (fromEnum MPTCP_ATTR_TOKEN) (convertToken token) Map.empty
+    pkt = getRequestPacket fid cmd False attributes
+    cmd = MPTCP_CMD_EXIST
+  in
+    putStrLn ("Checking token exists\n" ++ showAttributes attributes ++ showPacket pkt)
+      -- >> putStrLn $ 
+      >> query socket pkt
 
 --announceSubflow :: MptcpSocket -> MptcpToken -> IO [GenlPacket NoData]
 --announceSubflow (MptcpSocket socket fid) token = let
@@ -343,13 +367,13 @@ removeSubflow (MptcpSocket socket fid) token locId = let
 
 convertLocId :: Word8 -> ByteString
 convertLocId val = 
+  runPut $ putWord8 val
 
 convertToken :: Word32 -> ByteString
 convertToken val =
   runPut $ putWord32le val
 
 -- need to prepare a request
-  --unPut $ putWord32be w32
 -- type GenlPacket a = Packet (GenlData a)
 resetTheConnection :: MptcpSocket -> Attributes -> IO [GenlPacket NoData]
 resetTheConnection (MptcpSocket socket fid) receivedAttributes = let
@@ -375,29 +399,32 @@ inspectAnswers packets = do
   putStrLn "Finished inspecting answers"
   
 inspectAnswer :: GenlPacket NoData -> IO ()
-inspectAnswer packet = putStrLn $ show packet
+inspectAnswer packet = putStrLn $ showPacket packet
 
 onNewConnection :: MptcpSocket -> Attributes -> IO ()
-onNewConnection socket attrs = do
+onNewConnection socket attributes = do
+    let token = readToken $ Map.lookup (fromEnum MPTCP_ATTR_TOKEN) attributes
+    let locId = readLocId $ Map.lookup (fromEnum MPTCP_ATTR_LOC_ID) attributes
+    let answer = "e"
+    -- answer <-  Prelude.getLine
     -- putStrLn "What do you want to do ? (c.reate subflow, d.elete connection, r.eset connection)"
-    removeSubflow socket attrs >>= inspectAnswers >> putStrLn "Finished announcing"
     -- announceSubflow socket token >>= inspectAnswers >> putStrLn "Finished announcing"
-
-    -- answer <- Prelude.getLine
-    -- case answer of
-    --   "c" -> do
-    --     putStrLn "Creating new subflow !!"
-    --     createNewSubflow socket
-    --     return ()
-    --   "d" -> putStrLn "Not implemented"
-    --   "r" -> putStrLn "Reset the connection" >>
-    --     -- TODO expects token 
-    --     -- TODO discard result
-    --       resetTheConnection socket token >>= inspectAnswers >>
-    --       putStrLn "Finished resetting"
-    --     -- MPTCP_CMD_RESET: token,
-    --   -- wrong answer, repeat
-    --   _ -> onNewConnection socket token
+    case answer of
+      "c" -> do
+        putStrLn "Creating new subflow !!"
+        createNewSubflow socket token attributes
+        return ()
+      "d" -> putStrLn "Not implemented"
+        -- removeSubflow socket token locId >>= inspectAnswers >> putStrLn "Finished announcing"
+      "e" -> putStrLn "check for existence" >>
+          checkIfSocketExists socket token >>= inspectAnswers
+          -- return ()
+      "r" -> putStrLn "Reset the connection" >>
+        -- TODO expects token 
+        -- TODO discard result
+          -- resetTheConnection socket token >>= inspectAnswers >>
+          putStrLn "Finished resetting"
+      _ -> onNewConnection socket attributes
     return ()
 
 
@@ -413,18 +440,12 @@ dispatchPacket sock packet = let
     attributes = packetAttributes packet
     -- genl_data = genlDataData temp_data
     -- header = packetHeader packet
-    -- `cmd` of type Word8
     cmd = genlCmd genl_header
     -- version = genlVersion genl_header
-    -- return a maybe token
-    token = readToken $ Map.lookup (fromEnum MPTCP_ATTR_TOKEN) attributes
   in
-    -- expects an Int
     case toEnum (fromIntegral cmd) of
-    -- case (toEnum 2) of
       MPTCP_EVENT_CREATED -> do
             putStrLn $ "Connection created !!\n" ++ showAttributes attributes
-            -- TODO pass the token
             onNewConnection sock attributes
       MPTCP_EVENT_ESTABLISHED -> putStrLn "Connection established !"
       MPTCP_EVENT_CLOSED -> putStrLn "Connection closed"
@@ -432,33 +453,23 @@ dispatchPacket sock packet = let
       MPTCP_EVENT_SUB_CLOSED -> putStrLn "Subflow closed"
       _ -> putStrLn "undefined event !!"
 
-      -- putStrLn $show genl_data
-    -- case (messageType header) of
-    --   MPTCP_EVENT_CREATED -> putStrLn "Connection created !!"
-    --   MPTCP_CMD_UNSPEC -> putStrLn "UNKNOWN COMMAND ERROR "
 
 -- CtrlAttrMcastGroup
 -- copied from utils/GenlInfo.hs
 doDumpLoop :: MptcpSocket -> IO ()
 doDumpLoop (MptcpSocket simpleSock fid) = do
-  -- type GenlPacket a = Packet (GenlData a) 
-  -- with data GenlData A wrapper around GenlHeader
-  -- genlDataHeader
-  myPack <- (recvOne simpleSock :: IO [GenlPacket NoData])
+  -- putStrLn $show pack
+  putStrLn "doDumpLoop"
+  myPack <- trace "recvOne" (recvOne simpleSock :: IO [GenlPacket NoData])
   -- ca me retourne un tas de paquet en fait ?
-  -- _ <- pack.genlCmd
-  -- sock
   -- For a version that ignores the results see mapM_.
   _ <- mapM_ (dispatchPacket mptcpSocket) myPack
-  -- what does it do already ?
   -- _ <- mapM inspectPacket  pack
-  -- putStrLn $show pack
   doDumpLoop mptcpSocket
   where 
     mptcpSocket = MptcpSocket simpleSock fid
 
 -- regarder dans query/joinMulticastGroup/recvOne
---
 -- doDumpLoop / dumpGeneric
 listenToEvents :: MptcpSocket -> CtrlAttrMcastGroup -> IO ()
 listenToEvents (MptcpSocket sock fid) my_group = do
@@ -498,11 +509,7 @@ main = do
     -- print (packetMessage iface)
     -- let attrs = packetAttributes iface
     -- print $ getLinkAddress attrs
-    -- print $ getLinkBroadcast attrs
-    -- print $ getLinkName attrs
-    -- print $ getLinkMTU attrs
-    -- print $ getLinkQDisc attrs
-    -- print $ getLinkTXQLen attrs
+    -- print $ getLinkBroadcast attr
 
 -- dumpNumeric :: ByteString -> IO ()
 -- dumpNumeric b = print $ unpack b
