@@ -36,8 +36,6 @@ haskellPackages.shellFor {
     # check if it's still needed ?
     export HIE_HOOGLE_DATABASE="$NIX_GHC_LIBDIR/../../share/doc/hoogle/index.html"
     # export runghc=" "
-    function rundaemon() {
-      sudo setcap cap_net_admin+ep hs/dist-newstyle/build/x86_64-linux/ghc-8.6.3/netlink-pm-1.0.0/x/daemon/build/daemon/daemon
-    } 
+    source ./run_daemon
   '';
 }

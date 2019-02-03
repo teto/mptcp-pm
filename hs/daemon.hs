@@ -431,13 +431,18 @@ onNewConnection socket attributes = do
 -- return une fonction ?
 -- genlVersion
 -- type GenlPacket a = Packet (GenlData a)
-dispatchPacket :: MptcpSocket -> GenlPacket NoData -> IO ()
-dispatchPacket sock packet = let 
+-- overloaded dispatching inspired by System/Linux/Netlink.hs:showPacket
+dispatchPacket :: MptcpSocket -> Packet -> IO ()
+dispatchPacket sock (System.Linux.Netlink.ErrorMsg hdr code packet) = do
+  putStrLn "a netlink error happened"
+dispatchPacket sock (DoneMsg hdr) = do 
+  putStrLn "Done Msg"
+dispatchPacket sock (Packet hdr packet attributes) = let 
     -- todo not the good call
     -- genlHeader = packetHeader packet
     temp_data = packetCustom packet
     genl_header = genlDataHeader temp_data
-    attributes = packetAttributes packet
+    -- attributes = packetAttributes packet
     -- genl_data = genlDataData temp_data
     -- header = packetHeader packet
     cmd = genlCmd genl_header
@@ -460,7 +465,10 @@ doDumpLoop :: MptcpSocket -> IO ()
 doDumpLoop (MptcpSocket simpleSock fid) = do
   -- putStrLn $show pack
   putStrLn "doDumpLoop"
-  myPack <- trace "recvOne" (recvOne simpleSock :: IO [GenlPacket NoData])
+  -- TODO do less filtering here ?
+  -- myPack <- trace "recvOne" (recvOne simpleSock :: IO [GenlPacket NoData])
+  myPack <- trace "recvOne" (recvOne simpleSock)
+
   -- ca me retourne un tas de paquet en fait ?
   -- For a version that ignores the results see mapM_.
   _ <- mapM_ (dispatchPacket mptcpSocket) myPack
