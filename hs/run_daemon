@@ -2,7 +2,7 @@
 
 function rundaemon() {
 	cabal new-build
-	sudo setcap cap_net_admin+ep hs/dist-newstyle/build/x86_64-linux/ghc-8.6.3/netlink-pm-1.0.0/x/daemon/build/daemon/daemon
+	sudo setcap cap_net_admin+ep ./dist-newstyle/build/x86_64-linux/ghc-8.6.3/netlink-pm-1.0.0/x/daemon/build/daemon/daemon
 	cabal new-run
 } 
 

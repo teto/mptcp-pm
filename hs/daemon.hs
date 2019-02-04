@@ -432,7 +432,8 @@ onNewConnection socket attributes = do
 -- genlVersion
 -- type GenlPacket a = Packet (GenlData a)
 -- overloaded dispatching inspired by System/Linux/Netlink.hs:showPacket
-dispatchPacket :: MptcpSocket -> Packet -> IO ()
+-- NoData
+dispatchPacket :: MptcpSocket -> Packet (GenlData NoData) -> IO ()
 dispatchPacket sock (System.Linux.Netlink.ErrorMsg hdr code packet) = do
   putStrLn "a netlink error happened"
 dispatchPacket sock (DoneMsg hdr) = do 
@@ -440,8 +441,11 @@ dispatchPacket sock (DoneMsg hdr) = do
 dispatchPacket sock (Packet hdr packet attributes) = let 
     -- todo not the good call
     -- genlHeader = packetHeader packet
-    temp_data = packetCustom packet
-    genl_header = genlDataHeader temp_data
+
+    -- type GenlPacket a = Packet (GenlData a)
+  --    , genlDataData   :: a
+    -- temp_data = packetCustom packet
+    genl_header = genlDataHeader packet
     -- attributes = packetAttributes packet
     -- genl_data = genlDataData temp_data
     -- header = packetHeader packet
