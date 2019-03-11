@@ -9,7 +9,10 @@ let
   #  haskellPackages.hie
 
   # todo make it automatic depending on nixpkgs' ghc
-  hie = (import hie_remote {} ).hie86;
+# pkgs.haskell.packages.ghc864
+  hie = (import hie_remote {
+    # compiler = pkgs.haskell.compiler.ghc864;
+  } ).hie86;
 
 
   # TODO override
@@ -25,7 +28,7 @@ let
 
 
 in
-haskellPackages.shellFor {
+  haskell.packages.ghc863.shellFor {
   # the dependencies of packages listed in `packages`, not the
   packages = p: with p; [
     (import ./. )
