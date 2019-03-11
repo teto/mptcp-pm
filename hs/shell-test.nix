@@ -11,22 +11,36 @@ let
   # todo make it automatic depending on nixpkgs' ghc
   hie = (import hie_remote {} ).hie86;
 
+
+  # TODO override
+  # "netlink" = prev.haskell.lib.overrideSrc hprev.netlink {
+  #    src = prev.fetchFromGitHub {
+  #     owner = "ongy";
+  #     repo = "netlink-hs";
+  #     rev = "8e7a285f7e4cee0a7f908e431559c87c2f228783";
+
+  #     sha256 = "05hq41zh5msm06gfgfjvf1lq1qnqg1l2ng1ywiikkck8msc3mmx1";
+  #   };
+  # };
+
+
 in
 haskellPackages.shellFor {
   # the dependencies of packages listed in `packages`, not the
   packages = p: with p; [
-    # netlink-pm 
     (import ./. )
   ];
   withHoogle = true;
-  # haskellPackages.stack 
-  nativeBuildInputs = [ 
-    hie 
-    haskellPackages.cabal-install 
+  # haskellPackages.stack
+  nativeBuildInputs = [
+    hie
+    haskellPackages.cabal-install
     # haskellPackages.bytestring-conversion
     haskellPackages.gutenhasktags
     haskellPackages.haskdogs # seems to build on hasktags/ recursively import things
     haskellPackages.hasktags
+    haskellPackages.nvim-hs
+    haskellPackages.nvim-hs-ghcid
 
     # for https://hackage.haskell.org/package/bytestring-conversion-0.2/candidate/docs/Data-ByteString-Conversion-From.html
   ];

@@ -41,6 +41,8 @@ import Data.ByteString as BS hiding (putStrLn, putStr, map, intercalate)
 import qualified Data.ByteString.Lazy as BSL
 
 import Debug.Trace
+import Control.Exception
+
 
 import qualified Data.Map as Map
 -- import Data.ByteString.Char8 as C8 hiding (putStrLn, putStr)
@@ -418,6 +420,7 @@ onNewConnection socket attributes = do
         -- removeSubflow socket token locId >>= inspectAnswers >> putStrLn "Finished announcing"
       "e" -> putStrLn "check for existence" >>
           checkIfSocketExists socket token >>= inspectAnswers
+          -- checkIfSocketExists socket token >>= (dispatchPacket socket)
           -- return ()
       "r" -> putStrLn "Reset the connection" >>
         -- TODO expects token 
@@ -471,11 +474,19 @@ doDumpLoop (MptcpSocket simpleSock fid) = do
   putStrLn "doDumpLoop"
   -- TODO do less filtering here ?
   -- myPack <- trace "recvOne" (recvOne simpleSock :: IO [GenlPacket NoData])
-  myPack <- trace "recvOne" (recvOne simpleSock)
+
+  -- inspired by https://stackoverflow.com/questions/6009384/exception-handling-in-haskell
+  -- to work around "user error (too few bytes       From: demandInput     )"
+  --
+  result <-  try (recvOne' simpleSock) :: IO (Either IOError [GenlPacket NoData])
+  case result of
+    Left ex -> putStrLn $ "An error in parsing happened" ++ show ex
+    Right myPack -> mapM_ (dispatchPacket mptcpSocket) myPack >> putStrLn "toto"
+  putStrLn "foo"
 
   -- ca me retourne un tas de paquet en fait ?
   -- For a version that ignores the results see mapM_.
-  _ <- mapM_ (dispatchPacket mptcpSocket) myPack
+  -- _ <- mapM_ (dispatchPacket mptcpSocket) myPack
   -- _ <- mapM inspectPacket  pack
   doDumpLoop mptcpSocket
   where 
