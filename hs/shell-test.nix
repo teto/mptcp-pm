@@ -15,7 +15,6 @@ let
   #         owner = "ongy";
   #         repo = "netlink-hs";
   #         rev = "8e7a285f7e4cee0a7f908e431559c87c2f228783";
-
   #         sha256 = "05hq41zh5msm06gfgfjvf1lq1qnqg1l2ng1ywiikkck8msc3mmx1";
   #       };
   #     };
@@ -71,7 +70,7 @@ in
     haskellPackages.haskdogs # seems to build on hasktags/ recursively import things
     haskellPackages.hasktags
     haskellPackages.nvim-hs
-    haskellPackages.nvim-hs-ghcid
+    # haskellPackages.nvim-hs-ghcid
 
     # for https://hackage.haskell.org/package/bytestring-conversion-0.2/candidate/docs/Data-ByteString-Conversion-From.html
   ];

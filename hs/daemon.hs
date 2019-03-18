@@ -9,7 +9,7 @@ Portability : Linux
 This module providis utility functions for NL80211 subsystem.
 For more information see /usr/include/linux/nl80211.h
 
-To interact 
+To interact
 GENL_ADMIN_PERM
 The operation requires the CAP_NET_ADMIN privilege
 -}
@@ -53,7 +53,25 @@ import qualified Data.Map as Map
 -- |Wrapper for 'NetlinkSocket' we also need the family id for messages we construct
 data MptcpSocket = MptcpSocket NetlinkSocket Word16
 
+-- inspired by NoData80211 
 data NoDataMptcp = NoDataMptcp deriving (Eq, Show)
+instance Convertable NoDataMptcp where
+  getPut _ = return ()
+  getGet _ = return NoDataMptcp
+
+-- type GenlPacket a = Packet (GenlData a)
+type MptcpPacket = GenlPacket NoDataMptcp
+
+-- inspired by CtrlPacket
+  -- token :: MptcpToken
+-- MptcpNewConnection  
+-- data MptcpPacket = MptcpPacket {
+--       mptcpHeader     :: Header
+--     , mptcpGeHeader   :: GenlHeader
+--     , mptcpData   :: MptcpData
+-- data MptcpData = MptcpData {
+--     mptcpAttributes :: [MptcpAttr]
+--   } deriving (Eq)
 
 type MptcpToken = Word32
 type LocId    = Word8
@@ -65,7 +83,7 @@ mptcp_genl_ver = 1
 
 -- https://stackoverflow.com/questions/18606827/how-to-write-customised-show-function-in-haskell
 -- TODO could use templateHaskell
-data MptcpGenlEvent = 
+data MptcpGenlEvent =
   MPTCP_CMD_UNSPEC |
 
   MPTCP_EVENT_CREATED|
@@ -101,16 +119,22 @@ data MptcpGenlEvent =
 dumpCommand :: MptcpGenlEvent -> String
 dumpCommand x = (show x) ++ " = " ++ (show $ fromEnum x)
 -- dumpCommand MPTCP_CMD_UNSPEC  = " MPTCP_CMD_UNSPEC  0"
--- dumpCommand MPTCP_EVENT_SUB_ERROR = show MPTCP_EVENT_SUB_ERROR + show fromEnum MPTCP_EVENT_SUB_ERROR 
+-- dumpCommand MPTCP_EVENT_SUB_ERROR = show MPTCP_EVENT_SUB_ERROR + show fromEnum MPTCP_EVENT_SUB_ERROR
 
 dumpMptcpCommands :: MptcpGenlEvent -> String
-dumpMptcpCommands MPTCP_CMD_EXIST = dumpCommand MPTCP_CMD_EXIST 
+dumpMptcpCommands MPTCP_CMD_EXIST = dumpCommand MPTCP_CMD_EXIST
 dumpMptcpCommands x = dumpCommand x ++ "\n" ++ dumpMptcpCommands (succ x)
 
+-- take inspiration from ctrlAttribute ?
+-- data MptcpAttribute =
+--   MPTCP_ATTR_TOKEN MptcpToken|
+--   MPTCP_ATTR_FAMILY|
+--   MPTCP_ATTR_LOC_ID|
+
 -- data MptcpGenlGrp = MPTCP_GENL_EV_GRP_NAME | MPTCP_GENL_CMD_GRP_NAME
-data MptcpAttr = 
-  MPTCP_ATTR_UNSPEC|
-  MPTCP_ATTR_TOKEN|
+data MptcpAttr =
+  MPTCP_ATTR_UNSPEC |
+  MPTCP_ATTR_TOKEN |
   MPTCP_ATTR_FAMILY|
   MPTCP_ATTR_LOC_ID|
   MPTCP_ATTR_REM_ID|
@@ -121,16 +145,16 @@ data MptcpAttr =
   MPTCP_ATTR_SPORT|
   MPTCP_ATTR_DPORT|
   MPTCP_ATTR_BACKUP|
-  MPTCP_ATTR_ERROR| 
+  MPTCP_ATTR_ERROR|
   -- used to filter events we are interested in
-  MPTCP_ATTR_FLAGS| 
-  MPTCP_ATTR_TIMEOUT| 
+  MPTCP_ATTR_FLAGS|
+  MPTCP_ATTR_TIMEOUT|
   MPTCP_ATTR_IF_IDX
   -- __MPTCP_ATTR_AFTER_LAST
-  deriving  (Enum)
+  deriving  (Enum, Eq)
 
 -- en fait y a 2 multicast groups
--- genl_multicast_group 
+-- genl_multicast_group
 
 mptcpGenlEvGrpName :: String
 mptcpGenlEvGrpName = "mptcp_events"
@@ -174,12 +198,12 @@ opts = info (sample <**> helper)
 
 -- NetlinkSocket
 -- makeSocketGeneric
--- let active = take 1 args == ["--active"] 
+-- let active = take 1 args == ["--active"]
 
 -- NetlinkSocket
 -- mptcpNetlink :: IO ()
--- mptcpNetlink = 
---   let 
+-- mptcpNetlink =
+--   let
 --     -- family_id = getFamilyId sock mptcpGenlEvGrpName
 --     -- getFamilyId vs getMulticast
 --     -- getFamilyIdS is the safe version returning a Maybe
@@ -190,7 +214,7 @@ opts = info (sample <**> helper)
 --     -- expects a word32
 --     System.Linux.Netlink.GeNetlink.join sock familyId
 
--- inspired by makeNL80211Socket Create a 'NL80211Socket' this opens a genetlink 
+-- inspired by makeNL80211Socket Create a 'NL80211Socket' this opens a genetlink
 -- socket and gets the family id
 -- TODO should record the token too
 makeMptcpSocket :: IO MptcpSocket
@@ -204,12 +228,12 @@ makeMptcpSocket = do
 -- 	return err;
 
 -- inspectPacket :: GenlPacket NoData -> IO ()
--- inspectPacket = Prelude.putStrLn show 
+-- inspectPacket = Prelude.putStrLn show
 -- inspectPacket packet = Prelude.putStrLn $show packet
 
 getRequestPacket :: Word16 -> MptcpGenlEvent -> Bool -> Attributes -> GenlPacket NoData
 getRequestPacket fid cmd dump attrs =
-  let 
+  let
     -- The message type/ flag / sequence number / pid  (0 => from the kernel)
     myHeader = Header (fromIntegral fid) (flags .|. fNLM_F_ACK) 0 0
     -- GenlHeader <cmd> <version>
@@ -235,17 +259,17 @@ toIpv4 val = Data.List.intercalate "." ( map show (BS.unpack val))
 -- Data.ByteString.Conversion.fromByteString t :: Maybe Data.Word.Word16
 
 getPort :: ByteString -> Word16
-getPort val = 
+getPort val =
   -- decode (BSL.fromStrict value) :: Word16
   runGet getWord16le (BSL.fromStrict val)
 
 readToken :: Maybe ByteString -> MptcpToken
-readToken maybeVal = case maybeVal of 
+readToken maybeVal = case maybeVal of
   Nothing -> error "Missing token"
   Just val -> runGet getWord32le (BSL.fromStrict val)
 
 readLocId :: Maybe ByteString -> LocId
-readLocId maybeVal = case maybeVal of 
+readLocId maybeVal = case maybeVal of
   Nothing -> error "Missing locator id"
   Just val -> runGet getWord8 (BSL.fromStrict val)
 
@@ -254,9 +278,9 @@ dumpAttribute attr value = let
 
   -- fromJust :: Maybe a -> a
   -- ip = C8.unpack value
-  -- Data.ByteString.Char8 
-  -- ip = 
-  -- ip = case C8.unpack value of 
+  -- Data.ByteString.Char8
+  -- ip =
+  -- ip = case C8.unpack value of
   --   Nothing -> "no Ip"
   --   Just x -> show x
 
@@ -276,23 +300,23 @@ dumpAttribute attr value = let
       MPTCP_ATTR_ERROR -> "Error : " ++ show value
       MPTCP_ATTR_FLAGS -> "Flags : " ++ show value
       MPTCP_ATTR_TIMEOUT -> "timeout:" ++ show value
-      MPTCP_ATTR_IF_IDX -> "ifId: " ++ show value 
+      MPTCP_ATTR_IF_IDX -> "ifId: " ++ show value
 
       -- _ -> "unhandled case"
   in
     attrStr ++ "\n"
 
-    
+
 
 -- type Attributes = Map Int ByteString
 -- https://lotz84.github.io/haskellbyexample/ex/maps
 showAttributes :: Attributes -> String
 showAttributes attrs =
-  let 
+  let
     -- f k v = [show k, " = ", show v]
     -- mapped = Map.mapWithKey f attrs
     mapped = Map.foldrWithKey (\k v -> (dumpAttribute k v ++ ) ) " " attrs
-  in 
+  in
     -- putStrLn $ intercalate "," $ mapped
     mapped
 
@@ -347,7 +371,7 @@ checkIfSocketExists (MptcpSocket socket fid) token = let
     cmd = MPTCP_CMD_EXIST
   in
     putStrLn ("Checking token exists\n" ++ showAttributes attributes ++ showPacket pkt)
-      -- >> putStrLn $ 
+      -- >> putStrLn $
       >> query socket pkt
 
 --announceSubflow :: MptcpSocket -> MptcpToken -> IO [GenlPacket NoData]
@@ -368,7 +392,7 @@ checkIfSocketExists (MptcpSocket socket fid) token = let
 
 
 convertLocId :: Word8 -> ByteString
-convertLocId val = 
+convertLocId val =
   runPut $ putWord8 val
 
 convertToken :: Word32 -> ByteString
@@ -399,7 +423,7 @@ inspectAnswers :: [GenlPacket NoData] -> IO ()
 inspectAnswers packets = do
   _ <- mapM_ inspectAnswer packets
   putStrLn "Finished inspecting answers"
-  
+
 inspectAnswer :: GenlPacket NoData -> IO ()
 inspectAnswer packet = putStrLn $ showPacket packet
 
@@ -423,7 +447,7 @@ onNewConnection socket attributes = do
           -- checkIfSocketExists socket token >>= (dispatchPacket socket)
           -- return ()
       "r" -> putStrLn "Reset the connection" >>
-        -- TODO expects token 
+        -- TODO expects token
         -- TODO discard result
           -- resetTheConnection socket token >>= inspectAnswers >>
           putStrLn "Finished resetting"
@@ -431,29 +455,20 @@ onNewConnection socket attributes = do
     return ()
 
 
--- return une fonction ?
--- genlVersion
 -- type GenlPacket a = Packet (GenlData a)
 -- overloaded dispatching inspired by System/Linux/Netlink.hs:showPacket
--- NoData
-dispatchPacket :: MptcpSocket -> Packet (GenlData NoData) -> IO ()
-dispatchPacket sock (System.Linux.Netlink.ErrorMsg hdr code packet) = do
-  putStrLn "a netlink error happened"
-dispatchPacket sock (DoneMsg hdr) = do 
-  putStrLn "Done Msg"
-dispatchPacket sock (Packet hdr packet attributes) = let 
-    -- todo not the good call
-    -- genlHeader = packetHeader packet
+-- dispatchPacket :: MptcpSocket -> Packet -> IO ()
+-- dispatchPacket sock (System.Linux.Netlink.ErrorMsg hdr code packet) = do
+--   putStrLn "a netlink error happened"
+-- dispatchPacket sock (DoneMsg hdr) = do
+--   putStrLn "Done Msg"
 
-    -- type GenlPacket a = Packet (GenlData a)
-  --    , genlDataData   :: a
-    -- temp_data = packetCustom packet
-    genl_header = genlDataHeader packet
-    -- attributes = packetAttributes packet
-    -- genl_data = genlDataData temp_data
-    -- header = packetHeader packet
-    cmd = genlCmd genl_header
-    -- version = genlVersion genl_header
+-- type GenlPacket a = Packet (GenlData a)
+-- type MptcpPacket = GenlPacket NoDataMptcp
+
+dispatchPacket :: MptcpSocket -> MptcpPacket -> IO ()
+dispatchPacket sock (Packet hdr (GenlData genlHeader NoDataMptcp) attributes) = let
+    cmd = genlCmd genlHeader
   in
     case toEnum (fromIntegral cmd) of
       MPTCP_EVENT_CREATED -> do
@@ -465,6 +480,10 @@ dispatchPacket sock (Packet hdr packet attributes) = let
       MPTCP_EVENT_SUB_CLOSED -> putStrLn "Subflow closed"
       _ -> putStrLn "undefined event !!"
 
+inspectResult :: MptcpSocket -> Either String MptcpPacket -> IO()
+inspectResult mptcpSocket result =  case result of
+    Left ex -> putStrLn $ "An error in parsing happened" ++ show ex
+    Right myPack -> mapM_ (dispatchPacket mptcpSocket) myPack >> putStrLn "toto"
 
 -- CtrlAttrMcastGroup
 -- copied from utils/GenlInfo.hs
@@ -478,18 +497,18 @@ doDumpLoop (MptcpSocket simpleSock fid) = do
   -- inspired by https://stackoverflow.com/questions/6009384/exception-handling-in-haskell
   -- to work around "user error (too few bytes       From: demandInput     )"
   --
-  result <-  try (recvOne' simpleSock) :: IO (Either IOError [GenlPacket NoData])
-  case result of
-    Left ex -> putStrLn $ "An error in parsing happened" ++ show ex
-    Right myPack -> mapM_ (dispatchPacket mptcpSocket) myPack >> putStrLn "toto"
-  putStrLn "foo"
+  -- [Either String (Packet a)]
+  -- (Convertable a, Eq a, Show a) =>
+  results <- (recvOne' simpleSock) ::  IO [Either String MptcpPacket]
+
+  _ <- mapM (inspectResult mptcpSocket) results
 
   -- ca me retourne un tas de paquet en fait ?
   -- For a version that ignores the results see mapM_.
   -- _ <- mapM_ (dispatchPacket mptcpSocket) myPack
   -- _ <- mapM inspectPacket  pack
   doDumpLoop mptcpSocket
-  where 
+  where
     mptcpSocket = MptcpSocket simpleSock fid
 
 -- regarder dans query/joinMulticastGroup/recvOne
@@ -512,7 +531,7 @@ main = do
   -- options <- execParser opts
   putStrLn "dumping important values:"
   putStrLn $ "RESET" ++ (show MPTCP_CMD_REMOVE)
-  putStrLn $ dumpMptcpCommands MPTCP_CMD_UNSPEC 
+  putStrLn $ dumpMptcpCommands MPTCP_CMD_UNSPEC
   (MptcpSocket sock  fid) <- makeMptcpSocket
   putStr "socket created. Family id " >> print fid
   -- (mid, mcastGroup ) <- getFamilyWithMulticasts sock mptcpGenlEvGrpName
