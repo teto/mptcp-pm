@@ -483,7 +483,7 @@ dispatchPacket sock (Packet hdr (GenlData genlHeader NoDataMptcp) attributes) = 
 inspectResult :: MptcpSocket -> Either String MptcpPacket -> IO()
 inspectResult mptcpSocket result =  case result of
     Left ex -> putStrLn $ "An error in parsing happened" ++ show ex
-    Right myPack -> mapM_ (dispatchPacket mptcpSocket) myPack >> putStrLn "toto"
+    Right myPack -> dispatchPacket mptcpSocket myPack >> putStrLn "toto"
 
 -- CtrlAttrMcastGroup
 -- copied from utils/GenlInfo.hs
