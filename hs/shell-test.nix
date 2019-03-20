@@ -1,7 +1,7 @@
 # from https://github.com/NixOS/nixpkgs/blob/master/doc/languages-frameworks/haskell.section.md
 # can be called via
 # nix-shell --argstr compiler ghc784
-{ nixpkgs ? import <nixpkgs> {}, compiler ? "ghc863" }:
+{ nixpkgs ? import <nixpkgs> {}, compiler ? "ghc864" }:
 # with import <nixpkgs> {};
 
 with nixpkgs;
