@@ -220,9 +220,14 @@ opts = info (sample <**> helper)
 makeMptcpSocket :: IO MptcpSocket
 makeMptcpSocket = do
   sock <- makeSocket
-  fid <- getFamilyId sock mptcpGenlName
-  return (MptcpSocket sock fid)
+-- getFamilyWithMulticasts 
+  res <- getFamilyIdS sock mptcpGenlName
+  case res of
+    Nothing -> error $ "Could not find family " ++ mptcpGenlName
+    Just fid -> return  (MptcpSocket sock (trace ("family id"++ show fid ) fid))
 
+
+-- tcp_metrics is a multicast group
 
 -- errout:
 -- 	return err;
@@ -533,6 +538,7 @@ main = do
   putStrLn $ "buffer size " ++ show bufferSize
   putStrLn $ "RESET" ++ show MPTCP_CMD_REMOVE
   putStrLn $ dumpMptcpCommands MPTCP_CMD_UNSPEC
+  putStrLn "Creating MPTCP netlink socket..."
   (MptcpSocket sock  fid) <- makeMptcpSocket
   putStr "socket created. Family id " >> print fid
   -- (mid, mcastGroup ) <- getFamilyWithMulticasts sock mptcpGenlEvGrpName
