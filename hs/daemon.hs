@@ -21,9 +21,6 @@ module Main where
 import Prelude hiding (length, concat)
 import Options.Applicative hiding (value)
 import qualified Options.Applicative (value)
--- import Data.Semigroup ((<>))
--- import Data.ByteString (ByteString, length, unpack, pack, concat)
--- import System.Environment (getArgs)
 
 import Data.Bits ((.|.))
 import System.Linux.Netlink hiding (makeSocket)
