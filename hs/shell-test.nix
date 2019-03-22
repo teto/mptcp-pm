@@ -25,14 +25,12 @@ let
   # };
 
   hie_remote = builtins.fetchTarball {
-    url    = https://github.com/domenkozar/hie-nix/tarball/master;
+    # url    = https://github.com/domenkozar/hie-nix/tarball/master;
+    url    = https://github.com/teto/hie-nix/tarball/dev;
     # "https://github.com/NixOS/nixpkgs/archive/3389f23412877913b9d22a58dfb241684653d7e9.tar.gz";
     # sha256 = "0wgm7sk9fca38a50hrsqwz6q79z35gqgb9nw80xz7pfdr4jy9pf7";
   };
-  #  haskellPackages.hie
 
-  # todo make it automatic depending on nixpkgs' ghc
-# pkgs.haskell.packages.ghc864
 
   # TODO how to retrieve the compiler there
   # hie = (import hie_remote {
@@ -41,7 +39,6 @@ let
 
   hie = (import "${hie_remote}/ghc-8.6.nix" {
     inherit compiler;
-    # compiler = pkgs.haskell.compiler.ghc864;
   } ).haskell-ide-engine;
 
 

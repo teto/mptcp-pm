@@ -27,7 +27,7 @@ import qualified Options.Applicative (value)
 
 import Data.Bits ((.|.))
 import System.Linux.Netlink hiding (makeSocket)
-import System.Linux.Netlink (query)
+import System.Linux.Netlink (query, bufferSize)
 import System.Linux.Netlink.GeNetlink
 import System.Linux.Netlink.Constants
 
@@ -530,7 +530,8 @@ main :: IO ()
 main = do
   -- options <- execParser opts
   putStrLn "dumping important values:"
-  putStrLn $ "RESET" ++ (show MPTCP_CMD_REMOVE)
+  putStrLn $ "buffer size " ++ show bufferSize
+  putStrLn $ "RESET" ++ show MPTCP_CMD_REMOVE
   putStrLn $ dumpMptcpCommands MPTCP_CMD_UNSPEC
   (MptcpSocket sock  fid) <- makeMptcpSocket
   putStr "socket created. Family id " >> print fid
