@@ -1,10 +1,13 @@
 # from https://github.com/NixOS/nixpkgs/blob/master/doc/languages-frameworks/haskell.section.md
 # can be called via
 # nix-shell --argstr compiler ghc784
-{ nixpkgs ? import <nixpkgs> {}, compiler ? "ghc864" }:
-# with import <nixpkgs> {};
+{ pkgs ? import <nixpkgs> {}
+, compiler ?
+# pkgs.haskell.packages.ghc863Binary
+pkgs.haskell.packages.ghc864
+}:
 
-with nixpkgs;
+with pkgs;
 let
 
   # Override netlink to fetch the fix from the repository
@@ -32,13 +35,14 @@ let
 # pkgs.haskell.packages.ghc864
 
   # TODO how to retrieve the compiler there
-  hie = (import hie_remote {
-    # compiler = pkgs.haskell.compiler.ghc864;
-  } ).hie86;
+  # hie = (import hie_remote {
+  #   # compiler = pkgs.haskell.compiler.ghc864;
+  # } ).hie86;
 
-  # hie = (import "${hie_remote}/ghc-8.6.nix" {
-  #   compiler = pkgs.haskell.compiler.ghc864;
-  # } ).haskell-ide-engine;
+  hie = (import "${hie_remote}/ghc-8.6.nix" {
+    inherit compiler;
+    # compiler = pkgs.haskell.compiler.ghc864;
+  } ).haskell-ide-engine;
 
 
   # TODO override
@@ -55,7 +59,7 @@ let
 in
 
   # haskellPackages.shellFor {
-  haskell.packages."${compiler}".shellFor {
+  compiler.shellFor {
   # the dependencies of packages listed in `packages`, not the
   packages = p: with p; [
     (import ./. { inherit compiler;})

@@ -2,7 +2,7 @@
 with import <nixpkgs> {};
 
 # enableSeparateDocOutput
-haskell.lib.doHaddock (haskell.packages."${compiler}".callCabal2nix "netlink-pm" ./. {})
+haskell.lib.doHaddock (compiler.callCabal2nix "netlink-pm" ./. {})
 
 # let
 #   drv =haskellPackages.callCabal2nix "netlink-pm" ./. {}; 
