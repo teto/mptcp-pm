@@ -32,6 +32,7 @@ mptcpGenlName="mptcp"
 makeMptcpSocket :: IO MptcpSocket
 makeMptcpSocket = do
   sock <- makeSocket
+  putStrLn "socket created"
   res <- getFamilyIdS sock mptcpGenlName
   case res of
     Nothing -> error $ "Could not find family " ++ mptcpGenlName

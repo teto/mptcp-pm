@@ -24,23 +24,6 @@ let
   #   };
   # };
 
-  hie_remote = builtins.fetchTarball {
-    # url    = https://github.com/domenkozar/hie-nix/tarball/master;
-    url    = https://github.com/teto/hie-nix/tarball/dev;
-    # "https://github.com/NixOS/nixpkgs/archive/3389f23412877913b9d22a58dfb241684653d7e9.tar.gz";
-    # sha256 = "0wgm7sk9fca38a50hrsqwz6q79z35gqgb9nw80xz7pfdr4jy9pf7";
-  };
-
-
-  # TODO how to retrieve the compiler there
-  # hie = (import hie_remote {
-  #   # compiler = pkgs.haskell.compiler.ghc864;
-  # } ).hie86;
-
-  hie = (import "${hie_remote}/ghc-8.6.nix" {
-    inherit compiler;
-  } ).haskell-ide-engine;
-
 
   # TODO override
   # "netlink" = prev.haskell.lib.overrideSrc hprev.netlink {
@@ -64,7 +47,8 @@ in
   withHoogle = true;
   # haskellPackages.stack
   nativeBuildInputs = [
-    hie
+
+    haskellPackages.hie  # defined from my overlay
     haskellPackages.cabal-install
     # haskellPackages.bytestring-conversion
     haskellPackages.gutenhasktags
