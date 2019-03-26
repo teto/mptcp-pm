@@ -6,6 +6,10 @@ cabal-version: >= 1.18
 build-type: Simple
 
 executable daemon
-    build-depends: base, netlink, optparse-applicative, bytestring-conversion, binary, containers, bytestring, cereal
+    build-depends: base, netlink, optparse-applicative, bytestring-conversion, binary, containers, bytestring, cereal, fast-logger
     main-is: daemon.hs
+    default-language: Haskell2010
+
+executable test
+    main-is: test.hs
     default-language: Haskell2010

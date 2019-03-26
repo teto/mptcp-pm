@@ -27,6 +27,7 @@ import System.Linux.Netlink hiding (makeSocket)
 import System.Linux.Netlink (query, bufferSize)
 import System.Linux.Netlink.GeNetlink
 import System.Linux.Netlink.Constants
+import System.Log.FastLogger
 
 import System.Linux.Netlink.GeNetlink.Control as C
 import Data.Word (Word8, Word16, Word32)
@@ -526,11 +527,17 @@ listenToEvents (MptcpSocket sock fid) my_group = do
     mptcpSocket = MptcpSocket sock fid
 
 
+createLogger :: IO LoggerSet
+createLogger = newStdoutLoggerSet defaultBufSize
+
+
 -- s'inspirer de
 -- https://github.com/vdorr/linux-live-netinfo/blob/24ead3dd84d6847483aed206ec4b0e001bfade02/System/Linux/NetInfo.hs
 main :: IO ()
 main = do
   -- options <- execParser opts
+  logger <- createLogger
+  pushLogStr logger (toLogStr "ok")
   putStrLn "dumping important values:"
   putStrLn $ "buffer size " ++ show bufferSize
   putStrLn $ "RESET" ++ show MPTCP_CMD_REMOVE
