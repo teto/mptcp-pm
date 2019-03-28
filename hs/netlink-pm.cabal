@@ -1,15 +1,38 @@
+cabal-version: 2.2
 name: netlink-pm
 version: 1.0.0
-license: GPL-3
+license: GPL-3.0-only
 license-file: gpl-3.0.txt
-cabal-version: >= 1.18
 build-type: Simple
+-- build-depends: base, netlink, optparse-applicative, binary, containers, bytestring, cereal, fast-logger
+Maintainer:  whoknows
+Homepage:   https://github.com/Ongy/netlink-hs
+description:
+  Supposed to be an MPTCP path manager
+
+Source-repository head
+  type:       git
+  location:   https://github.com/teto/mptcpnetlink
+
+
+common shared-properties
+    build-depends: base, netlink>= 1.1.1.1, optparse-applicative, bytestring-conversion, binary, containers, bytestring, cereal, fast-logger
+    default-language: Haskell2010
 
 executable daemon
+    import: shared-properties
+-- -no-global-package-db
+    -- ghc-options: -i/home/teto/netlink-hs
     build-depends: base, netlink, optparse-applicative, bytestring-conversion, binary, containers, bytestring, cereal, fast-logger
     main-is: daemon.hs
     default-language: Haskell2010
+	-- extra-packages: netlink
+    -- extra-lib-dirs: /home/teto/netlink-hs
+  -- hs-source-dirs: Utils
 
-executable test
-    main-is: test.hs
-    default-language: Haskell2010
+-- executable test
+    -- import: shared-properties
+--     build-depends: base, netlink, optparse-applicative, bytestring-conversion, binary, containers, bytestring, cereal, fast-logger
+--     main-is: test.hs
+--     default-language: Haskell2010
+--	-- extra-lib-dirs: /home/teto/netlink-hs
