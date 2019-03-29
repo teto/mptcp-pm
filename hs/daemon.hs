@@ -24,9 +24,10 @@ import qualified Options.Applicative (value)
 
 import Data.Bits ((.|.))
 import System.Linux.Netlink hiding (makeSocket)
-import System.Linux.Netlink (query, bufferSize)
+import System.Linux.Netlink (query)
 import System.Linux.Netlink.GeNetlink
 import System.Linux.Netlink.Constants
+import System.Linux.Netlink.Helpers
 import System.Log.FastLogger
 
 import System.Linux.Netlink.GeNetlink.Control as C
@@ -77,10 +78,12 @@ type MptcpFamily    = Word16
 
 -- |typedef for messages send by this mdoule
 -- type NL80211Packet = GenlPacket NoData80211
-mptcp_genl_ver = 1
+mptcpGenlVer = 1
 
 -- https://stackoverflow.com/questions/18606827/how-to-write-customised-show-function-in-haskell
 -- TODO could use templateHaskell
+-- TODO les generer via le netlink helper mkIncludeBlock 
+-- look at generate.hs
 data MptcpGenlEvent =
   MPTCP_CMD_UNSPEC |
 
@@ -115,7 +118,7 @@ data MptcpGenlEvent =
 
 -- dumpEnum
 dumpCommand :: MptcpGenlEvent -> String
-dumpCommand x = (show x) ++ " = " ++ (show $ fromEnum x)
+dumpCommand x = show x ++ " = " ++ (show $ fromEnum x)
 -- dumpCommand MPTCP_CMD_UNSPEC  = " MPTCP_CMD_UNSPEC  0"
 -- dumpCommand MPTCP_EVENT_SUB_ERROR = show MPTCP_EVENT_SUB_ERROR + show fromEnum MPTCP_EVENT_SUB_ERROR
 
@@ -240,7 +243,7 @@ getRequestPacket fid cmd dump attrs =
     -- The message type/ flag / sequence number / pid  (0 => from the kernel)
     myHeader = Header (fromIntegral fid) (flags .|. fNLM_F_ACK) 0 0
     -- GenlHeader <cmd> <version>
-    geheader = GenlHeader word8Cmd mptcp_genl_ver
+    geheader = GenlHeader word8Cmd mptcpGenlVer
     -- NLM_F_ACK
     -- https://elixir.bootlin.com/linux/latest/source/include/uapi/linux/netlink.h#L54
     flags = if dump then fNLM_F_REQUEST .|. fNLM_F_MATCH .|. fNLM_F_ROOT else fNLM_F_REQUEST
@@ -394,6 +397,7 @@ checkIfSocketExists (MptcpSocket socket fid) token = let
 --    query socket pkt
 
 
+-- TODO here I could helpers from the netlink library
 convertLocId :: Word8 -> ByteString
 convertLocId val =
   runPut $ putWord8 val
@@ -428,7 +432,7 @@ inspectAnswers packets = do
   putStrLn "Finished inspecting answers"
 
 inspectAnswer :: GenlPacket NoData -> IO ()
-inspectAnswer packet = putStrLn $ showPacket packet
+inspectAnswer packet = putStrLn $ "Inspecting answer:\n" ++ showPacket packet
 
 onNewConnection :: MptcpSocket -> Attributes -> IO ()
 onNewConnection socket attributes = do
@@ -481,12 +485,13 @@ dispatchPacket sock (Packet hdr (GenlData genlHeader NoDataMptcp) attributes) = 
       MPTCP_EVENT_CLOSED -> putStrLn "Connection closed"
       MPTCP_EVENT_SUB_ESTABLISHED -> putStrLn "Subflow established"
       MPTCP_EVENT_SUB_CLOSED -> putStrLn "Subflow closed"
+      MPTCP_CMD_EXIST -> putStrLn "this token exists"
       _ -> putStrLn "undefined event !!"
 
 inspectResult :: MptcpSocket -> Either String MptcpPacket -> IO()
 inspectResult mptcpSocket result =  case result of
     Left ex -> putStrLn $ "An error in parsing happened" ++ show ex
-    Right myPack -> dispatchPacket mptcpSocket myPack >> putStrLn "toto"
+    Right myPack -> dispatchPacket mptcpSocket myPack >> putStrLn "Valid packet"
 
 -- CtrlAttrMcastGroup
 -- copied from utils/GenlInfo.hs
@@ -502,9 +507,9 @@ doDumpLoop (MptcpSocket simpleSock fid) = do
   --
   -- [Either String (Packet a)]
   -- (Convertable a, Eq a, Show a) =>
-  results <- (recvOne' simpleSock) ::  IO [Either String MptcpPacket]
+  results <- recvOne' simpleSock ::  IO [Either String MptcpPacket]
 
-  _ <- mapM (inspectResult mptcpSocket) results
+  mapM_ (inspectResult mptcpSocket) results
 
   -- ca me retourne un tas de paquet en fait ?
   -- For a version that ignores the results see mapM_.
@@ -539,7 +544,7 @@ main = do
   logger <- createLogger
   pushLogStr logger (toLogStr "ok")
   putStrLn "dumping important values:"
-  putStrLn $ "buffer size " ++ show bufferSize
+  -- putStrLn $ "buffer size " ++ show bufferSize
   putStrLn $ "RESET" ++ show MPTCP_CMD_REMOVE
   putStrLn $ dumpMptcpCommands MPTCP_CMD_UNSPEC
   putStrLn "Creating MPTCP netlink socket..."
