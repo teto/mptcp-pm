@@ -54,14 +54,14 @@ import qualified Data.Map as Map
 -- |Wrapper for 'NetlinkSocket' we also need the family id for messages we construct
 data MptcpSocket = MptcpSocket NetlinkSocket Word16
 
--- inspired by NoData80211 
+-- inspired by NoData80211
 data NoDataMptcp = NoDataMptcp deriving (Eq, Show)
 instance Convertable NoDataMptcp where
   getPut _ = return ()
   getGet _ = return NoDataMptcp
 
 
--- data GenlData a = GenlData 
+-- data GenlData a = GenlData
 --     {
 --       genlDataHeader :: GenlHeader
 --     , genlDataData   :: a
@@ -73,7 +73,7 @@ type MptcpPacket = Packet (GenlData NoDataMptcp)
 
 -- inspired by CtrlPacket
   -- token :: MptcpToken
--- MptcpNewConnection  
+-- MptcpNewConnection
 -- data MptcpPacket = MptcpPacket {
 --       mptcpHeader     :: Header
 --     , mptcpGeHeader   :: GenlHeader
@@ -93,7 +93,7 @@ mptcpGenlVer = 1
 
 -- https://stackoverflow.com/questions/18606827/how-to-write-customised-show-function-in-haskell
 -- TODO could use templateHaskell
--- TODO les generer via le netlink helper mkIncludeBlock 
+-- TODO les generer via le netlink helper mkIncludeBlock
 -- look at generate.hs
 data MptcpGenlEvent =
   MPTCP_CMD_UNSPEC |
@@ -176,7 +176,7 @@ mptcpGenlName :: String
 mptcpGenlName="mptcp"
 
 data Sample = Sample
-  { hello      :: String
+  { command      :: String
   , quiet      :: Bool
   , enthusiasm :: Int }
 
@@ -232,7 +232,7 @@ opts = info (sample <**> helper)
 makeMptcpSocket :: IO MptcpSocket
 makeMptcpSocket = do
   sock <- makeSocket
--- getFamilyWithMulticasts 
+-- getFamilyWithMulticasts
   res <- getFamilyIdS sock mptcpGenlName
   case res of
     Nothing -> error $ "Could not find family " ++ mptcpGenlName
@@ -454,8 +454,20 @@ inspectAnswers packets = do
 --   hdr = (genlDataHeader pkt )
 --   in showPacket pkt
 
+showHeaderCustom :: GenlHeader -> String
+showHeaderCustom hdr = show hdr
+
 inspectAnswer :: GenlPacket NoData -> IO ()
-inspectAnswer packet = putStrLn $ "Inspecting answer:\n" ++ showPacket packet
+-- inspectAnswer packet = putStrLn $ "Inspecting answer:\n" ++ showPacket packet
+-- (GenlData NoData)
+-- inspectAnswer (Packet hdr (GenlData ghdr NoData) attributes) = putStrLn $ "Inspecting answer:\n"
+inspectAnswer (Packet _ (GenlData hdr NoData) attributes) = let
+    cmd = genlCmd hdr
+  in
+    putStrLn $ "Inspecting answer custom:\n" ++ showHeaderCustom hdr
+            ++ "Supposing it's a mptcp command" ++ dumpCommand ( toEnum $ fromIntegral cmd)
+
+inspectAnswer pkt = putStrLn $ "Inspecting answer:\n" ++ showPacket pkt
 
 onNewConnection :: MptcpSocket -> Attributes -> IO ()
 onNewConnection socket attributes = do
@@ -588,7 +600,7 @@ createLogger = newStdoutLoggerSet defaultBufSize
 -- https://github.com/vdorr/linux-live-netinfo/blob/24ead3dd84d6847483aed206ec4b0e001bfade02/System/Linux/NetInfo.hs
 main :: IO ()
 main = do
-  -- options <- execParser opts
+  options <- execParser opts
   logger <- createLogger
   pushLogStr logger (toLogStr "ok")
   putStrLn "dumping important values:"
@@ -601,9 +613,9 @@ main = do
   -- (mid, mcastGroup ) <- getFamilyWithMulticasts sock mptcpGenlEvGrpName
   mcastGroups <- getMulticastGroups sock fid
   -- IO [CtrlAttrMcastGroup]
-  _ <- mapM_ print mcastGroups
+  mapM_ print mcastGroups
 
-  _ <- mapM_ (listenToEvents (MptcpSocket sock fid)) mcastGroups
+  mapM_ (listenToEvents (MptcpSocket sock fid)) mcastGroups
   -- putStrLn $ " Groups: " ++ unwords ( map grpName mcastGroups)
   putStrLn "finished"
 
