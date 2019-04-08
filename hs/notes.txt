@@ -1,6 +1,9 @@
 Attributes = Map Int ByteString
 
 
+showMessageType 2 = "NLMSG_ERROR"
+
+
 HIE_HOOGLE_DATABASE
 CABAL_HELPER_DEBUG=1
 

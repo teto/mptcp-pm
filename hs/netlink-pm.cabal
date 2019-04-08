@@ -23,6 +23,7 @@ executable daemon
     import: shared-properties
 -- -no-global-package-db
     -- ghc-options: -i/home/teto/netlink-hs
+    ghc-options: -Wall -Werror -fno-warn-unused-binds -fno-warn-unused-matches
     build-depends: base, netlink, optparse-applicative, bytestring-conversion, binary, containers, bytestring, cereal, fast-logger
     main-is: daemon.hs
     default-language: Haskell2010

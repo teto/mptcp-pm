@@ -19,15 +19,16 @@ The operation requires the CAP_NET_ADMIN privilege
 module Main where
 
 import Prelude hiding (length, concat)
-import Options.Applicative hiding (value)
+import Options.Applicative hiding (value, ErrorMsg)
 import qualified Options.Applicative (value)
 
 import Data.Bits ((.|.))
+import Foreign.C.Types (CInt)
 import System.Linux.Netlink hiding (makeSocket)
-import System.Linux.Netlink (query)
+import System.Linux.Netlink (query, Packet(..))
 import System.Linux.Netlink.GeNetlink
 import System.Linux.Netlink.Constants
-import System.Linux.Netlink.Helpers
+-- import System.Linux.Netlink.Helpers
 import System.Log.FastLogger
 
 import System.Linux.Netlink.GeNetlink.Control as C
@@ -40,7 +41,7 @@ import Data.ByteString as BS hiding (putStrLn, putStr, map, intercalate)
 import qualified Data.ByteString.Lazy as BSL
 
 import Debug.Trace
-import Control.Exception
+-- import Control.Exception
 
 
 import qualified Data.Map as Map
@@ -78,6 +79,7 @@ type MptcpFamily    = Word16
 
 -- |typedef for messages send by this mdoule
 -- type NL80211Packet = GenlPacket NoData80211
+mptcpGenlVer :: Word8
 mptcpGenlVer = 1
 
 -- https://stackoverflow.com/questions/18606827/how-to-write-customised-show-function-in-haskell
@@ -118,7 +120,7 @@ data MptcpGenlEvent =
 
 -- dumpEnum
 dumpCommand :: MptcpGenlEvent -> String
-dumpCommand x = show x ++ " = " ++ (show $ fromEnum x)
+dumpCommand x = show x ++ " = " ++ show (fromEnum x)
 -- dumpCommand MPTCP_CMD_UNSPEC  = " MPTCP_CMD_UNSPEC  0"
 -- dumpCommand MPTCP_EVENT_SUB_ERROR = show MPTCP_EVENT_SUB_ERROR + show fromEnum MPTCP_EVENT_SUB_ERROR
 
@@ -292,7 +294,7 @@ dumpAttribute attr value = let
 
   attrStr = case toEnum (fromIntegral attr) of
       MPTCP_ATTR_UNSPEC -> "UNSPECIFIED"
-      MPTCP_ATTR_TOKEN -> "TOKEN: " ++ show (readToken $ Just value)
+      MPTCP_ATTR_TOKEN -> "token: " ++ show (readToken $ Just value)
       MPTCP_ATTR_FAMILY -> "family: " ++ show value
       MPTCP_ATTR_LOC_ID -> "Locator id: " ++ show (readLocId $ Just value)
       MPTCP_ATTR_REM_ID -> "Remote id: " ++ show value
@@ -300,12 +302,12 @@ dumpAttribute attr value = let
       MPTCP_ATTR_SADDR6 -> "ipv6.src: " ++ show value
       MPTCP_ATTR_DADDR4 -> "ipv4.dest: " ++ toIpv4 value
       MPTCP_ATTR_DADDR6 -> "ipv6.dest: " ++ show value
-      MPTCP_ATTR_SPORT -> "sport" ++ show (getPort value)
-      MPTCP_ATTR_DPORT -> "dport" ++ show (getPort value)
+      MPTCP_ATTR_SPORT -> "sport: " ++ show (getPort value)
+      MPTCP_ATTR_DPORT -> "dport: " ++ show (getPort value)
       MPTCP_ATTR_BACKUP -> "backup" ++ show value
-      MPTCP_ATTR_ERROR -> "Error : " ++ show value
-      MPTCP_ATTR_FLAGS -> "Flags : " ++ show value
-      MPTCP_ATTR_TIMEOUT -> "timeout:" ++ show value
+      MPTCP_ATTR_ERROR -> "Error: " ++ show value
+      MPTCP_ATTR_FLAGS -> "Flags: " ++ show value
+      MPTCP_ATTR_TIMEOUT -> "timeout: " ++ show value
       MPTCP_ATTR_IF_IDX -> "ifId: " ++ show value
 
       -- _ -> "unhandled case"
@@ -428,7 +430,7 @@ resetTheConnection (MptcpSocket socket fid) receivedAttributes = let
 
 inspectAnswers :: [GenlPacket NoData] -> IO ()
 inspectAnswers packets = do
-  _ <- mapM_ inspectAnswer packets
+  mapM_ inspectAnswer packets
   putStrLn "Finished inspecting answers"
 
 inspectAnswer :: GenlPacket NoData -> IO ()
@@ -472,6 +474,10 @@ onNewConnection socket attributes = do
 
 -- type GenlPacket a = Packet (GenlData a)
 -- type MptcpPacket = GenlPacket NoDataMptcp
+-- dispatchPacket :: MptcpSocket -> GenlPacket NoData -> IO ()
+-- dispatchPacket sock (Packet hdr (GenlData NoData) attributes) = do
+--     -- cmd = genlCmd genlHeader
+--     putStrLn "Genldata"
 
 dispatchPacket :: MptcpSocket -> MptcpPacket -> IO ()
 dispatchPacket sock (Packet hdr (GenlData genlHeader NoDataMptcp) attributes) = let
@@ -487,6 +493,26 @@ dispatchPacket sock (Packet hdr (GenlData genlHeader NoDataMptcp) attributes) = 
       MPTCP_EVENT_SUB_CLOSED -> putStrLn "Subflow closed"
       MPTCP_CMD_EXIST -> putStrLn "this token exists"
       _ -> putStrLn "undefined event !!"
+
+-- dispatchPacket sock (ErrorMsg err) attributes) = let
+dispatchPacket sock (DoneMsg err) =
+  putStrLn "Done msg"
+
+
+dispatchPacket sock (ErrorMsg hdr errCode errPacket) =
+  putStrLn $ "Error msg" ++ showErrCode errCode ++ show errPacket
+
+-- /usr/include/asm/errno.h
+showErrCode :: CInt -> String
+showErrCode err
+  | err == ePERM = "EPERM"
+  | otherwise = show err
+
+-- showErrCode err = case err of
+-- -- show err
+--   ePERM -> "EPERM"
+--   eNOTCONN -> "NOT connected"
+
 
 inspectResult :: MptcpSocket -> Either String MptcpPacket -> IO()
 inspectResult mptcpSocket result =  case result of
