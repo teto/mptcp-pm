@@ -24,6 +24,7 @@ import qualified Options.Applicative (value)
 
 import Data.Bits ((.|.))
 import Foreign.C.Types (CInt)
+import Foreign.C.Error
 import System.Linux.Netlink hiding (makeSocket)
 import System.Linux.Netlink (query, Packet(..))
 import System.Linux.Netlink.GeNetlink
@@ -59,8 +60,16 @@ instance Convertable NoDataMptcp where
   getPut _ = return ()
   getGet _ = return NoDataMptcp
 
+
+-- data GenlData a = GenlData 
+--     {
+--       genlDataHeader :: GenlHeader
+--     , genlDataData   :: a
+--     } deriving (Eq)
+  --
 -- type GenlPacket a = Packet (GenlData a)
-type MptcpPacket = GenlPacket NoDataMptcp
+-- type Mptcp
+type MptcpPacket = Packet (GenlData NoDataMptcp)
 
 -- inspired by CtrlPacket
   -- token :: MptcpToken
@@ -114,9 +123,9 @@ data MptcpGenlEvent =
   -- eventually derive "Bounded"
   deriving  (Enum, Show)
 
--- instance Show MptcpGenlEvent where
+-- instance Show MptcpPacket where
 --   show MPTCP_EVENT_CREATED = "MPTCP_EVENT_CREATED"
-  -- show x = x
+--   show x = x
 
 -- dumpEnum
 dumpCommand :: MptcpGenlEvent -> String
@@ -318,6 +327,7 @@ dumpAttribute attr value = let
 
 -- type Attributes = Map Int ByteString
 -- https://lotz84.github.io/haskellbyexample/ex/maps
+-- the library contains showAttrs / showNLAttrs
 showAttributes :: Attributes -> String
 showAttributes attrs =
   let
@@ -354,6 +364,12 @@ createNewSubflow (MptcpSocket socket fid) token attrs = let
 
 -- removeSubflow :: MptcpSocket -> MptcpToken -> LocId -> IO [GenlPacket NoData]
 -- removeSubflow (MptcpSocket socket fid) token locId = let
+
+-- I want to override the GenlHeader version
+newtype GenlHeaderMptcp = GenlHeaderMptcp GenlHeader
+instance Show GenlHeaderMptcp where
+  show (GenlHeaderMptcp (GenlHeader cmd ver)) =
+    "Header: Cmd = " ++ show cmd ++ ", Version: " ++ show ver ++ "\n"
 
 
 removeLocId :: MptcpSocket -> MptcpToken -> LocId -> IO [GenlPacket NoData]
@@ -433,6 +449,11 @@ inspectAnswers packets = do
   mapM_ inspectAnswer packets
   putStrLn "Finished inspecting answers"
 
+-- showPacketCustom :: GenlPacket NoData -> String
+-- showPacketCustom pkt = let
+--   hdr = (genlDataHeader pkt )
+--   in showPacket pkt
+
 inspectAnswer :: GenlPacket NoData -> IO ()
 inspectAnswer packet = putStrLn $ "Inspecting answer:\n" ++ showPacket packet
 
@@ -500,12 +521,13 @@ dispatchPacket sock (DoneMsg err) =
 
 
 dispatchPacket sock (ErrorMsg hdr errCode errPacket) =
-  putStrLn $ "Error msg" ++ showErrCode errCode ++ show errPacket
+  putStrLn $ "Error msg of type " ++ showErrCode errCode ++ " Packet content:\n" ++ show errPacket
 
 -- /usr/include/asm/errno.h
 showErrCode :: CInt -> String
 showErrCode err
-  | err == ePERM = "EPERM"
+  | Errno err == ePERM = "EPERM"
+  | Errno err == eOK = "EOK"
   | otherwise = show err
 
 -- showErrCode err = case err of
