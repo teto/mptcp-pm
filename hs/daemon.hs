@@ -366,6 +366,8 @@ showAttributes attrs =
 --     p32 flags
 --     p32 0xFFFFFFFF
 
+
+-- TODO prefix with --cmd
 createNewSubflow :: MptcpSocket -> MptcpToken -> Attributes -> IO ()
 createNewSubflow (MptcpSocket sock fid) token attrs = let
   localId = readLocId $ Map.lookup (fromEnum MPTCP_ATTR_LOC_ID) attrs
@@ -526,14 +528,19 @@ onNewConnection sock attributes = do
 --     -- cmd = genlCmd genlHeader
 --     putStrLn "Genldata"
 
+subflowFromAttributes :: Attributes -> TcpConnection
+subflowFromAttributes attributes = 
+
 dispatchPacket :: MyState -> MptcpPacket -> IO MyState
 dispatchPacket (MyState sock conns) (Packet hdr (GenlData genlHeader NoDataMptcp) attributes) = let
     cmd = genlCmd genlHeader
   in
     case toEnum (fromIntegral cmd) of
       MPTCP_EVENT_CREATED -> do
-            putStrLn $ "Connection created !!\n" ++ showAttributes attributes
+        let subflow = subflowFromAttributes attributes
             onNewConnection sock attributes
+            putStrLn $ "Connection created !!\n" ++ showAttributes attributes
+            
       MPTCP_EVENT_ESTABLISHED -> putStrLn "Connection established !"
       MPTCP_EVENT_CLOSED -> putStrLn "Connection closed"
       MPTCP_EVENT_SUB_ESTABLISHED -> putStrLn "Subflow established"
