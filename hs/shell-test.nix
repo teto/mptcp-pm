@@ -36,6 +36,8 @@ let
   #   };
   # };
 
+  my_nvim = genNeovim  [ ] { withHaskell = true; };
+
 in
 
   # haskellPackages.shellFor {
@@ -68,5 +70,10 @@ in
     export HIE_HOOGLE_DATABASE="$NIX_GHC_LIBDIR/../../share/doc/hoogle/index.html"
     # export runghc=" "
     source ./run_daemon
+
+      export PATH="${my_nvim}/bin:$PATH"
+      echo "importing a custom nvim ${my_nvim}"
+
   '';
+
   }

@@ -51,7 +51,7 @@ enum {
  *                          sport, dport
  *       A new connection has been created. It is the good time to allocate
  *       memory and send ADD_ADDR if needed. Depending on the traffic-patterns
- *       it can be very long until the MPTCP_EVENT_ESTABLISHED is sent.
+ *       it can take a long time until the MPTCP_EVENT_ESTABLISHED is sent.
  *
  *   - MPTCP_EVENT_ESTABLISHED: token, family, saddr4 | saddr6, daddr4 | daddr6,
  *                              sport, dport
@@ -73,18 +73,12 @@ enum {
  *
  *   - MPTCP_EVENT_SUB_CLOSED: token, family, saddr4 | saddr6, daddr4 | daddr6,
  *                             sport, dport, backup, if_idx [, error]
- *       A subflow has been closed. An error (copy of sk_err) could be set but
- *       errors should have been previously notified via MPTCP_EVENT_SUB_ERROR.
+ *       A subflow has been closed. An error (copy of sk_err) could be set if an
+ *       error has been detected for this subflow.
  *
  *   - MPTCP_EVENT_SUB_PRIORITY: token, family, saddr4 | saddr6, daddr4 | daddr6,
  *                               sport, dport, backup, if_idx [, error]
  *       The priority of a subflow has changed. 'error' should not be set.
- *
- *   - MPTCP_EVENT_SUB_ERROR: token, family, saddr4 | saddr6, daddr4 | daddr6,
- *                            sport, dport, backup, if_idx, error
- *       A subflow got an error. Note that this error will be cleaned
- *       internally resulting on a 'MPTCP_EVENT_SUB_CLOSED' event without this
- *       specific error.
  *
  * Commands for MPTCP:
  *   - MPTCP_CMD_ANNOUNCE: token, loc_id, family, saddr4 | saddr6 [, sport]
@@ -136,8 +130,6 @@ enum {
 
 	MPTCP_CMD_EXIST,
 
-	MPTCP_EVENT_SUB_ERROR,
-
 	__MPTCP_CMD_AFTER_LAST
 };
 
@@ -152,7 +144,7 @@ enum {
 	MPTCPF_EVENT_SUB_ESTABLISHED	= (1 << 6),
 	MPTCPF_EVENT_SUB_CLOSED		= (1 << 7),
 	MPTCPF_EVENT_SUB_PRIORITY	= (1 << 8),
-	MPTCPF_EVENT_SUB_ERROR		= (1 << 9),
 };
 
 #endif /* _LINUX_MPTCP_H */
+

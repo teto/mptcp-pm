@@ -12,3 +12,7 @@ TEMP
 
 #!/usr/bin/env bash
 exec cabal -v0 --project-file=path/to/project/cabal.project new-run exe:exe-name -- "$@"
+
+
+TODO:
+- [ ] generate the enums via FFI from include/uapi/linux/mptcp.h

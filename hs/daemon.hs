@@ -60,7 +60,21 @@ instance Convertable NoDataMptcp where
   getPut _ = return ()
   getGet _ = return NoDataMptcp
 
+-- isIPv4address
+--
+data TcpConnection = TcpConnection {
+}
 
+newtype MptcpConnection = MptcpConnection {
+  subflows :: [TcpConnection ]
+}
+
+data MyState = MyState {
+  -- Use a map instead to map on token
+  socket :: MptcpSocket
+  , connections :: Map.Map MptcpToken MptcpConnection
+  -- TODO pass the socket as well ?
+}
 -- data GenlData a = GenlData
 --     {
 --       genlDataHeader :: GenlHeader
@@ -86,10 +100,6 @@ type MptcpToken = Word32
 type LocId    = Word8
 type MptcpFamily    = Word16
 
--- |typedef for messages send by this mdoule
--- type NL80211Packet = GenlPacket NoData80211
-mptcpGenlVer :: Word8
-mptcpGenlVer = 1
 
 -- https://stackoverflow.com/questions/18606827/how-to-write-customised-show-function-in-haskell
 -- TODO could use templateHaskell
@@ -173,22 +183,32 @@ mptcpGenlEvGrpName = "mptcp_events"
 mptcpGenlCmdGrpName :: String
 mptcpGenlCmdGrpName = "mptcp_commands"
 mptcpGenlName :: String
-mptcpGenlName="mptcp"
+mptcpGenlName = "mptcp"
+-- |typedef for messages send by this mdoule
+-- type NL80211Packet = GenlPacket NoData80211
+mptcpGenlVer :: Word8
+mptcpGenlVer = 1
+
+
+tcpMetricsGenlName :: String
+tcpMetricsGenlName = "tcp_metrics"
+tcpMetricsGenlVer :: Word8
+tcpMetricsGenlVer = 1
 
 data Sample = Sample
-  { command      :: String
+  { command    :: String
   , quiet      :: Bool
   , enthusiasm :: Int }
 
+-- TODO register subcommands instead
 sample :: Parser Sample
 sample = Sample
-      <$> strOption
-          ( long "hello"
-         <> metavar "TARGET"
-         <> help "Target for the greeting" )
+      <$> argument str
+          ( metavar "CMD"
+         <> help "What to do" )
       <*> switch
-          ( long "quiet"
-         <> short 'q'
+          ( long "verbose"
+         <> short 'v'
          <> help "Whether to be quiet" )
       <*> option auto
           ( long "enthusiasm"
@@ -204,13 +224,7 @@ opts = info (sample <**> helper)
   <> progDesc "Print a greeting for TARGET"
   <> header "hello - a test for optparse-applicative" )
 
--- MPTCP_GENL_CMD_GRP_NAME  = "mptcp_commands"
--- MPTCP_GENL_VERSION       = 1
--- MPTCP_FAMILY_NAME   = MPTCP_GENL_NAME = "mptcp"
 
--- NetlinkSocket
--- makeSocketGeneric
--- let active = take 1 args == ["--active"]
 
 -- NetlinkSocket
 -- mptcpNetlink :: IO ()
@@ -353,7 +367,7 @@ showAttributes attrs =
 --     p32 0xFFFFFFFF
 
 createNewSubflow :: MptcpSocket -> MptcpToken -> Attributes -> IO ()
-createNewSubflow (MptcpSocket socket fid) token attrs = let
+createNewSubflow (MptcpSocket sock fid) token attrs = let
   localId = readLocId $ Map.lookup (fromEnum MPTCP_ATTR_LOC_ID) attrs
   remoteId = readLocId $ Map.lookup (fromEnum MPTCP_ATTR_REM_ID) attrs
   in
@@ -373,7 +387,7 @@ instance Show GenlHeaderMptcp where
 
 
 removeLocId :: MptcpSocket -> MptcpToken -> LocId -> IO [GenlPacket NoData]
-removeLocId (MptcpSocket socket fid) token locId = let
+removeLocId (MptcpSocket sock fid) token locId = let
     m0 = Map.empty
     m1 = Map.insert (fromEnum MPTCP_ATTR_TOKEN) (convertToken token) m0
     m2 = Map.insert (fromEnum MPTCP_ATTR_LOC_ID) (convertLocId locId) m1
@@ -385,18 +399,18 @@ removeLocId (MptcpSocket socket fid) token locId = let
     pkt = getRequestPacket fid cmd False attributes
   in
     putStrLn ("Remove subflow " ++ showAttributes attributes)
-      >> query socket pkt
+      >> query sock pkt
 
 
 checkIfSocketExists :: MptcpSocket -> MptcpToken  -> IO [GenlPacket NoData]
-checkIfSocketExists (MptcpSocket socket fid) token = let
+checkIfSocketExists (MptcpSocket sock fid) token = let
     attributes = Map.insert (fromEnum MPTCP_ATTR_TOKEN) (convertToken token) Map.empty
     pkt = getRequestPacket fid cmd False attributes
     cmd = MPTCP_CMD_EXIST
   in
     putStrLn ("Checking token exists\n" ++ showAttributes attributes ++ showPacket pkt)
       -- >> putStrLn $
-      >> query socket pkt
+      >> query sock pkt
 
 --announceSubflow :: MptcpSocket -> MptcpToken -> IO [GenlPacket NoData]
 --announceSubflow (MptcpSocket socket fid) token = let
@@ -470,30 +484,30 @@ inspectAnswer (Packet _ (GenlData hdr NoData) attributes) = let
 inspectAnswer pkt = putStrLn $ "Inspecting answer:\n" ++ showPacket pkt
 
 onNewConnection :: MptcpSocket -> Attributes -> IO ()
-onNewConnection socket attributes = do
+onNewConnection sock attributes = do
     let token = readToken $ Map.lookup (fromEnum MPTCP_ATTR_TOKEN) attributes
     let locId = readLocId $ Map.lookup (fromEnum MPTCP_ATTR_LOC_ID) attributes
     let answer = "e"
     -- answer <-  Prelude.getLine
     -- putStrLn "What do you want to do ? (c.reate subflow, d.elete connection, r.eset connection)"
-    -- announceSubflow socket token >>= inspectAnswers >> putStrLn "Finished announcing"
+    -- announceSubflow sock token >>= inspectAnswers >> putStrLn "Finished announcing"
     case answer of
       "c" -> do
         putStrLn "Creating new subflow !!"
-        createNewSubflow socket token attributes
+        createNewSubflow sock token attributes
         return ()
       "d" -> putStrLn "Not implemented"
-        -- removeSubflow socket token locId >>= inspectAnswers >> putStrLn "Finished announcing"
+        -- removeSubflow sock token locId >>= inspectAnswers >> putStrLn "Finished announcing"
       "e" -> putStrLn "check for existence" >>
-          checkIfSocketExists socket token >>= inspectAnswers
-          -- checkIfSocketExists socket token >>= (dispatchPacket socket)
+          checkIfSocketExists sock token >>= inspectAnswers
+          -- checkIfSocketExists sock token >>= (dispatchPacket sock)
           -- return ()
       "r" -> putStrLn "Reset the connection" >>
         -- TODO expects token
         -- TODO discard result
-          -- resetTheConnection socket token >>= inspectAnswers >>
+          -- resetTheConnection sock token >>= inspectAnswers >>
           putStrLn "Finished resetting"
-      _ -> onNewConnection socket attributes
+      _ -> onNewConnection sock attributes
     return ()
 
 
@@ -512,8 +526,8 @@ onNewConnection socket attributes = do
 --     -- cmd = genlCmd genlHeader
 --     putStrLn "Genldata"
 
-dispatchPacket :: MptcpSocket -> MptcpPacket -> IO ()
-dispatchPacket sock (Packet hdr (GenlData genlHeader NoDataMptcp) attributes) = let
+dispatchPacket :: MyState -> MptcpPacket -> IO MyState
+dispatchPacket (MyState sock conns) (Packet hdr (GenlData genlHeader NoDataMptcp) attributes) = let
     cmd = genlCmd genlHeader
   in
     case toEnum (fromIntegral cmd) of
@@ -527,13 +541,15 @@ dispatchPacket sock (Packet hdr (GenlData genlHeader NoDataMptcp) attributes) = 
       MPTCP_CMD_EXIST -> putStrLn "this token exists"
       _ -> putStrLn "undefined event !!"
 
+
 -- dispatchPacket sock (ErrorMsg err) attributes) = let
-dispatchPacket sock (DoneMsg err) =
-  putStrLn "Done msg"
+dispatchPacket s (DoneMsg err) =
+  putStrLn "Done msg" >> return s
 
 
-dispatchPacket sock (ErrorMsg hdr errCode errPacket) =
-  putStrLn $ "Error msg of type " ++ showErrCode errCode ++ " Packet content:\n" ++ show errPacket
+dispatchPacket s (ErrorMsg hdr errCode errPacket) =
+  putStrLn $ "Error msg of type " ++ showErrCode errCode ++ " Packet content:\n" ++ show errPacket 
+  return s
 
 -- /usr/include/asm/errno.h
 showErrCode :: CInt -> String
@@ -548,36 +564,34 @@ showErrCode err
 --   eNOTCONN -> "NOT connected"
 
 
-inspectResult :: MptcpSocket -> Either String MptcpPacket -> IO()
-inspectResult mptcpSocket result =  case result of
+-- 
+inspectResult :: MyState -> Either String MptcpPacket -> IO()
+inspectResult myState result =  case result of
     Left ex -> putStrLn $ "An error in parsing happened" ++ show ex
-    Right myPack -> dispatchPacket mptcpSocket myPack >> putStrLn "Valid packet"
+    Right myPack -> dispatchPacket myState myPack >> putStrLn "Valid packet"
 
 -- CtrlAttrMcastGroup
 -- copied from utils/GenlInfo.hs
-doDumpLoop :: MptcpSocket -> IO ()
-doDumpLoop (MptcpSocket simpleSock fid) = do
-  -- putStrLn $show pack
-  putStrLn "doDumpLoop"
-  -- TODO do less filtering here ?
-  -- myPack <- trace "recvOne" (recvOne simpleSock :: IO [GenlPacket NoData])
+doDumpLoop :: MyState -> IO MyState
+doDumpLoop myState = do
+    let (MptcpSocket simpleSock fid) = socket myState
+    putStrLn "doDumpLoop"
+    -- TODO do less filtering here ?
+    -- myPack <- trace "recvOne" (recvOne simpleSock :: IO [GenlPacket NoData])
 
-  -- inspired by https://stackoverflow.com/questions/6009384/exception-handling-in-haskell
-  -- to work around "user error (too few bytes       From: demandInput     )"
-  --
-  -- [Either String (Packet a)]
-  -- (Convertable a, Eq a, Show a) =>
-  results <- recvOne' simpleSock ::  IO [Either String MptcpPacket]
+    -- inspired by https://stackoverflow.com/questions/6009384/exception-handling-in-haskell
+    -- to work around "user error (too few bytes       From: demandInput     )"
+    results <- recvOne' simpleSock ::  IO [Either String MptcpPacket]
 
-  mapM_ (inspectResult mptcpSocket) results
+    -- TODO retrieve packets
+    mapM_ (inspectResult myState) results
 
-  -- ca me retourne un tas de paquet en fait ?
-  -- For a version that ignores the results see mapM_.
-  -- _ <- mapM_ (dispatchPacket mptcpSocket) myPack
-  -- _ <- mapM inspectPacket  pack
-  doDumpLoop mptcpSocket
-  where
-    mptcpSocket = MptcpSocket simpleSock fid
+    -- ca me retourne un tas de paquet en fait ?
+    -- For a version that ignores the results see mapM_.
+    -- _ <- mapM_ (dispatchPacket mptcpSocket) myPack
+    -- _ <- mapM inspectPacket  pack
+    newState <- doDumpLoop myState
+    return newState
 
 -- regarder dans query/joinMulticastGroup/recvOne
 -- doDumpLoop / dumpGeneric
@@ -587,9 +601,11 @@ listenToEvents (MptcpSocket sock fid) my_group = do
   -- TODO should check it works correctly !
   joinMulticastGroup sock (grpId my_group)
   putStrLn $ "Joined grp " ++ grpName my_group
-  doDumpLoop mptcpSocket
+  _ <- doDumpLoop globalState
+  putStrLn "TOTO"
   where
     mptcpSocket = MptcpSocket sock fid
+    globalState = MyState (MptcpSocket sock fid) Map.empty
 
 
 createLogger :: IO LoggerSet
@@ -600,6 +616,10 @@ createLogger = newStdoutLoggerSet defaultBufSize
 -- https://github.com/vdorr/linux-live-netinfo/blob/24ead3dd84d6847483aed206ec4b0e001bfade02/System/Linux/NetInfo.hs
 main :: IO ()
 main = do
+
+  -- super nice tutorial on optparse applicative:
+  -- https://github.com/pcapriotti/optparse-applicative#regular-options
+  let mptcpConnections = []
   options <- execParser opts
   logger <- createLogger
   pushLogStr logger (toLogStr "ok")
