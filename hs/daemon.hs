@@ -17,7 +17,7 @@ The operation requires the CAP_NET_ADMIN privilege
 
 Helpful links:
 - How to use Map https://lotz84.github.io/haskellbyexample/ex/maps
-
+= How to update a single field https://stackoverflow.com/questions/14955627/shorthand-way-for-assigning-a-single-field-in-a-record-while-copying-the-rest-o
 -}
 
 -- !/usr/bin/env nix-shell
@@ -60,6 +60,8 @@ import qualified Data.Map as Map
 -- everywhere
 -- |Wrapper for 'NetlinkSocket' we also need the family id for messages we construct
 data MptcpSocket = MptcpSocket NetlinkSocket Word16
+instance Show MptcpSocket where
+  show sock = "Mptcp netlink socket: "
 
 -- inspired by NoData80211
 data NoDataMptcp = NoDataMptcp deriving (Eq, Show)
@@ -77,6 +79,8 @@ data TcpConnection = TcpConnection {
   , dstIp :: String
   , srcPort :: Word16
   , dstPort :: Word16
+  -- , localId :: Word8
+  -- , remoteId :: Word8
   -- add loc id
   -- add TcpMetrics member
 
@@ -88,14 +92,15 @@ data TcpConnection = TcpConnection {
 
 newtype MptcpConnection = MptcpConnection {
   subflows :: [TcpConnection]
-}
+} deriving Show
 
 data MyState = MyState {
   -- Use a map instead to map on token
   socket :: MptcpSocket
   , connections :: Map.Map MptcpToken MptcpConnection
   -- TODO pass the socket as well ?
-}
+} deriving Show
+
 -- data GenlData a = GenlData
 --     {
 --       genlDataHeader :: GenlHeader
@@ -348,7 +353,7 @@ dumpAttribute attr value = let
 
       -- _ -> "unhandled case"
   in
-    attrStr ++ "\n"
+    attrStr
 
 
 
@@ -359,7 +364,7 @@ showAttributes attrs =
   let
     -- f k v = [show k, " = ", show v]
     -- mapped = Map.mapWithKey f attrs
-    mapped = Map.foldrWithKey (\k v -> (dumpAttribute k v ++ ) ) " " attrs
+    mapped = Map.foldrWithKey (\k v -> (dumpAttribute k v ++)  ) "\n " attrs
   in
     -- putStrLn $ intercalate "," $ mapped
     mapped
@@ -493,7 +498,7 @@ inspectAnswer (Packet _ (GenlData hdr NoData) attributes) = let
     cmd = genlCmd hdr
   in
     putStrLn $ "Inspecting answer custom:\n" ++ showHeaderCustom hdr
-            ++ "Supposing it's a mptcp command" ++ dumpCommand ( toEnum $ fromIntegral cmd)
+            ++ "Supposing it's a mptcp command: " ++ dumpCommand ( toEnum $ fromIntegral cmd)
 
 inspectAnswer pkt = putStrLn $ "Inspecting answer:\n" ++ showPacket pkt
 
@@ -544,10 +549,20 @@ subflowFromAttributes :: Attributes -> TcpConnection
 subflowFromAttributes attrs =
   let
     -- expects a ByteString
-    _srcPort = getPort $ fromJust (Nothing) (Map.lookup (fromEnum MPTCP_ATTR_SPORT) attrs)
-    _srcIp = toIpv4 $ fromJust (Map.lookup (fromEnum MPTCP_ATTR_SADDR4) attrs)
+    _srcPort = getPort $ fromJust (Map.lookup (fromEnum MPTCP_ATTR_SPORT) attrs)
+    -- toIpv4 $ fromJust
+    _srcIp =  case (Map.lookup (fromEnum MPTCP_ATTR_SADDR4) attrs) of
+      -- TODO toIpv4 ip
+      Just ip -> toIpv4 ip
+      -- assume v6, throws otherwise
+      -- Nothing -> fromJust (Map.lookup (fromEnum MPTCP_ATTR_SADDR6) attrs)
+      Nothing -> "ipv6 src"
     _dstPort = getPort $ fromJust (Map.lookup (fromEnum MPTCP_ATTR_DPORT) attrs)
-    _dstIp = toIpv4 $fromJust (Map.lookup (fromEnum MPTCP_ATTR_DADDR4) attrs)
+    _dstIp = case (Map.lookup (fromEnum MPTCP_ATTR_DADDR4) attrs) of
+      Just ip -> toIpv4 ip
+      -- assume v6, throws otherwise
+      -- Nothing -> fromJust (Map.lookup (fromEnum MPTCP_ATTR_SADDR6) attrs)
+      Nothing -> "ipv6 dst"
     -- convertLocId
   in
     TcpConnection _srcIp _dstIp _srcPort _dstPort
@@ -556,20 +571,43 @@ dispatchPacket :: MyState -> MptcpPacket -> IO MyState
 dispatchPacket oldState (Packet hdr (GenlData genlHeader NoDataMptcp) attributes) = let
     cmd = genlCmd genlHeader
     (MyState sock conns) = oldState
+
+    -- i suppose token is always available right ?
+    token = readToken $ Map.lookup (fromEnum MPTCP_ATTR_TOKEN) attributes
+    mptcpConn = Map.lookup token (connections oldState)
   in
     case toEnum (fromIntegral cmd) of
       MPTCP_EVENT_CREATED -> do
         let subflow = subflowFromAttributes attributes
+        let mptcpConn = MptcpConnection [ subflow ]
+        putStrLn $ "Connection created !!\n" ++ showAttributes attributes
         onNewConnection sock attributes
         putStrLn $ "Connection created !!\n" ++ show subflow
         -- showAttributes attributes
-        return oldState
+
+        -- syntax seen at https://stackoverflow.com/questions/14955627/shorthand-way-for-assigning-a-single-field-in-a-record-while-copying-the-rest-o
+        let newState = oldState { connections = Map.insert token mptcpConn (connections oldState) }
+        putStrLn $ "New state" ++ show newState
+        return newState
 
       MPTCP_EVENT_ESTABLISHED -> do
         putStrLn "Connection established !"
         return oldState
-      MPTCP_EVENT_CLOSED -> putStrLn "Connection closed"  >> return oldState
-      MPTCP_EVENT_SUB_ESTABLISHED -> putStrLn "Subflow established" >> return oldState
+
+      -- this might be true for subflow
+      MPTCP_EVENT_CLOSED -> do
+        -- case mptcpConn of
+        --   Nothing -> putStrLn "Not found"
+        --   Just 
+        putStrLn "Connection closed, deleting token "
+        let newState = oldState { connections = Map.delete token (connections oldState) }
+        putStrLn $ "New state" ++ show newState
+        return newState
+      MPTCP_EVENT_SUB_ESTABLISHED -> do
+        let subflow = subflowFromAttributes attributes
+        putStrLn "Subflow established" 
+        let newConns = subflows mptcpConn ++ subflow
+        let newState = oldState { connections = Map.delete token (connections oldState) }
       MPTCP_EVENT_SUB_CLOSED -> putStrLn "Subflow closed" >> return oldState
       MPTCP_CMD_EXIST -> putStrLn "this token exists" >> return oldState
       _ -> putStrLn "undefined event !!" >> return oldState
