@@ -12,6 +12,12 @@ For more information see /usr/include/linux/nl80211.h
 To interact
 GENL_ADMIN_PERM
 The operation requires the CAP_NET_ADMIN privilege
+
+
+
+Helpful links:
+- How to use Map https://lotz84.github.io/haskellbyexample/ex/maps
+
 -}
 
 -- !/usr/bin/env nix-shell
@@ -22,6 +28,7 @@ import Prelude hiding (length, concat)
 import Options.Applicative hiding (value, ErrorMsg)
 import qualified Options.Applicative (value)
 
+import Data.Maybe
 import Data.Bits ((.|.))
 import Foreign.C.Types (CInt)
 import Foreign.C.Error
@@ -62,11 +69,25 @@ instance Convertable NoDataMptcp where
 
 -- isIPv4address
 --
+-- data TcpMetrics = TcpMetrics {
+-- }
 data TcpConnection = TcpConnection {
-}
+  -- TODO use libraries to deal with that ? filter from the command line for instance ?
+  srcIp :: String
+  , dstIp :: String
+  , srcPort :: Word16
+  , dstPort :: Word16
+  -- add loc id
+  -- add TcpMetrics member
+
+-- TODO derive Eq as well
+} deriving Show
+
+-- instance Show TcpConnection where
+--   show (TcpConnection srcIp dstIP srcPort dstPort) = "Src IP: " ++ srcIp
 
 newtype MptcpConnection = MptcpConnection {
-  subflows :: [TcpConnection ]
+  subflows :: [TcpConnection]
 }
 
 data MyState = MyState {
@@ -307,14 +328,6 @@ readLocId maybeVal = case maybeVal of
 dumpAttribute :: Int -> ByteString -> String
 dumpAttribute attr value = let
 
-  -- fromJust :: Maybe a -> a
-  -- ip = C8.unpack value
-  -- Data.ByteString.Char8
-  -- ip =
-  -- ip = case C8.unpack value of
-  --   Nothing -> "no Ip"
-  --   Just x -> show x
-
   attrStr = case toEnum (fromIntegral attr) of
       MPTCP_ATTR_UNSPEC -> "UNSPECIFIED"
       MPTCP_ATTR_TOKEN -> "token: " ++ show (readToken $ Just value)
@@ -340,7 +353,6 @@ dumpAttribute attr value = let
 
 
 -- type Attributes = Map Int ByteString
--- https://lotz84.github.io/haskellbyexample/ex/maps
 -- the library contains showAttrs / showNLAttrs
 showAttributes :: Attributes -> String
 showAttributes attrs =
@@ -443,7 +455,7 @@ convertToken val =
 -- need to prepare a request
 -- type GenlPacket a = Packet (GenlData a)
 resetTheConnection :: MptcpSocket -> Attributes -> IO [GenlPacket NoData]
-resetTheConnection (MptcpSocket socket fid) receivedAttributes = let
+resetTheConnection (MptcpSocket sock fid) receivedAttributes = let
     m0 = Map.empty
     m1 = Map.insert intCmd (convertToken token) m0
     token = readToken $ Map.lookup (fromEnum MPTCP_ATTR_TOKEN) receivedAttributes
@@ -458,7 +470,7 @@ resetTheConnection (MptcpSocket socket fid) receivedAttributes = let
     -- GenlPacket a with a acting as genlDataData
     -- query or queryOne
     -- System.Linux.Netlink query :: (Convertable a, Eq a, Show a) => NetlinkSocket -> Packet a -> IO [Packet a]
-    query socket pkt
+    query sock pkt
 
 inspectAnswers :: [GenlPacket NoData] -> IO ()
 inspectAnswers packets = do
@@ -529,24 +541,38 @@ onNewConnection sock attributes = do
 --     putStrLn "Genldata"
 
 subflowFromAttributes :: Attributes -> TcpConnection
-subflowFromAttributes attributes = 
+subflowFromAttributes attrs =
+  let
+    -- expects a ByteString
+    _srcPort = getPort $ fromJust (Nothing) (Map.lookup (fromEnum MPTCP_ATTR_SPORT) attrs)
+    _srcIp = toIpv4 $ fromJust (Map.lookup (fromEnum MPTCP_ATTR_SADDR4) attrs)
+    _dstPort = getPort $ fromJust (Map.lookup (fromEnum MPTCP_ATTR_DPORT) attrs)
+    _dstIp = toIpv4 $fromJust (Map.lookup (fromEnum MPTCP_ATTR_DADDR4) attrs)
+    -- convertLocId
+  in
+    TcpConnection _srcIp _dstIp _srcPort _dstPort
 
 dispatchPacket :: MyState -> MptcpPacket -> IO MyState
-dispatchPacket (MyState sock conns) (Packet hdr (GenlData genlHeader NoDataMptcp) attributes) = let
+dispatchPacket oldState (Packet hdr (GenlData genlHeader NoDataMptcp) attributes) = let
     cmd = genlCmd genlHeader
+    (MyState sock conns) = oldState
   in
     case toEnum (fromIntegral cmd) of
       MPTCP_EVENT_CREATED -> do
         let subflow = subflowFromAttributes attributes
-            onNewConnection sock attributes
-            putStrLn $ "Connection created !!\n" ++ showAttributes attributes
-            
-      MPTCP_EVENT_ESTABLISHED -> putStrLn "Connection established !"
-      MPTCP_EVENT_CLOSED -> putStrLn "Connection closed"
-      MPTCP_EVENT_SUB_ESTABLISHED -> putStrLn "Subflow established"
-      MPTCP_EVENT_SUB_CLOSED -> putStrLn "Subflow closed"
-      MPTCP_CMD_EXIST -> putStrLn "this token exists"
-      _ -> putStrLn "undefined event !!"
+        onNewConnection sock attributes
+        putStrLn $ "Connection created !!\n" ++ show subflow
+        -- showAttributes attributes
+        return oldState
+
+      MPTCP_EVENT_ESTABLISHED -> do
+        putStrLn "Connection established !"
+        return oldState
+      MPTCP_EVENT_CLOSED -> putStrLn "Connection closed"  >> return oldState
+      MPTCP_EVENT_SUB_ESTABLISHED -> putStrLn "Subflow established" >> return oldState
+      MPTCP_EVENT_SUB_CLOSED -> putStrLn "Subflow closed" >> return oldState
+      MPTCP_CMD_EXIST -> putStrLn "this token exists" >> return oldState
+      _ -> putStrLn "undefined event !!" >> return oldState
 
 
 -- dispatchPacket sock (ErrorMsg err) attributes) = let
@@ -554,7 +580,7 @@ dispatchPacket s (DoneMsg err) =
   putStrLn "Done msg" >> return s
 
 
-dispatchPacket s (ErrorMsg hdr errCode errPacket) =
+dispatchPacket s (ErrorMsg hdr errCode errPacket) = do
   putStrLn $ "Error msg of type " ++ showErrCode errCode ++ " Packet content:\n" ++ show errPacket 
   return s
 
@@ -571,7 +597,7 @@ showErrCode err
 --   eNOTCONN -> "NOT connected"
 
 
--- 
+--
 inspectResult :: MyState -> Either String MptcpPacket -> IO()
 inspectResult myState result =  case result of
     Left ex -> putStrLn $ "An error in parsing happened" ++ show ex
