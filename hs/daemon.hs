@@ -33,7 +33,7 @@ import Data.Bits ((.|.))
 import Foreign.C.Types (CInt)
 import Foreign.C.Error
 import System.Linux.Netlink hiding (makeSocket)
-import System.Linux.Netlink (query, Packet(..))
+import System.Linux.Netlink (query, Packet(..), NetlinkSocket)
 import System.Linux.Netlink.GeNetlink
 import System.Linux.Netlink.Constants
 -- import System.Linux.Netlink.Helpers
@@ -59,9 +59,13 @@ import qualified Data.Map as Map
 -- The Netlink socket with Family Id, so we don't need as many arguments
 -- everywhere
 -- |Wrapper for 'NetlinkSocket' we also need the family id for messages we construct
+
+-- how can I retreive the word16 without pattern matching ?
 data MptcpSocket = MptcpSocket NetlinkSocket Word16
 instance Show MptcpSocket where
-  show sock = "Mptcp netlink socket: "
+  show sock = let (MptcpSocket nlSock fid) = sock in ("Mptcp netlink socket: " ++ show fid)
+
+data MetricsSocket = MetricsSocket NetlinkSocket Word16
 
 -- inspired by NoData80211
 data NoDataMptcp = NoDataMptcp deriving (Eq, Show)
@@ -271,12 +275,24 @@ opts = info (sample <**> helper)
 -- TODO should record the token too
 makeMptcpSocket :: IO MptcpSocket
 makeMptcpSocket = do
+    -- for legacy reasons this opens a route socket
   sock <- makeSocket
--- getFamilyWithMulticasts
   res <- getFamilyIdS sock mptcpGenlName
   case res of
     Nothing -> error $ "Could not find family " ++ mptcpGenlName
     Just fid -> return  (MptcpSocket sock (trace ("family id"++ show fid ) fid))
+
+
+-- GenlSocket
+makeMetricsSocket :: IO NetlinkSocket
+makeMetricsSocket = do
+  sock <- makeSocket
+  -- makeSocketGeneric 16
+  res <- getFamilyIdS sock tcpMetricsGenlName
+  case res of
+    Nothing -> error $ "Could not find family " ++ tcpMetricsGenlName
+    -- (trace ("family id"++ show fid )
+    Just fid -> return (NS fid)
 
 
 -- tcp_metrics is a multicast group
@@ -579,15 +595,15 @@ dispatchPacket oldState (Packet hdr (GenlData genlHeader NoDataMptcp) attributes
     case toEnum (fromIntegral cmd) of
       MPTCP_EVENT_CREATED -> do
         let subflow = subflowFromAttributes attributes
-        let mptcpConn = MptcpConnection [ subflow ]
+        let newMptcpConn = MptcpConnection [ subflow ]
         putStrLn $ "Connection created !!\n" ++ showAttributes attributes
         onNewConnection sock attributes
         putStrLn $ "Connection created !!\n" ++ show subflow
         -- showAttributes attributes
 
         -- syntax seen at https://stackoverflow.com/questions/14955627/shorthand-way-for-assigning-a-single-field-in-a-record-while-copying-the-rest-o
-        let newState = oldState { connections = Map.insert token mptcpConn (connections oldState) }
-        putStrLn $ "New state" ++ show newState
+        let newState = oldState { connections = Map.insert token newMptcpConn (connections oldState) }
+        putStrLn $ "New state after creation: " ++ show newState
         return newState
 
       MPTCP_EVENT_ESTABLISHED -> do
@@ -605,9 +621,14 @@ dispatchPacket oldState (Packet hdr (GenlData genlHeader NoDataMptcp) attributes
         return newState
       MPTCP_EVENT_SUB_ESTABLISHED -> do
         let subflow = subflowFromAttributes attributes
-        putStrLn "Subflow established" 
-        let newConns = subflows mptcpConn ++ subflow
-        let newState = oldState { connections = Map.delete token (connections oldState) }
+        putStrLn "Subflow established"
+        case mptcpConn of
+            Nothing -> putStrLn "No connection with this token" >> return oldState
+            Just con -> do
+                let newCon = con { subflows = subflows con ++ [subflow] }
+                let newState = oldState { connections = Map.insert token newCon (connections oldState) }
+                return newState
+      -- TODO remove
       MPTCP_EVENT_SUB_CLOSED -> putStrLn "Subflow closed" >> return oldState
       MPTCP_CMD_EXIST -> putStrLn "this token exists" >> return oldState
       _ -> putStrLn "undefined event !!" >> return oldState
@@ -700,6 +721,7 @@ main = do
   putStrLn $ dumpMptcpCommands MPTCP_CMD_UNSPEC
   putStrLn "Creating MPTCP netlink socket..."
   (MptcpSocket sock  fid) <- makeMptcpSocket
+-- NetlinkSocket 
   putStr "socket created. Family id " >> print fid
   -- (mid, mcastGroup ) <- getFamilyWithMulticasts sock mptcpGenlEvGrpName
   mcastGroups <- getMulticastGroups sock fid
