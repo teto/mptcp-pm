@@ -18,6 +18,7 @@ The operation requires the CAP_NET_ADMIN privilege
 Helpful links:
 - How to use Map https://lotz84.github.io/haskellbyexample/ex/maps
 = How to update a single field https://stackoverflow.com/questions/14955627/shorthand-way-for-assigning-a-single-field-in-a-record-while-copying-the-rest-o
+- get tcp stats via netlink https://www.vividcortex.com/blog/2014/09/22/using-netlink-to-optimize-socket-statistics/
 -}
 
 -- !/usr/bin/env nix-shell
@@ -33,7 +34,7 @@ import Data.Bits ((.|.))
 import Foreign.C.Types (CInt)
 import Foreign.C.Error
 import System.Linux.Netlink hiding (makeSocket)
-import System.Linux.Netlink (query, Packet(..), NetlinkSocket)
+import System.Linux.Netlink (query, Packet(..))
 import System.Linux.Netlink.GeNetlink
 import System.Linux.Netlink.Constants
 -- import System.Linux.Netlink.Helpers
@@ -283,8 +284,8 @@ makeMptcpSocket = do
     Just fid -> return  (MptcpSocket sock (trace ("family id"++ show fid ) fid))
 
 
--- GenlSocket
-makeMetricsSocket :: IO NetlinkSocket
+-- Used tuples
+makeMetricsSocket :: IO (NetlinkSocket, Word16)
 makeMetricsSocket = do
   sock <- makeSocket
   -- makeSocketGeneric 16
@@ -292,7 +293,7 @@ makeMetricsSocket = do
   case res of
     Nothing -> error $ "Could not find family " ++ tcpMetricsGenlName
     -- (trace ("family id"++ show fid )
-    Just fid -> return (NS fid)
+    Just fid -> return (sock, fid)
 
 
 -- tcp_metrics is a multicast group
@@ -614,7 +615,7 @@ dispatchPacket oldState (Packet hdr (GenlData genlHeader NoDataMptcp) attributes
       MPTCP_EVENT_CLOSED -> do
         -- case mptcpConn of
         --   Nothing -> putStrLn "Not found"
-        --   Just 
+        --   Just
         putStrLn "Connection closed, deleting token "
         let newState = oldState { connections = Map.delete token (connections oldState) }
         putStrLn $ "New state" ++ show newState
@@ -687,6 +688,7 @@ doDumpLoop myState = do
 
 -- regarder dans query/joinMulticastGroup/recvOne
 -- doDumpLoop / dumpGeneric
+-- why doesnt it complain that
 listenToEvents :: MptcpSocket -> CtrlAttrMcastGroup -> IO ()
 listenToEvents (MptcpSocket sock fid) my_group = do
   -- joinMulticastGroup  returns IO ()
@@ -697,11 +699,25 @@ listenToEvents (MptcpSocket sock fid) my_group = do
   putStrLn "TOTO"
   where
     mptcpSocket = MptcpSocket sock fid
-    globalState = MyState (MptcpSocket sock fid) Map.empty
+    globalState = MyState mptcpSocket Map.empty
+
+-- testing
+listenToMetricEvents :: NetlinkSocket -> CtrlAttrMcastGroup  -> IO ()
+listenToMetricEvents sock myGroup = do
+  putStrLn "listening to metric events"
+  joinMulticastGroup sock (grpId myGroup)
+  putStrLn $ "Joined grp " ++ grpName myGroup
+  -- _ <- doDumpLoop globalState
+  -- putStrLn "TOTO"
+  -- where
+  --   -- mptcpSocket = MptcpSocket sock fid
+  --   globalState = MyState mptcpSocket Map.empty
 
 
 createLogger :: IO LoggerSet
 createLogger = newStdoutLoggerSet defaultBufSize
+
+
 
 
 -- s'inspirer de
@@ -721,15 +737,21 @@ main = do
   putStrLn $ dumpMptcpCommands MPTCP_CMD_UNSPEC
   putStrLn "Creating MPTCP netlink socket..."
   (MptcpSocket sock  fid) <- makeMptcpSocket
--- NetlinkSocket 
-  putStr "socket created. Family id " >> print fid
+  (sockMetrics, fidMetrics) <- makeMetricsSocket
+-- NetlinkSocket
+  putStr "socket created. MPTCP Family id " >> print fid
+  putStr "socket created. tcp_metrics Family id " >> print fidMetrics
+  -- That's what I should use in fact !! (Word16, [CtrlAttrMcastGroup])
   -- (mid, mcastGroup ) <- getFamilyWithMulticasts sock mptcpGenlEvGrpName
-  mcastGroups <- getMulticastGroups sock fid
-  -- IO [CtrlAttrMcastGroup]
-  mapM_ print mcastGroups
+  -- Each netlink family has a set of 32 multicast groups
+  mcastMetricGroups <- getMulticastGroups sockMetrics fidMetrics
+  mcastMptcpGroups <- getMulticastGroups sock fid
+  mapM_ print mcastMptcpGroups
+  mapM_ print mcastMetricGroups
 
-  mapM_ (listenToEvents (MptcpSocket sock fid)) mcastGroups
-  -- putStrLn $ " Groups: " ++ unwords ( map grpName mcastGroups)
+  mapM_ (listenToMetricEvents sockMetrics) mcastMetricGroups
+  -- mapM_ (listenToEvents (MptcpSocket sock fid)) mcastMptcpGroups
+  -- putStrLn $ " Groups: " ++ unwords ( map grpName mcastMptcpGroups )
   putStrLn "finished"
 
     -- let flags   = foldr (.|.) 0 [fNLM_F_REQUEST]
