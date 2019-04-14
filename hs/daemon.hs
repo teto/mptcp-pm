@@ -19,6 +19,7 @@ Helpful links:
 - How to use Map https://lotz84.github.io/haskellbyexample/ex/maps
 = How to update a single field https://stackoverflow.com/questions/14955627/shorthand-way-for-assigning-a-single-field-in-a-record-while-copying-the-rest-o
 - get tcp stats via netlink https://www.vividcortex.com/blog/2014/09/22/using-netlink-to-optimize-socket-statistics/
+eNETLINK_INET_DIAG
 -}
 
 -- !/usr/bin/env nix-shell
@@ -40,6 +41,8 @@ import System.Linux.Netlink.Constants
 -- import System.Linux.Netlink.Helpers
 import System.Log.FastLogger
 
+-- https://downloads.haskell.org/~ghc/latest/docs/html/libraries/process-1.6.5.0/System-Process.html
+import System.Process
 import System.Linux.Netlink.GeNetlink.Control as C
 import Data.Word (Word8, Word16, Word32)
 import Data.List (intercalate)
@@ -285,16 +288,22 @@ makeMptcpSocket = do
 
 
 -- Used tuples
-makeMetricsSocket :: IO (NetlinkSocket, Word16)
+-- sock <- makeSocket
+makeMetricsSocket :: IO NetlinkSocket
 makeMetricsSocket = do
-  sock <- makeSocket
-  -- makeSocketGeneric 16
-  res <- getFamilyIdS sock tcpMetricsGenlName
-  case res of
-    Nothing -> error $ "Could not find family " ++ tcpMetricsGenlName
-    -- (trace ("family id"++ show fid )
-    Just fid -> return (sock, fid)
+  sock <- makeSocketGeneric eNETLINK_INET_DIAG
+  return sock
+  -- res <- getFamilyIdS sock tcpMetricsGenlName
+  -- case res of
+  --   Nothing -> error $ "Could not find family " ++ tcpMetricsGenlName
+  --   -- (trace ("family id"++ show fid )
+  --   Just fid -> return (sock, fid)
 
+
+runMptcpNumerics :: IO String
+runMptcpNumerics  =
+  -- TODO run readProcessWithExitCode instead
+  readProcess "seq" ["1", "10"] ""
 
 -- tcp_metrics is a multicast group
 
@@ -718,6 +727,69 @@ createLogger :: IO LoggerSet
 createLogger = newStdoutLoggerSet defaultBufSize
 
 
+-- TODO rename to a TCP one ?
+data DiagCustom = DiagCustom {
+  -- common to all families
+  sdiag_family :: Word8
+-- It should be set to the appropriate IPPROTO_* constant for AF_INET and AF_INET6, and to 0 otherwise.
+  , sdiag_protocol :: Word8
+  -- IPv4/v6 specific structure
+  , idiag_ext :: Word8 -- query extended info
+  , pad :: Word8        -- padding for backwards compatibility with v1
+  , idiag_states :: Word32 -- States to dump
+    -- struct inet_diag_sockid id;
+  , id :: Inet_diag_sockid
+}
+
+-- where struct inet_diag_sockid is defined as follows:
+--     struct inet_diag_sockid {
+--         __be16  idiag_sport;
+--         __be16  idiag_dport;
+--         __be32  idiag_src[4];
+--         __be32  idiag_dst[4];
+--         __u32   idiag_if;
+--         __u32   idiag_cookie[2];
+--     };
+
+--
+-- this is inspired 
+data Inet_diag_sockid  = Inet_diag_sockid  {
+  sport :: Word16
+  , dport :: Word16
+  -- IP 4*
+  , src :: Word16
+  , dst :: Word16
+
+  , intf :: Word32
+  -- * 2
+  , cookie :: Word32
+
+}
+
+
+eIPPROTO_TCP :: Word8
+eIPPROTO_TCP = 6
+
+-- inspired by http://man7.org/linux/man-pages/man7/sock_diag.7.html
+queryTcpStats :: NetlinkSocket -> Bool
+queryTcpStats sock = let
+  req = Packet
+  -- Mesge type / flags /seqNum /pid 
+  -- or DUMP_INTR or DUMP_FILTERED ?
+  -- where do I put eAF_INET  ?
+  -- eNLMSG
+  header = Header eNETLINK_SOCK_DIAG (fNLM_F_REQUEST .|. fNLM_F_DUMP_INTR) 0 0
+  -- IPPROTO_TCP = 6,
+  -- sprot
+  diag_req = Inet_diag_sockid 0 5001
+  -- TCP states taken from include/net/tcp_states.h TCP_LISTEN,
+  custom = DiagCustom eAF_INET eIPPROTO_TCP 1 0 () diag_req
+      -- NLC.eRTM_GETLINK (NLC.fNLM_F_ROOT .|. NLC.fNLM_F_MATCH .|. NLC.fNLM_F_REQUEST) 0 0)
+  -- packet header Custom Attributes
+  -- pkt = Packet
+  in
+  -- queryOne 
+    True
 
 
 -- s'inspirer de
@@ -737,19 +809,25 @@ main = do
   putStrLn $ dumpMptcpCommands MPTCP_CMD_UNSPEC
   putStrLn "Creating MPTCP netlink socket..."
   (MptcpSocket sock  fid) <- makeMptcpSocket
-  (sockMetrics, fidMetrics) <- makeMetricsSocket
+  -- (sockMetrics, fidMetrics) <- makeMetricsSocket
+  sockMetrics <- makeMetricsSocket
+
+
+-- sendmsg 
+  queryTcpStats sockMetrics
+
 -- NetlinkSocket
   putStr "socket created. MPTCP Family id " >> print fid
-  putStr "socket created. tcp_metrics Family id " >> print fidMetrics
+  -- putStr "socket created. tcp_metrics Family id " >> print fidMetrics
   -- That's what I should use in fact !! (Word16, [CtrlAttrMcastGroup])
   -- (mid, mcastGroup ) <- getFamilyWithMulticasts sock mptcpGenlEvGrpName
   -- Each netlink family has a set of 32 multicast groups
-  mcastMetricGroups <- getMulticastGroups sockMetrics fidMetrics
+  -- mcastMetricGroups <- getMulticastGroups sockMetrics fidMetrics
   mcastMptcpGroups <- getMulticastGroups sock fid
   mapM_ print mcastMptcpGroups
-  mapM_ print mcastMetricGroups
+  -- mapM_ print mcastMetricGroups
 
-  mapM_ (listenToMetricEvents sockMetrics) mcastMetricGroups
+  -- mapM_ (listenToMetricEvents sockMetrics) mcastMetricGroups
   -- mapM_ (listenToEvents (MptcpSocket sock fid)) mcastMptcpGroups
   -- putStrLn $ " Groups: " ++ unwords ( map grpName mcastMptcpGroups )
   putStrLn "finished"
