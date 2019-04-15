@@ -32,7 +32,11 @@ import Prelude hiding (length, concat)
 import Options.Applicative hiding (value, ErrorMsg)
 import qualified Options.Applicative (value)
 
+-- For TcpState, FFI generated
 import Generated
+
+-- for replicateM
+import Control.Monad
 import Data.Maybe
 import Data.Bits ((.|.))
 import Foreign.C.Types (CInt)
@@ -50,13 +54,21 @@ import System.Process
 import System.Linux.Netlink.GeNetlink.Control as C
 import Data.Word (Word8, Word16, Word32)
 import Data.List (intercalate)
--- import Data.Binary.Get
-import Data.Serialize.Get
-import Data.Serialize.Put
+
+-- According to merijn, I am more likely to need Binary
+import Data.Binary.Get
+import Data.Binary.Put
+
+-- imported from cereal
+-- import Data.Serialize.Get hiding (runGet)
+-- import Data.Serialize.Put
+
 -- import Data.Word (Word8)
 
-import Data.ByteString as BS hiding (putStrLn, putStr, map, intercalate)
-import qualified Data.ByteString.Lazy as BSL
+-- import Data.ByteString as BS hiding (putStrLn, putStr, map, intercalate)
+import Data.ByteString hiding (putStrLn, putStr, map, intercalate)
+-- hiding (putStrLn, putStr, map, intercalate)
+-- import qualified Data.ByteString.Lazy as BSL hiding (putStrLn, putStr, map, intercalate)
 
 import Debug.Trace
 -- import Control.Exception
@@ -340,7 +352,7 @@ getRequestPacket fid cmd dump attrs =
   --   System.Linux.Netlink.ErrorMsg -> error "error msg"
 
 toIpv4 :: ByteString -> String
-toIpv4 val = Data.List.intercalate "." ( map show (BS.unpack val))
+toIpv4 val = Data.List.intercalate "." ( map show (unpack val))
 
 
 -- TODO convert port
@@ -350,18 +362,19 @@ toIpv4 val = Data.List.intercalate "." ( map show (BS.unpack val))
 getPort :: ByteString -> Word16
 getPort val =
   -- decode (BSL.fromStrict value) :: Word16
-  runGet getWord16le (BSL.fromStrict val)
+  -- runGet getWord16le (BSL.fromStrict val)
+  runGet getWord16le val
   -- g16 val
 
 readToken :: Maybe ByteString -> MptcpToken
 readToken maybeVal = case maybeVal of
   Nothing -> error "Missing token"
-  Just val -> runGet getWord32le (BSL.fromStrict val)
+  Just val -> runGet getWord32le val
 
 readLocId :: Maybe ByteString -> LocId
 readLocId maybeVal = case maybeVal of
   Nothing -> error "Missing locator id"
-  Just val -> runGet getWord8 (BSL.fromStrict val)
+  Just val -> runGet getWord8 val
 
 dumpAttribute :: Int -> ByteString -> String
 dumpAttribute attr value = let
@@ -484,6 +497,7 @@ checkIfSocketExists (MptcpSocket sock fid) token = let
 -- TODO here I could helpers from the netlink library
 convertLocId :: Word8 -> ByteString
 convertLocId val =
+  -- putWord8 val
   runPut $ putWord8 val
 
 convertToken :: Word32 -> ByteString
@@ -596,7 +610,6 @@ subflowFromAttributes attrs =
       -- assume v6, throws otherwise
       -- Nothing -> fromJust (Map.lookup (fromEnum MPTCP_ATTR_SADDR6) attrs)
       Nothing -> "ipv6 dst"
-    -- convertLocId
   in
     TcpConnection _srcIp _dstIp _srcPort _dstPort
 
@@ -818,10 +831,10 @@ getInetDiagSockid  = do
     sport <- getWord16host
     dport <- getWord8
     -- iterate/ grow
-    src <- iterateM getWord32host 4
-    dst <- iterateM getWord32host 4
+    src <- replicateM getWord32host 4
+    dst <- replicateM getWord32host 4
     intf <- getWord32host
-    cookie <- iterateM getWord32host 2
+    cookie <- replicateM getWord32host 2
     Inet_diag_sockid sport dport src dst intf cookie
 
 
