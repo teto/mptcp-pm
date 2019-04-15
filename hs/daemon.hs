@@ -20,6 +20,8 @@ Helpful links:
 = How to update a single field https://stackoverflow.com/questions/14955627/shorthand-way-for-assigning-a-single-field-in-a-record-while-copying-the-rest-o
 - get tcp stats via netlink https://www.vividcortex.com/blog/2014/09/22/using-netlink-to-optimize-socket-statistics/
 eNETLINK_INET_DIAG
+
+http://kristrev.github.io/2013/07/26/passive-monitoring-of-sockets-on-linux
 -}
 
 -- !/usr/bin/env nix-shell

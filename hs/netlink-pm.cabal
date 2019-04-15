@@ -29,11 +29,14 @@ executable daemon
     default-language: Haskell2010
     -- for the generated.hsc , c2hs seems good to generate headers
     Build-tools:       hsc2hs, c2hs
+    -- Includes:          ./tcp_states.h
+    include-dirs:      .
     Other-modules:     Generated
     -- extra-packages: netlink
     -- extra-lib-dirs: /home/teto/netlink-hs
   -- hs-source-dirs: Utils
 
+Library
 -- executable test
     -- import: shared-properties
 --     build-depends: base, netlink, optparse-applicative, bytestring-conversion, binary, containers, bytestring, cereal, fast-logger
