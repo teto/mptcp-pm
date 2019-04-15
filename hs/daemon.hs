@@ -370,21 +370,23 @@ getPort :: ByteString -> Word16
 getPort val =
   -- decode (BSL.fromStrict value) :: Word16
   -- runGet getWord16le (BSL.fromStrict val)
-  runGet getWord16le val
+  -- runGet getWord16le val
+  fromJust $ fromByteString val
   -- getWord16le val
   -- runGet getWord16le val
-  -- fromByteString 
-  -- g16 val
 
 readToken :: Maybe ByteString -> MptcpToken
 readToken maybeVal = case maybeVal of
   Nothing -> error "Missing token"
-  Just val -> fromRight ( runGet getWord32le val)
+  Just val -> case ( runGet getWord32le val) of
+    Left err -> error "could not decode"
+    Right token -> token
 
 readLocId :: Maybe ByteString -> LocId
 readLocId maybeVal = case maybeVal of
   Nothing -> error "Missing locator id"
-  Just val -> runGet getWord8 val
+  Just val -> fromJust $ fromByteString val
+  -- runGet getWord8 val
 
 dumpAttribute :: Int -> ByteString -> String
 dumpAttribute attr value = let
@@ -810,8 +812,9 @@ putDiagCustomHeader hdr = do
   putWord8 $ sdiag_protocol hdr
   putWord8 $ 1
   putWord8 $ 0
-  putWord32 $ idiag_states hdr
-  putInetDiagSockid diag_sockid hdr
+  -- TODO check endianness
+  putWord32be $ idiag_states hdr
+  putInetDiagSockid $ diag_sockid hdr
 
 -- where struct inet_diag_sockid is defined as follows:
 --     struct inet_diag_sockid {
@@ -855,8 +858,8 @@ getInetDiagSockid  = do
 putInetDiagSockid :: Inet_diag_sockid -> Put
 putInetDiagSockid cust = do
   -- we might need to clean up this a bit
-  putWord16 $ sport cust
-  putWord16 $ sport cust
+  putWord16be $ sport cust
+  putWord16be $ sport cust
   -- TODO fix
   iterateM putWord32 4 -- src
   iterateM putWord32 4 -- dest
