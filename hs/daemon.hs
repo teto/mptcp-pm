@@ -22,6 +22,8 @@ Helpful links:
 eNETLINK_INET_DIAG
 
 http://kristrev.github.io/2013/07/26/passive-monitoring-of-sockets-on-linux
+
+
 -}
 
 -- !/usr/bin/env nix-shell
@@ -56,20 +58,25 @@ import Data.Word (Word8, Word16, Word32)
 import Data.List (intercalate)
 
 -- According to merijn, I am more likely to need Binary
-import Data.Binary.Get
-import Data.Binary.Put
+-- import Data.Binary.Get
+-- import Data.Binary.Put
 
--- imported from cereal
--- import Data.Serialize.Get hiding (runGet)
--- import Data.Serialize.Put
+-- imported from cereal  hiding (runGet)
+import Data.Serialize.Get
+import Data.Serialize.Put
+
+import Data.Either (fromRight)
 
 -- import Data.Word (Word8)
 
 -- import Data.ByteString as BS hiding (putStrLn, putStr, map, intercalate)
-import Data.ByteString hiding (putStrLn, putStr, map, intercalate)
+import Data.ByteString (ByteString, unpack)
 -- hiding (putStrLn, putStr, map, intercalate)
--- import qualified Data.ByteString.Lazy as BSL hiding (putStrLn, putStr, map, intercalate)
+import qualified Data.ByteString.Lazy as BSL hiding (putStrLn, putStr, map, intercalate)
 
+-- https://hackage.haskell.org/package/bytestring-conversion-0.1/candidate/docs/Data-ByteString-Conversion.html#t:ToByteString
+-- contains ToByteString / FromByteString
+import Data.ByteString.Conversion
 import Debug.Trace
 -- import Control.Exception
 
@@ -364,12 +371,15 @@ getPort val =
   -- decode (BSL.fromStrict value) :: Word16
   -- runGet getWord16le (BSL.fromStrict val)
   runGet getWord16le val
+  -- getWord16le val
+  -- runGet getWord16le val
+  -- fromByteString 
   -- g16 val
 
 readToken :: Maybe ByteString -> MptcpToken
 readToken maybeVal = case maybeVal of
   Nothing -> error "Missing token"
-  Just val -> runGet getWord32le val
+  Just val -> fromRight ( runGet getWord32le val)
 
 readLocId :: Maybe ByteString -> LocId
 readLocId maybeVal = case maybeVal of
@@ -499,7 +509,11 @@ convertLocId :: Word8 -> ByteString
 convertLocId val =
   -- putWord8 val
   runPut $ putWord8 val
+  -- toByteString val
 
+
+-- put32 :: Word32 -> ByteString
+-- put32 w = runPut (putWord32host w)
 convertToken :: Word32 -> ByteString
 convertToken val =
   runPut $ putWord32le val
