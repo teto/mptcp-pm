@@ -30,6 +30,7 @@ import Prelude hiding (length, concat)
 import Options.Applicative hiding (value, ErrorMsg)
 import qualified Options.Applicative (value)
 
+import Generated
 import Data.Maybe
 import Data.Bits ((.|.))
 import Foreign.C.Types (CInt)
