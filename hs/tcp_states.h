@@ -13,7 +13,7 @@
 #ifndef _LINUX_TCP_STATES_H
 #define _LINUX_TCP_STATES_H
 
-enum {
+enum eTCPStates {
 	TCP_ESTABLISHED = 1,
 	TCP_SYN_SENT,
 	TCP_SYN_RECV,
@@ -28,7 +28,7 @@ enum {
 	TCP_NEW_SYN_RECV,
 
 	TCP_MAX_STATES	/* Leave at the end! */
-};
+} ;
 
 #define TCP_STATE_MASK	0xF
 

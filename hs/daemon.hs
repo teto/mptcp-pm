@@ -41,7 +41,8 @@ import System.Linux.Netlink hiding (makeSocket)
 import System.Linux.Netlink (query, Packet(..))
 import System.Linux.Netlink.GeNetlink
 import System.Linux.Netlink.Constants
--- import System.Linux.Netlink.Helpers
+-- for pX and gY
+import System.Linux.Netlink.Helpers
 import System.Log.FastLogger
 
 -- https://downloads.haskell.org/~ghc/latest/docs/html/libraries/process-1.6.5.0/System-Process.html
@@ -49,8 +50,10 @@ import System.Process
 import System.Linux.Netlink.GeNetlink.Control as C
 import Data.Word (Word8, Word16, Word32)
 import Data.List (intercalate)
-import Data.Binary.Get
+-- import Data.Binary.Get
+import Data.Serialize.Get
 import Data.Serialize.Put
+-- import Data.Word (Word8)
 
 import Data.ByteString as BS hiding (putStrLn, putStr, map, intercalate)
 import qualified Data.ByteString.Lazy as BSL
@@ -348,6 +351,7 @@ getPort :: ByteString -> Word16
 getPort val =
   -- decode (BSL.fromStrict value) :: Word16
   runGet getWord16le (BSL.fromStrict val)
+  -- g16 val
 
 readToken :: Maybe ByteString -> MptcpToken
 readToken maybeVal = case maybeVal of
@@ -739,10 +743,48 @@ data DiagCustom = DiagCustom {
   -- IPv4/v6 specific structure
   , idiag_ext :: Word8 -- query extended info
   , pad :: Word8        -- padding for backwards compatibility with v1
-  , idiag_states :: Word32 -- States to dump
+
+  -- States to dump (based on TcpDump)
+  , idiag_states :: Word32 
     -- struct inet_diag_sockid id;
-  , id :: Inet_diag_sockid
-}
+  , diag_sockid :: Inet_diag_sockid
+} 
+-- deriving (Eq)
+
+{- |Typeclase used by the system. Basically 'Storable' for 'Get' and 'Put'
+getGet Returns a 'Get' function for the convertable. 
+The MessageType is passed so that the function can parse different data structures
+based on the message type.
+-}
+-- class Convertable a where
+--   getGet :: MessageType -> Get a -- ^get a 'Get' function for the static data
+--   getPut :: a -> Put -- ^get a 'Put' function for the static data
+instance Convertable DiagCustom where
+  getPut = putDiagCustomHeader
+  -- MessageType
+  getGet _ = getDiagCustomHeader
+
+-- |'Get' function for 'GenlHeader'
+-- applicative style Trade <$> getWord32le <*> getWord32le <*> getWord16le
+getDiagCustomHeader :: Get DiagCustom
+getDiagCustomHeader = do
+    family <- getWord8
+    protocol <- getWord8
+    extended <- getWord8
+    _pad <- getWord8
+    states <- getWord32host
+    sockid <- getInetDiagSockid
+    return $ DiagCustom family protocol extended _pad states sockid
+
+-- |'Put' function for 'GenlHeader'
+putDiagCustomHeader :: DiagCustom -> Put
+putDiagCustomHeader hdr = do
+  putWord8 $ sdiag_family hdr
+  putWord8 $ sdiag_protocol hdr
+  putWord8 $ 1
+  putWord8 $ 0
+  putWord32 $ idiag_states hdr
+  putInetDiagSockid diag_sockid hdr
 
 -- where struct inet_diag_sockid is defined as follows:
 --     struct inet_diag_sockid {
@@ -759,22 +801,50 @@ data DiagCustom = DiagCustom {
 data Inet_diag_sockid  = Inet_diag_sockid  {
   sport :: Word16
   , dport :: Word16
-  -- IP 4*
-  , src :: Word16
-  , dst :: Word16
+  -- IP address, 4*
+  , src :: [Word32]
+  , dst :: [Word32]
 
   , intf :: Word32
   -- * 2
-  , cookie :: Word32
+  , cookie :: [Word32]
 
 }
 
+-- TODO
+getInetDiagSockid :: Get Inet_diag_sockid
+getInetDiagSockid  = do
+-- getWord32host
+    sport <- getWord16host
+    dport <- getWord8
+    -- iterate/ grow
+    src <- iterateM getWord32host 4
+    dst <- iterateM getWord32host 4
+    intf <- getWord32host
+    cookie <- iterateM getWord32host 2
+    Inet_diag_sockid sport dport src dst intf cookie
 
+
+putInetDiagSockid :: Inet_diag_sockid -> Put
+putInetDiagSockid cust = do
+  -- we might need to clean up this a bit
+  putWord16 $ sport cust
+  putWord16 $ sport cust
+  -- TODO fix
+  iterateM putWord32 4 -- src
+  iterateM putWord32 4 -- dest
+  putWord32 $ intf cust
+
+  -- cookie ?
+  iterateM putWord32 4
+
+
+-- TODO generate via FFI ?
 eIPPROTO_TCP :: Word8
 eIPPROTO_TCP = 6
 
 -- inspired by http://man7.org/linux/man-pages/man7/sock_diag.7.html
-queryTcpStats :: NetlinkSocket -> Bool
+queryTcpStats :: NetlinkSocket -> IO (Packet DiagCustom)
 queryTcpStats sock = let
   req = Packet
   -- Mesge type / flags /seqNum /pid 
@@ -784,15 +854,15 @@ queryTcpStats sock = let
   header = Header eNETLINK_SOCK_DIAG (fNLM_F_REQUEST .|. fNLM_F_DUMP_INTR) 0 0
   -- IPPROTO_TCP = 6,
   -- sprot
-  diag_req = Inet_diag_sockid 0 5001
+  diag_req = Inet_diag_sockid 0 5001 0 0 0 0
   -- TCP states taken from include/net/tcp_states.h TCP_LISTEN,
-  custom = DiagCustom eAF_INET eIPPROTO_TCP 1 0 () diag_req
+  stateFilter = fromIntegral (fromEnum TcpListen) :: Word32
+  custom = DiagCustom eAF_INET eIPPROTO_TCP 1 0 (stateFilter) diag_req
       -- NLC.eRTM_GETLINK (NLC.fNLM_F_ROOT .|. NLC.fNLM_F_MATCH .|. NLC.fNLM_F_REQUEST) 0 0)
   -- packet header Custom Attributes
   -- pkt = Packet
   in
-  -- queryOne 
-    True
+    queryOne sock $ Packet header custom Map.empty
 
 
 -- s'inspirer de
@@ -816,7 +886,7 @@ main = do
   sockMetrics <- makeMetricsSocket
 
 
--- sendmsg 
+-- sendmsg
   queryTcpStats sockMetrics
 
 -- NetlinkSocket
