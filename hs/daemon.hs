@@ -686,7 +686,7 @@ dispatchPacket s (DoneMsg err) =
 
 
 dispatchPacket s (ErrorMsg hdr errCode errPacket) = do
-  putStrLn $ "Error msg of type " ++ showErrCode errCode ++ " Packet content:\n" ++ show errPacket 
+  putStrLn $ "Error msg of type " ++ showErrCode errCode ++ " Packet content:\n" ++ show errPacket
   return s
 
 -- /usr/include/asm/errno.h
@@ -774,14 +774,14 @@ data DiagCustom = DiagCustom {
   , pad :: Word8        -- padding for backwards compatibility with v1
 
   -- States to dump (based on TcpDump)
-  , idiag_states :: Word32 
+  , idiag_states :: Word32
     -- struct inet_diag_sockid id;
   , diag_sockid :: Inet_diag_sockid
-} 
+}
 -- deriving (Eq)
 
 {- |Typeclase used by the system. Basically 'Storable' for 'Get' and 'Put'
-getGet Returns a 'Get' function for the convertable. 
+getGet Returns a 'Get' function for the convertable.
 The MessageType is passed so that the function can parse different data structures
 based on the message type.
 -}
@@ -827,7 +827,7 @@ putDiagCustomHeader hdr = do
 --     };
 
 --
--- this is inspired 
+-- this is inspired
 data Inet_diag_sockid  = Inet_diag_sockid  {
   sport :: Word16
   , dport :: Word16
@@ -846,12 +846,12 @@ getInetDiagSockid :: Get Inet_diag_sockid
 getInetDiagSockid  = do
 -- getWord32host
     sport <- getWord16host
-    dport <- getWord8
+    dport <- getWord16host
     -- iterate/ grow
-    src <- replicateM getWord32host 4
-    dst <- replicateM getWord32host 4
+    src <- replicateM 4 getWord32host
+    dst <- replicateM 4 getWord32host
     intf <- getWord32host
-    cookie <- replicateM getWord32host 2
+    cookie <- replicateM 2 getWord32host
     Inet_diag_sockid sport dport src dst intf cookie
 
 
@@ -861,8 +861,8 @@ putInetDiagSockid cust = do
   putWord16be $ sport cust
   putWord16be $ sport cust
   -- TODO fix
-  iterateM putWord32 4 -- src
-  iterateM putWord32 4 -- dest
+  iterateM 4 putWord32 -- src
+  iterateM 4 putWord32 -- dest
   putWord32 $ intf cust
 
   -- cookie ?
@@ -877,7 +877,7 @@ eIPPROTO_TCP = 6
 queryTcpStats :: NetlinkSocket -> IO (Packet DiagCustom)
 queryTcpStats sock = let
   req = Packet
-  -- Mesge type / flags /seqNum /pid 
+  -- Mesge type / flags /seqNum /pid
   -- or DUMP_INTR or DUMP_FILTERED ?
   -- where do I put eAF_INET  ?
   -- eNLMSG
