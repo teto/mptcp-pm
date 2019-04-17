@@ -44,11 +44,11 @@ import Data.Bits ((.|.))
 import Foreign.C.Types (CInt)
 import Foreign.C.Error
 import System.Linux.Netlink hiding (makeSocket)
-import System.Linux.Netlink (query, Packet(..))
+-- import System.Linux.Netlink (query, Packet(..))
 import System.Linux.Netlink.GeNetlink
 import System.Linux.Netlink.Constants
 -- for pX and gY
-import System.Linux.Netlink.Helpers
+-- import System.Linux.Netlink.Helpers
 import System.Log.FastLogger
 
 -- https://downloads.haskell.org/~ghc/latest/docs/html/libraries/process-1.6.5.0/System-Process.html
@@ -65,14 +65,14 @@ import Data.List (intercalate)
 import Data.Serialize.Get
 import Data.Serialize.Put
 
-import Data.Either (fromRight)
+-- import Data.Either (fromRight)
 
 -- import Data.Word (Word8)
 
 -- import Data.ByteString as BS hiding (putStrLn, putStr, map, intercalate)
 import Data.ByteString (ByteString, unpack)
 -- hiding (putStrLn, putStr, map, intercalate)
-import qualified Data.ByteString.Lazy as BSL hiding (putStrLn, putStr, map, intercalate)
+-- import qualified Data.ByteString.Lazy as BSL hiding (putStrLn, putStr, map, intercalate)
 
 -- https://hackage.haskell.org/package/bytestring-conversion-0.1/candidate/docs/Data-ByteString-Conversion.html#t:ToByteString
 -- contains ToByteString / FromByteString
@@ -258,6 +258,12 @@ data Sample = Sample
   { command    :: String
   , quiet      :: Bool
   , enthusiasm :: Int }
+
+
+-- TODO should be an enum
+data IDiagExt = IDiagExt {
+INET_DIAG_MEMINFO
+}
 
 -- TODO register subcommands instead
 sample :: Parser Sample
@@ -536,7 +542,6 @@ resetTheConnection (MptcpSocket sock fid) receivedAttributes = let
     pkt = getRequestPacket fid cmd False attributes
   in
     -- GenlPacket a with a acting as genlDataData
-    -- query or queryOne
     -- System.Linux.Netlink query :: (Convertable a, Eq a, Show a) => NetlinkSocket -> Packet a -> IO [Packet a]
     query sock pkt
 
@@ -777,8 +782,7 @@ data DiagCustom = DiagCustom {
   , idiag_states :: Word32
     -- struct inet_diag_sockid id;
   , diag_sockid :: Inet_diag_sockid
-}
--- deriving (Eq)
+} deriving (Eq, Show)
 
 {- |Typeclase used by the system. Basically 'Storable' for 'Get' and 'Put'
 getGet Returns a 'Get' function for the convertable.
@@ -839,20 +843,20 @@ data Inet_diag_sockid  = Inet_diag_sockid  {
   -- * 2
   , cookie :: [Word32]
 
-}
+} deriving (Eq, Show)
 
 -- TODO
 getInetDiagSockid :: Get Inet_diag_sockid
 getInetDiagSockid  = do
 -- getWord32host
-    sport <- getWord16host
-    dport <- getWord16host
+    _sport <- getWord16host
+    _dport <- getWord16host
     -- iterate/ grow
-    src <- replicateM 4 getWord32host
-    dst <- replicateM 4 getWord32host
-    intf <- getWord32host
-    cookie <- replicateM 2 getWord32host
-    Inet_diag_sockid sport dport src dst intf cookie
+    _src <- replicateM 4 getWord32host
+    _dst <- replicateM 4 getWord32host
+    _intf <- getWord32host
+    _cookie <- replicateM 2 getWord32host
+    return $ Inet_diag_sockid _sport _dport _src _dst _intf _cookie
 
 
 putInetDiagSockid :: Inet_diag_sockid -> Put
@@ -860,13 +864,15 @@ putInetDiagSockid cust = do
   -- we might need to clean up this a bit
   putWord16be $ sport cust
   putWord16be $ sport cust
-  -- TODO fix
-  iterateM 4 putWord32 -- src
-  iterateM 4 putWord32 -- dest
-  putWord32 $ intf cust
+  -- TODO fix 
+  mapM_ putWord32be $ take 4 (src cust)
+  mapM_ putWord32be $ take 4 (dst cust)
+  -- replicateM 4 (putWord32be $ dst cust) -- dest
+  putWord32host $ intf cust
 
   -- cookie ?
-  iterateM putWord32 4
+  mapM_ putWord32host $ take 2 (cookie cust)
+  -- replicateM $ putWord32host (cookie cust) 4
 
 
 -- TODO generate via FFI ?
@@ -881,10 +887,12 @@ queryTcpStats sock = let
   -- or DUMP_INTR or DUMP_FILTERED ?
   -- where do I put eAF_INET  ?
   -- eNLMSG
-  header = Header eNETLINK_SOCK_DIAG (fNLM_F_REQUEST .|. fNLM_F_DUMP_INTR) 0 0
+  hdr = Header eNETLINK_SOCK_DIAG (fNLM_F_REQUEST .|. fNLM_F_DUMP_INTR) 0 0
   -- IPPROTO_TCP = 6,
   -- sprot
-  diag_req = Inet_diag_sockid 0 5001 0 0 0 0
+  --  :: [Word32]
+  _cookie = [42, 42]
+  diag_req = Inet_diag_sockid 0 5001 [0,0,0,0]  [0, 0, 0, 0] 0 _cookie
   -- TCP states taken from include/net/tcp_states.h TCP_LISTEN,
   stateFilter = fromIntegral (fromEnum TcpListen) :: Word32
   custom = DiagCustom eAF_INET eIPPROTO_TCP 1 0 (stateFilter) diag_req
@@ -892,8 +900,27 @@ queryTcpStats sock = let
   -- packet header Custom Attributes
   -- pkt = Packet
   in
-    queryOne sock $ Packet header custom Map.empty
+    queryOne sock $ Packet hdr custom Map.empty
 
+
+
+inspectIdiagAnswer :: GenlPacket NoData -> IO ()
+-- inspectIdiagAnswer packet = putStrLn $ "Inspecting answer:\n" ++ showPacket packet
+-- (GenlData NoData)
+-- inspectIdiagAnswer (Packet hdr (GenlData ghdr NoData) attributes) = putStrLn $ "Inspecting answer:\n"
+-- inspectIdiagAnswer (Packet _ (GenlData hdr NoData) attributes) = let
+--     cmd = genlCmd hdr
+--   in
+--     putStrLn $ "Inspecting answer custom:\n" ++ showHeaderCustom hdr
+--             ++ "Supposing it's a mptcp command: " ++ dumpCommand ( toEnum $ fromIntegral cmd)
+
+
+
+inspectIdiagAnswers :: [GenlPacket NoData] -> IO ()
+inspectIdiagAnswers packets = do
+  putStrLn "Start inspecting IDIAG answers"
+  mapM_ inspectIdiagAnswer packets
+  putStrLn "Finished inspecting answers"
 
 -- s'inspirer de
 -- https://github.com/vdorr/linux-live-netinfo/blob/24ead3dd84d6847483aed206ec4b0e001bfade02/System/Linux/NetInfo.hs
@@ -917,7 +944,7 @@ main = do
 
 
 -- sendmsg
-  queryTcpStats sockMetrics
+  _ <- queryTcpStats sockMetrics
 
 -- NetlinkSocket
   putStr "socket created. MPTCP Family id " >> print fid

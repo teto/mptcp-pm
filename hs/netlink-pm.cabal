@@ -15,12 +15,23 @@ Source-repository head
   location:   https://github.com/teto/mptcpnetlink
 
 
+Flag Dev {
+  Description: Develop with a local netlink library
+  Default:     True
+}
+
 -- binary, 
 -- kinda conflicts with cereal
 common shared-properties
-    build-depends: base, netlink>= 1.1.1.0, optparse-applicative, bytestring-conversion, 
-        containers, bytestring, fast-logger, process, cereal
+    build-depends: base, optparse-applicative, bytestring-conversion,
+        containers, bytestring, fast-logger, process, cereal, netlink>= 1.1.1.0,
     default-language: Haskell2010
+    if flag(Dev)
+        build-depends: netlink>= 1.1.1.1
+    -- else
+    --     build-depends: 
+
+
 
 executable daemon
     import: shared-properties

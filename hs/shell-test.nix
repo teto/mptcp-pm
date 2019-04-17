@@ -37,7 +37,9 @@ let
   # };
 
   my_nvim = genNeovim  [ ] { withHaskell = true; };
+  # my_nvim = neovim;
 
+  # hie-nixpkgs= import (builtins.fetchTarball https://github.com/NixOS/nixpkgs/archive/70cff41febf8d27cb55eb11f5e7d54af2a3357db.tar.gz ) {};
 in
 
   # haskellPackages.shellFor {
@@ -49,8 +51,10 @@ in
   withHoogle = true;
   # haskellPackages.stack
   nativeBuildInputs = [
+    # # defined from my overlay, builds instead of using cachix
+    # hie-nixpkgs.haskellPackages.hie
+    hie
 
-    haskellPackages.hie  # defined from my overlay
     haskellPackages.cabal-install
     # haskellPackages.bytestring-conversion
     haskellPackages.gutenhasktags

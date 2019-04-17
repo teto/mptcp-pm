@@ -24,3 +24,5 @@ where
 {#enum eTCPStates as TcpState {underscoreToCase} deriving (Eq, Show)#}
 
 
+-- TODO
+{#enum eTCPStates as IDiagExt {underscoreToCase} deriving (Eq, Show)#}
