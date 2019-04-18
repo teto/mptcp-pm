@@ -17,16 +17,38 @@ https://github.com/Ongy/netlink-hs/issues/7
 module Generated
 where
 
+import Data.Word (Word8)
+
 
 -- copy from include/net/tcp_states
 #include "tcp_states.h"
 
--- eTCPStates
-{#enum eTCPStates as TcpState {underscoreToCase} deriving (Eq, Show)#}
+-- For anonymous C enums, we can use 
+{#enum TCP_ESTABLISHED as TcpState {underscoreToCase} deriving (Eq, Show)#}
 
 -- copy from include/uapi/linux/mptcp.h
 #include "mptcp.h"
 
--- TODO
+{#enum MPTCP_ATTR_UNSPEC as MptcpAttr {underscoreToCase} deriving (Eq, Show)#}
+-- TODO reuse
+-- #define MPTCP_GENL_NAME		"mptcp"
+-- #define MPTCP_GENL_EV_GRP_NAME	"mptcp_events"
+-- #define MPTCP_GENL_CMD_GRP_NAME "mptcp_commands"
+-- #define MPTCP_GENL_VER		0x1
+mptcpGenlVer :: Word8
+mptcpGenlVer = {#const MPTCP_GENL_VER #}
+
+mptcpGenlName :: String
+mptcpGenlName = {#const MPTCP_GENL_NAME #}
+mptcpGenlCmdGrpName :: String
+mptcpGenlCmdGrpName = {#const MPTCP_GENL_CMD_GRP_NAME #}
+mptcpGenlEvGrpName :: String
+mptcpGenlEvGrpName  = {#const MPTCP_GENL_EV_GRP_NAME #}
+
 -- copy from include/uapi/linux/inet_diag.h
-{#enum eTCPStates as IDiagExt {underscoreToCase} deriving (Eq, Show)#}
+#include "inet_diag.h"
+
+{#enum INET_DIAG_NONE as IDiagExt {underscoreToCase} deriving (Eq, Show)#}
+
+-- Convert struct ?
+-- inet_diag_req_v2 

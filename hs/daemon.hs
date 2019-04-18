@@ -237,16 +237,16 @@ data MptcpAttr =
 -- en fait y a 2 multicast groups
 -- genl_multicast_group
 
-mptcpGenlEvGrpName :: String
-mptcpGenlEvGrpName = "mptcp_events"
-mptcpGenlCmdGrpName :: String
-mptcpGenlCmdGrpName = "mptcp_commands"
-mptcpGenlName :: String
-mptcpGenlName = "mptcp"
+-- mptcpGenlEvGrpName :: String
+-- mptcpGenlEvGrpName = "mptcp_events"
+-- mptcpGenlCmdGrpName :: String
+-- mptcpGenlCmdGrpName = "mptcp_commands"
+-- mptcpGenlName :: String
+-- mptcpGenlName = "mptcp"
 -- |typedef for messages send by this mdoule
 -- type NL80211Packet = GenlPacket NoData80211
-mptcpGenlVer :: Word8
-mptcpGenlVer = 1
+-- mptcpGenlVer :: Word8
+-- mptcpGenlVer = 1
 
 
 tcpMetricsGenlName :: String
@@ -261,9 +261,9 @@ data Sample = Sample
 
 
 -- TODO should be an enum
-data IDiagExt = IDiagExt {
-INET_DIAG_MEMINFO
-}
+-- data IDiagExt = IDiagExt {
+-- INET_DIAG_MEMINFO
+-- }
 
 -- TODO register subcommands instead
 sample :: Parser Sample
@@ -396,7 +396,7 @@ readLocId maybeVal = case maybeVal of
 
 dumpAttribute :: Int -> ByteString -> String
 dumpAttribute attr value = let
-
+  -- enumFromTo ?
   attrStr = case toEnum (fromIntegral attr) of
       MPTCP_ATTR_UNSPEC -> "UNSPECIFIED"
       MPTCP_ATTR_TOKEN -> "token: " ++ show (readToken $ Just value)
@@ -775,7 +775,8 @@ data DiagCustom = DiagCustom {
 -- It should be set to the appropriate IPPROTO_* constant for AF_INET and AF_INET6, and to 0 otherwise.
   , sdiag_protocol :: Word8
   -- IPv4/v6 specific structure
-  , idiag_ext :: Word8 -- query extended info
+  -- InetDiagInfo
+  , idiag_ext :: IDiagExt -- query extended info
   , pad :: Word8        -- padding for backwards compatibility with v1
 
   -- States to dump (based on TcpDump)
@@ -803,7 +804,9 @@ getDiagCustomHeader :: Get DiagCustom
 getDiagCustomHeader = do
     family <- getWord8
     protocol <- getWord8
-    extended <- getWord8
+    -- TODO convert it ?
+    -- extended <- getWord8
+    let extended = InetDiagNone
     _pad <- getWord8
     states <- getWord32host
     sockid <- getInetDiagSockid
@@ -814,7 +817,8 @@ putDiagCustomHeader :: DiagCustom -> Put
 putDiagCustomHeader hdr = do
   putWord8 $ sdiag_family hdr
   putWord8 $ sdiag_protocol hdr
-  putWord8 $ 1
+  -- extended
+  putWord8 $ fromIntegral $ fromEnum InetDiagInfo
   putWord8 $ 0
   -- TODO check endianness
   putWord32be $ idiag_states hdr
@@ -904,7 +908,7 @@ queryTcpStats sock = let
 
 
 
-inspectIdiagAnswer :: GenlPacket NoData -> IO ()
+-- inspectIdiagAnswer :: GenlPacket NoData -> IO ()
 -- inspectIdiagAnswer packet = putStrLn $ "Inspecting answer:\n" ++ showPacket packet
 -- (GenlData NoData)
 -- inspectIdiagAnswer (Packet hdr (GenlData ghdr NoData) attributes) = putStrLn $ "Inspecting answer:\n"
@@ -919,7 +923,7 @@ inspectIdiagAnswer :: GenlPacket NoData -> IO ()
 inspectIdiagAnswers :: [GenlPacket NoData] -> IO ()
 inspectIdiagAnswers packets = do
   putStrLn "Start inspecting IDIAG answers"
-  mapM_ inspectIdiagAnswer packets
+  -- mapM_ inspectIdiagAnswer packets
   putStrLn "Finished inspecting answers"
 
 -- s'inspirer de
