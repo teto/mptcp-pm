@@ -147,4 +147,3 @@ enum {
 };
 
 #endif /* _LINUX_MPTCP_H */
-

@@ -18,11 +18,15 @@ module Generated
 where
 
 
+-- copy from include/net/tcp_states
 #include "tcp_states.h"
 
 -- eTCPStates
 {#enum eTCPStates as TcpState {underscoreToCase} deriving (Eq, Show)#}
 
+-- copy from include/uapi/linux/mptcp.h
+#include "mptcp.h"
 
 -- TODO
+-- copy from include/uapi/linux/inet_diag.h
 {#enum eTCPStates as IDiagExt {underscoreToCase} deriving (Eq, Show)#}
