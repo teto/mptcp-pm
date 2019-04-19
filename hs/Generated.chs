@@ -29,12 +29,12 @@ import Data.Word (Word8)
 -- copy from include/uapi/linux/mptcp.h
 #include "mptcp.h"
 
-{#enum MPTCP_ATTR_UNSPEC as MptcpAttr {underscoreToCase} deriving (Eq, Show)#}
--- TODO reuse
--- #define MPTCP_GENL_NAME		"mptcp"
--- #define MPTCP_GENL_EV_GRP_NAME	"mptcp_events"
--- #define MPTCP_GENL_CMD_GRP_NAME "mptcp_commands"
--- #define MPTCP_GENL_VER		0x1
+-- {underscoreToCase}
+{#enum MPTCP_ATTR_UNSPEC as MptcpAttr {} deriving (Eq, Show)#}
+
+-- {underscoreToCase}
+{#enum MPTCP_CMD_UNSPEC as MptcpGenlEvent {} deriving (Eq, Show)#}
+
 mptcpGenlVer :: Word8
 mptcpGenlVer = {#const MPTCP_GENL_VER #}
 
@@ -49,6 +49,10 @@ mptcpGenlEvGrpName  = {#const MPTCP_GENL_EV_GRP_NAME #}
 #include "inet_diag.h"
 
 {#enum INET_DIAG_NONE as IDiagExt {underscoreToCase} deriving (Eq, Show)#}
+
+
+-- TODO generate AF_INET (6) from include/linux/socket.h
+-- IPPROTO_TCP defined in include/uapi/linux/in.h
 
 -- Convert struct ?
 -- inet_diag_req_v2 

@@ -38,7 +38,7 @@ import qualified Options.Applicative (value)
 import Generated
 
 -- for replicateM
-import Control.Monad
+-- import Control.Monad
 import Data.Maybe
 import Data.Bits ((.|.))
 import Foreign.C.Types (CInt)
@@ -57,22 +57,15 @@ import System.Linux.Netlink.GeNetlink.Control as C
 import Data.Word (Word8, Word16, Word32)
 import Data.List (intercalate)
 
--- According to merijn, I am more likely to need Binary
--- import Data.Binary.Get
--- import Data.Binary.Put
-
 -- imported from cereal  hiding (runGet)
 import Data.Serialize.Get
 import Data.Serialize.Put
 
+import IDiag
+
 -- import Data.Either (fromRight)
 
--- import Data.Word (Word8)
-
--- import Data.ByteString as BS hiding (putStrLn, putStr, map, intercalate)
 import Data.ByteString (ByteString, unpack)
--- hiding (putStrLn, putStr, map, intercalate)
--- import qualified Data.ByteString.Lazy as BSL hiding (putStrLn, putStr, map, intercalate)
 
 -- https://hackage.haskell.org/package/bytestring-conversion-0.1/candidate/docs/Data-ByteString-Conversion.html#t:ToByteString
 -- contains ToByteString / FromByteString
@@ -164,34 +157,6 @@ type MptcpFamily    = Word16
 -- TODO could use templateHaskell
 -- TODO les generer via le netlink helper mkIncludeBlock
 -- look at generate.hs
-data MptcpGenlEvent =
-  MPTCP_CMD_UNSPEC |
-
-  MPTCP_EVENT_CREATED|
-  MPTCP_EVENT_ESTABLISHED|
-  MPTCP_EVENT_CLOSED|
-
-  -- mptcp_nl_genl_announce
-  MPTCP_CMD_ANNOUNCE|
-  MPTCP_CMD_REMOVE|
-  MPTCP_EVENT_ANNOUNCED|
-  MPTCP_EVENT_REMOVED|
-
-  MPTCP_CMD_SUB_CREATE|
-  MPTCP_CMD_SUB_DESTROY|
-  MPTCP_EVENT_SUB_ESTABLISHED|
-  MPTCP_EVENT_SUB_CLOSED|
-
-  MPTCP_CMD_SUB_PRIORITY|
-  MPTCP_EVENT_SUB_PRIORITY|
-
-  MPTCP_CMD_SET_FILTER|
-
-  MPTCP_CMD_EXIST
-
-  -- eventually derive "Bounded"
-  deriving  (Enum, Show)
-
 -- instance Show MptcpPacket where
 --   show MPTCP_EVENT_CREATED = "MPTCP_EVENT_CREATED"
 --   show x = x
@@ -212,41 +177,6 @@ dumpMptcpCommands x = dumpCommand x ++ "\n" ++ dumpMptcpCommands (succ x)
 --   MPTCP_ATTR_FAMILY|
 --   MPTCP_ATTR_LOC_ID|
 
--- data MptcpGenlGrp = MPTCP_GENL_EV_GRP_NAME | MPTCP_GENL_CMD_GRP_NAME
-data MptcpAttr =
-  MPTCP_ATTR_UNSPEC |
-  MPTCP_ATTR_TOKEN |
-  MPTCP_ATTR_FAMILY|
-  MPTCP_ATTR_LOC_ID|
-  MPTCP_ATTR_REM_ID|
-  MPTCP_ATTR_SADDR4|
-  MPTCP_ATTR_SADDR6|
-  MPTCP_ATTR_DADDR4|
-  MPTCP_ATTR_DADDR6|
-  MPTCP_ATTR_SPORT|
-  MPTCP_ATTR_DPORT|
-  MPTCP_ATTR_BACKUP|
-  MPTCP_ATTR_ERROR|
-  -- used to filter events we are interested in
-  MPTCP_ATTR_FLAGS|
-  MPTCP_ATTR_TIMEOUT|
-  MPTCP_ATTR_IF_IDX
-  -- __MPTCP_ATTR_AFTER_LAST
-  deriving  (Enum, Eq)
-
--- en fait y a 2 multicast groups
--- genl_multicast_group
-
--- mptcpGenlEvGrpName :: String
--- mptcpGenlEvGrpName = "mptcp_events"
--- mptcpGenlCmdGrpName :: String
--- mptcpGenlCmdGrpName = "mptcp_commands"
--- mptcpGenlName :: String
--- mptcpGenlName = "mptcp"
--- |typedef for messages send by this mdoule
--- type NL80211Packet = GenlPacket NoData80211
--- mptcpGenlVer :: Word8
--- mptcpGenlVer = 1
 
 
 tcpMetricsGenlName :: String
@@ -415,7 +345,7 @@ dumpAttribute attr value = let
       MPTCP_ATTR_TIMEOUT -> "timeout: " ++ show value
       MPTCP_ATTR_IF_IDX -> "ifId: " ++ show value
 
-      -- _ -> "unhandled case"
+      _ -> "unhandled case"
   in
     attrStr
 
@@ -767,10 +697,9 @@ listenToMetricEvents sock myGroup = do
 createLogger :: IO LoggerSet
 createLogger = newStdoutLoggerSet defaultBufSize
 
-
 -- TODO rename to a TCP one ?
 data DiagCustom = DiagCustom {
-  -- common to all families
+  -- AF_INET6 or AF_INET
   sdiag_family :: Word8
 -- It should be set to the appropriate IPPROTO_* constant for AF_INET and AF_INET6, and to 0 otherwise.
   , sdiag_protocol :: Word8
@@ -782,7 +711,7 @@ data DiagCustom = DiagCustom {
   -- States to dump (based on TcpDump)
   , idiag_states :: Word32
     -- struct inet_diag_sockid id;
-  , diag_sockid :: Inet_diag_sockid
+  , diag_sockid :: InetDiagSockId
 } deriving (Eq, Show)
 
 {- |Typeclase used by the system. Basically 'Storable' for 'Get' and 'Put'
@@ -809,8 +738,8 @@ getDiagCustomHeader = do
     let extended = InetDiagNone
     _pad <- getWord8
     states <- getWord32host
-    sockid <- getInetDiagSockid
-    return $ DiagCustom family protocol extended _pad states sockid
+    _sockid <- getInetDiagSockid
+    return $ DiagCustom family protocol extended _pad states _sockid
 
 -- |'Put' function for 'GenlHeader'
 putDiagCustomHeader :: DiagCustom -> Put
@@ -834,49 +763,11 @@ putDiagCustomHeader hdr = do
 --         __u32   idiag_cookie[2];
 --     };
 
---
+-- data IDiagFamily = AF_INET | AF_INET6
+
 -- this is inspired
-data Inet_diag_sockid  = Inet_diag_sockid  {
-  sport :: Word16
-  , dport :: Word16
-  -- IP address, 4*
-  , src :: [Word32]
-  , dst :: [Word32]
-
-  , intf :: Word32
-  -- * 2
-  , cookie :: [Word32]
-
-} deriving (Eq, Show)
-
--- TODO
-getInetDiagSockid :: Get Inet_diag_sockid
-getInetDiagSockid  = do
--- getWord32host
-    _sport <- getWord16host
-    _dport <- getWord16host
-    -- iterate/ grow
-    _src <- replicateM 4 getWord32host
-    _dst <- replicateM 4 getWord32host
-    _intf <- getWord32host
-    _cookie <- replicateM 2 getWord32host
-    return $ Inet_diag_sockid _sport _dport _src _dst _intf _cookie
-
-
-putInetDiagSockid :: Inet_diag_sockid -> Put
-putInetDiagSockid cust = do
-  -- we might need to clean up this a bit
-  putWord16be $ sport cust
-  putWord16be $ sport cust
-  -- TODO fix 
-  mapM_ putWord32be $ take 4 (src cust)
-  mapM_ putWord32be $ take 4 (dst cust)
-  -- replicateM 4 (putWord32be $ dst cust) -- dest
-  putWord32host $ intf cust
-
-  -- cookie ?
-  mapM_ putWord32host $ take 2 (cookie cust)
-  -- replicateM $ putWord32host (cookie cust) 4
+--  All values are in network byte order.
+--  idiag_sport prefix them
 
 
 -- TODO generate via FFI ?
@@ -884,6 +775,9 @@ eIPPROTO_TCP :: Word8
 eIPPROTO_TCP = 6
 
 -- inspired by http://man7.org/linux/man-pages/man7/sock_diag.7.html
+
+-- Sends a DiagCustom
+-- expects INetDiag 
 queryTcpStats :: NetlinkSocket -> IO (Packet DiagCustom)
 queryTcpStats sock = let
   req = Packet
@@ -895,11 +789,16 @@ queryTcpStats sock = let
   -- IPPROTO_TCP = 6,
   -- sprot
   --  :: [Word32]
-  _cookie = [42, 42]
-  diag_req = Inet_diag_sockid 0 5001 [0,0,0,0]  [0, 0, 0, 0] 0 _cookie
+  -- -1 => ignore cookie content
+  _cookie = [ maxBound :: Word32, maxBound :: Word32]
+
+  -- TODO hardcoded for now
+  iperfSrcPort = 5500
+  iperfDstPort = 5201
+  diag_req = InetDiagSockId iperfSrcPort iperfDstPort [ 127, 0, 0, 1]  [127, 0, 0, 1] 0 _cookie
   -- TCP states taken from include/net/tcp_states.h TCP_LISTEN,
   stateFilter = fromIntegral (fromEnum TcpListen) :: Word32
-  custom = DiagCustom eAF_INET eIPPROTO_TCP 1 0 (stateFilter) diag_req
+  custom = DiagCustom eAF_INET eIPPROTO_TCP InetDiagInfo 0 (stateFilter) diag_req
       -- NLC.eRTM_GETLINK (NLC.fNLM_F_ROOT .|. NLC.fNLM_F_MATCH .|. NLC.fNLM_F_REQUEST) 0 0)
   -- packet header Custom Attributes
   -- pkt = Packet
@@ -908,8 +807,8 @@ queryTcpStats sock = let
 
 
 
--- inspectIdiagAnswer :: GenlPacket NoData -> IO ()
--- inspectIdiagAnswer packet = putStrLn $ "Inspecting answer:\n" ++ showPacket packet
+inspectIDiagAnswer :: Packet InetDiagMsg -> IO ()
+inspectIDiagAnswer packet = putStrLn $ "Inspecting answer:\n" ++ showPacket packet
 -- (GenlData NoData)
 -- inspectIdiagAnswer (Packet hdr (GenlData ghdr NoData) attributes) = putStrLn $ "Inspecting answer:\n"
 -- inspectIdiagAnswer (Packet _ (GenlData hdr NoData) attributes) = let
@@ -920,10 +819,11 @@ queryTcpStats sock = let
 
 
 
-inspectIdiagAnswers :: [GenlPacket NoData] -> IO ()
+-- Packet of 
+inspectIdiagAnswers :: [Packet InetDiagMsg] -> IO ()
 inspectIdiagAnswers packets = do
   putStrLn "Start inspecting IDIAG answers"
-  -- mapM_ inspectIdiagAnswer packets
+  mapM_ inspectIDiagAnswer packets
   putStrLn "Finished inspecting answers"
 
 -- s'inspirer de
@@ -948,7 +848,16 @@ main = do
 
 
 -- sendmsg
-  _ <- queryTcpStats sockMetrics
+  -- _ <- queryTcpStats sockMetrics
+  -- sendPacket or recvOne
+  queryTcpStats sockMetrics >> putStrLn "Sent the TCP SS request"
+
+    -- pkts <- recvMulti sock
+    -- case pkts of
+    --   [x] -> return x
+    --   _ -> fail ("Expected one packet, received " ++ (show . length $pkts))
+  recvOne sockMetrics
+  inspectIdiagAnswers
 
 -- NetlinkSocket
   putStr "socket created. MPTCP Family id " >> print fid
