@@ -24,20 +24,7 @@ let
   #   };
   # };
 
-
-  # TODO override
-  # "netlink" = prev.haskell.lib.overrideSrc hprev.netlink {
-  #    src = prev.fetchFromGitHub {
-  #     owner = "ongy";
-  #     repo = "netlink-hs";
-  #     rev = "8e7a285f7e4cee0a7f908e431559c87c2f228783";
-
-  #     sha256 = "05hq41zh5msm06gfgfjvf1lq1qnqg1l2ng1ywiikkck8msc3mmx1";
-  #   };
-  # };
-
   my_nvim = genNeovim  [ ] { withHaskell = true; };
-  # my_nvim = neovim;
 
   # hie-nixpkgs= import (builtins.fetchTarball https://github.com/NixOS/nixpkgs/archive/70cff41febf8d27cb55eb11f5e7d54af2a3357db.tar.gz ) {};
 in

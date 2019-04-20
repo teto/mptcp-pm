@@ -844,6 +844,8 @@ main = do
   putStrLn "Creating MPTCP netlink socket..."
   (MptcpSocket sock  fid) <- makeMptcpSocket
   -- (sockMetrics, fidMetrics) <- makeMetricsSocket
+  --
+  putStrLn "Creating metrics netlink socket..."
   sockMetrics <- makeMetricsSocket
 
 
@@ -856,8 +858,7 @@ main = do
     -- case pkts of
     --   [x] -> return x
     --   _ -> fail ("Expected one packet, received " ++ (show . length $pkts))
-  recvOne sockMetrics
-  inspectIdiagAnswers
+  recvOne sockMetrics >>= inspectIdiagAnswers
 
 -- NetlinkSocket
   putStr "socket created. MPTCP Family id " >> print fid

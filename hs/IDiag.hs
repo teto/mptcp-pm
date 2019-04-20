@@ -19,6 +19,9 @@ import Data.Serialize.Put
 -- for replicateM
 import Control.Monad
 
+-- for Convertable
+import System.Linux.Netlink
+
 data InetDiagSockId  = InetDiagSockId  {
   sport :: Word16
   , dport :: Word16
@@ -40,7 +43,7 @@ data InetDiagMsg = InetDiagMsg {
   , idiag_timer :: Word8
   , idiag_retrans :: Word8
 
-  , sockid :: InetDiagSockId
+  , idiag_sockid :: InetDiagSockId
 
 , idiag_expires :: Word32
 , idiag_rqueue :: Word32
@@ -50,6 +53,11 @@ data InetDiagMsg = InetDiagMsg {
 } deriving (Eq, Show)
 
 
+instance Convertable InetDiagMsg where
+  getPut = putInetDiagMsg
+  -- MessageType
+  getGet _ = getInetDiagMsg
+
 getInetDiagMsg :: Get InetDiagMsg
 getInetDiagMsg  = do
     family <- getWord8
@@ -58,12 +66,28 @@ getInetDiagMsg  = do
     retrans <- getWord8
 
     _sockid <- getInetDiagSockid
-    expires <- getWord32host 
+    expires <- getWord32host
     rqueue <- getWord32host
     wqueue <- getWord32host
     uid <- getWord32host
     inode <- getWord32host
     return$  InetDiagMsg family state timer retrans _sockid expires rqueue wqueue uid inode
+
+putInetDiagMsg :: InetDiagMsg -> Put
+putInetDiagMsg msg = do
+  putWord8 $ idiag_family msg
+  putWord8 $ idiag_state msg
+  putWord8 $ idiag_timer msg
+  putWord8 $ idiag_retrans msg
+
+  putInetDiagSockid $ idiag_sockid msg
+
+  -- Network order
+  putWord32le $ idiag_expires msg
+  putWord32le $ idiag_rqueue msg
+  putWord32le $ idiag_wqueue msg
+  putWord32le $ idiag_uid msg
+  putWord32le $ idiag_inode msg
 
 -- TODO
 getInetDiagSockid :: Get InetDiagSockId
