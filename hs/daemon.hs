@@ -95,6 +95,9 @@ instance Convertable NoDataMptcp where
   getPut _ = return ()
   getGet _ = return NoDataMptcp
 
+iperfHardcodedSrcPort :: Word16
+iperfHardcodedSrcPort = 5500
+
 -- isIPv4address
 --
 -- data TcpMetrics = TcpMetrics {
@@ -171,12 +174,6 @@ dumpMptcpCommands :: MptcpGenlEvent -> String
 dumpMptcpCommands MPTCP_CMD_EXIST = dumpCommand MPTCP_CMD_EXIST
 dumpMptcpCommands x = dumpCommand x ++ "\n" ++ dumpMptcpCommands (succ x)
 
--- take inspiration from ctrlAttribute ?
--- data MptcpAttribute =
---   MPTCP_ATTR_TOKEN MptcpToken|
---   MPTCP_ATTR_FAMILY|
---   MPTCP_ATTR_LOC_ID|
-
 
 
 tcpMetricsGenlName :: String
@@ -220,20 +217,6 @@ opts = info (sample <**> helper)
   <> header "hello - a test for optparse-applicative" )
 
 
-
--- NetlinkSocket
--- mptcpNetlink :: IO ()
--- mptcpNetlink =
---   let
---     -- family_id = getFamilyId sock mptcpGenlEvGrpName
---     -- getFamilyId vs getMulticast
---     -- getFamilyIdS is the safe version returning a Maybe
---     -- joinMulticastGroup
---     genlFamilyId = makeSocket >>= \sock -> (getFamilyId sock mptcp_genl_name)
---     -- genlFamilyId = makeSocket >>= \sock -> (getMulticast sock mptcpGenlEvGrpName)
---   in
---     -- expects a word32
---     System.Linux.Netlink.GeNetlink.join sock familyId
 
 -- inspired by makeNL80211Socket Create a 'NL80211Socket' this opens a genetlink
 -- socket and gets the family id
@@ -363,19 +346,6 @@ showAttributes attrs =
     -- putStrLn $ intercalate "," $ mapped
     mapped
 
-
-
--- - MPTCP_CMD_SUB_CREATE: token, family, loc_id, rem_id, [saddr4 | saddr6,
---                         daddr4 | daddr6, dport [, sport, backup, if_idx]]
---     Create a new subflow.
---  one can look at  Route.hs for "putMessage"
--- putMessage :: Message -> Put
--- putMessage (NLinkMsg ty idx flags) = do
---     p8 eAF_UNSPEC >> p8 0
---     p16 (fromIntegral ty)
---     p32 idx
---     p32 flags
---     p32 0xFFFFFFFF
 
 
 -- TODO prefix with --cmd
@@ -783,17 +753,13 @@ queryTcpStats sock = let
   req = Packet
   -- Mesge type / flags /seqNum /pid
   -- or DUMP_INTR or DUMP_FILTERED ?
-  -- where do I put eAF_INET  ?
-  -- eNLMSG
-  hdr = Header eNETLINK_SOCK_DIAG (fNLM_F_REQUEST .|. fNLM_F_DUMP_INTR) 0 0
+  hdr = Header msgTypeSockDiag (fNLM_F_REQUEST .|. fNLM_F_DUMP_INTR) 0 0
   -- IPPROTO_TCP = 6,
-  -- sprot
-  --  :: [Word32]
   -- -1 => ignore cookie content
   _cookie = [ maxBound :: Word32, maxBound :: Word32]
 
   -- TODO hardcoded for now
-  iperfSrcPort = 5500
+  iperfSrcPort = iperfHardcodedSrcPort
   iperfDstPort = 5201
   diag_req = InetDiagSockId iperfSrcPort iperfDstPort [ 127, 0, 0, 1]  [127, 0, 0, 1] 0 _cookie
   -- TCP states taken from include/net/tcp_states.h TCP_LISTEN,

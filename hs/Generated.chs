@@ -50,6 +50,10 @@ mptcpGenlEvGrpName  = {#const MPTCP_GENL_EV_GRP_NAME #}
 
 {#enum INET_DIAG_NONE as IDiagExt {underscoreToCase} deriving (Eq, Show)#}
 
+#include "sock_diag.h"
+
+msgTypeSockDiag :: Word8
+msgTypeSockDiag  = {#const SOCK_DIAG_BY_FAMILY #}
 
 -- TODO generate AF_INET (6) from include/linux/socket.h
 -- IPPROTO_TCP defined in include/uapi/linux/in.h

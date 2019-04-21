@@ -7,6 +7,14 @@ The netlink module asks for GENL_ADMIN_PERM => The operation requires the CAP_NE
 
 sudo setcap cap_net_admin+ep hs/dist-newstyle/build/x86_64-linux/ghc-8.6.3/netlink-pm-1.0.0/x/daemon/build/daemon/daemon
 
+# Netlink explanation
+
+To fetch TCP diagnostics:
+Creates a socket with family eNETLINK_INET_DIAG (really NETLINK_SOCK_DIAG) with value 4
+AF_INET => netlink family 2
+
+
+
 # Compilation
 
 With a custom netlink:
