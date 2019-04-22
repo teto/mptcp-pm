@@ -18,12 +18,13 @@ module Generated
 where
 
 import Data.Word (Word8)
-
+import System.Linux.Netlink.Constants (MessageType)
+import Data.Bits ()
 
 -- copy from include/net/tcp_states
 #include "tcp_states.h"
 
--- For anonymous C enums, we can use 
+-- For anonymous C enums, we can use , Bits
 {#enum TCP_ESTABLISHED as TcpState {underscoreToCase} deriving (Eq, Show)#}
 
 -- copy from include/uapi/linux/mptcp.h
@@ -48,11 +49,13 @@ mptcpGenlEvGrpName  = {#const MPTCP_GENL_EV_GRP_NAME #}
 -- copy from include/uapi/linux/inet_diag.h
 #include "inet_diag.h"
 
+-- let it use Bits as well as fNLM_F_REQUEST so that I can chain them with .|.
+-- , Bits
 {#enum INET_DIAG_NONE as IDiagExt {underscoreToCase} deriving (Eq, Show)#}
 
 #include "sock_diag.h"
 
--- cccaa 
+-- cccaa
 msgTypeSockDiag :: MessageType
 msgTypeSockDiag  = {#const SOCK_DIAG_BY_FAMILY #}
 

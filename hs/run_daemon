@@ -1,7 +1,9 @@
 #!/bin/sh
 function buildNrun() {
 	cabal build -v
-	sudo ./daemon test
+	if [ $? -eq 0 ]; then
+		sudo ./daemon test
+	fi
 }
 
 # function rundaemon() {

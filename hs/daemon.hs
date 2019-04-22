@@ -56,6 +56,7 @@ import System.Process
 import System.Linux.Netlink.GeNetlink.Control as C
 import Data.Word (Word8, Word16, Word32)
 import Data.List (intercalate)
+import Data.Bits (shiftL, )
 
 -- imported from cereal  hiding (runGet)
 import Data.Serialize.Get
@@ -594,6 +595,11 @@ dispatchPacket s (ErrorMsg hdr errCode errPacket) = do
   putStrLn $ "Error msg of type " ++ showErrCode errCode ++ " Packet content:\n" ++ show errPacket
   return s
 
+showError :: Show a => Packet a -> IO ()
+showError (ErrorMsg hdr errCode errPacket) = do
+  putStrLn $ "Error msg of type " ++ showErrCode errCode ++ " Packet content:\n" ++ show errPacket
+
+-- netlink must contain sthg for it
 -- /usr/include/asm/errno.h
 showErrCode :: CInt -> String
 showErrCode err
@@ -746,6 +752,9 @@ eIPPROTO_TCP = 6
 
 -- inspired by http://man7.org/linux/man-pages/man7/sock_diag.7.html
 
+-- 
+-- instance Bits TcpState where
+
 -- Sends a DiagCustom
 -- expects INetDiag 
 queryTcpStats :: NetlinkSocket -> IO (Packet DiagCustom)
@@ -753,6 +762,8 @@ queryTcpStats sock = let
   req = Packet
   -- Mesge type / flags /seqNum /pid
   -- or DUMP_INTR or DUMP_FILTERED ?
+  -- NLM_F_DUMP flag set, it means that a list of sockets is being
+  -- requested; otherwise it is a query about an individual socket.
   hdr = Header msgTypeSockDiag (fNLM_F_REQUEST .|. fNLM_F_DUMP_INTR) 0 0
   -- IPPROTO_TCP = 6,
   -- -1 => ignore cookie content
@@ -761,8 +772,11 @@ queryTcpStats sock = let
   -- TODO hardcoded for now
   iperfSrcPort = iperfHardcodedSrcPort
   iperfDstPort = 5201
-  diag_req = InetDiagSockId iperfSrcPort iperfDstPort [ 127, 0, 0, 1]  [127, 0, 0, 1] 0 _cookie
+  -- 4 Word32
+  ipSrc = [ fromOctets [ 127, 3, 2, 1], 0, 0, 0]
+  diag_req = InetDiagSockId iperfSrcPort iperfDstPort ipSrc  [127, 0, 0, 1] 0 _cookie
   -- TCP states taken from include/net/tcp_states.h TCP_LISTEN,
+  -- idiag_states = TCPF_ALL & ~(TCPF_SYN_RECV | TCPF_TIME_WAIT | TCPF_CLOSE);
   stateFilter = fromIntegral (fromEnum TcpListen) :: Word32
   custom = DiagCustom eAF_INET eIPPROTO_TCP InetDiagInfo 0 (stateFilter) diag_req
       -- NLC.eRTM_GETLINK (NLC.fNLM_F_ROOT .|. NLC.fNLM_F_MATCH .|. NLC.fNLM_F_REQUEST) 0 0)
@@ -771,10 +785,23 @@ queryTcpStats sock = let
   in
     queryOne sock $ Packet hdr custom Map.empty
 
-
+-- for big endian
+-- https://mail.haskell.org/pipermail/beginners/2010-October/005571.html
+-- foldl' :: (b -> a -> b) -> b -> Maybe a -> b
+fromOctets :: [Word8] -> Word32
+fromOctets = Prelude.foldl' accum 0
+  where
+    accum a o = (a `shiftL` 8) .|. fromIntegral o
+    -- maybe I could use putIArrayOf instead
 
 inspectIDiagAnswer :: Packet InetDiagMsg -> IO ()
 inspectIDiagAnswer packet = putStrLn $ "Inspecting answer:\n" ++ showPacket packet
+
+
+-- inspectIDiagAnswer :: ErrorMsg -> IO ()
+inspectIDiagAnswer p =  putStrLn $ showPacket p
+
+-- inspectIDiagAnswer (DoneMsg err) = putStrLn "DONE MSG"
 -- (GenlData NoData)
 -- inspectIdiagAnswer (Packet hdr (GenlData ghdr NoData) attributes) = putStrLn $ "Inspecting answer:\n"
 -- inspectIdiagAnswer (Packet _ (GenlData hdr NoData) attributes) = let

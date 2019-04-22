@@ -109,8 +109,8 @@ putInetDiagSockid cust = do
   putWord16be $ sport cust
   putWord16be $ sport cust
   -- TODO fix 
-  mapM_ putWord32be $ take 4 (src cust)
-  mapM_ putWord32be $ take 4 (dst cust)
+  mapM_ putWord32host $ take 4 (src cust)
+  mapM_ putWord32host $ take 4 (dst cust)
   -- replicateM 4 (putWord32be $ dst cust) -- dest
   putWord32host $ intf cust
 
