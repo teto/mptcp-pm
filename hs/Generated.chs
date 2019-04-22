@@ -52,7 +52,8 @@ mptcpGenlEvGrpName  = {#const MPTCP_GENL_EV_GRP_NAME #}
 
 #include "sock_diag.h"
 
-msgTypeSockDiag :: Word8
+-- cccaa 
+msgTypeSockDiag :: MessageType
 msgTypeSockDiag  = {#const SOCK_DIAG_BY_FAMILY #}
 
 -- TODO generate AF_INET (6) from include/linux/socket.h

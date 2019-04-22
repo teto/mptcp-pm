@@ -45,7 +45,6 @@ executable daemon
     Build-tools:       hsc2hs, c2hs
     Includes:          tcp_states.h
     include-dirs:      .
-    Modules:           idiag.hs
     Other-modules:     Generated, IDiag
     -- extra-packages: netlink
     -- extra-lib-dirs: /home/teto/netlink-hs
