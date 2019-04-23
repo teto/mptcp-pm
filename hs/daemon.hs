@@ -87,7 +87,7 @@ import qualified Data.Map as Map
 -- iproute uses this seq number
 -- #define MAGIC_SEQ 123456
 magicSeq :: Word32
-magicSeq = 123000
+magicSeq = 123456
 
 -- how can I retreive the word16 without pattern matching ?
 data MptcpSocket = MptcpSocket NetlinkSocket Word16
@@ -680,19 +680,16 @@ listenToMetricEvents sock myGroup = do
 createLogger :: IO LoggerSet
 createLogger = newStdoutLoggerSet defaultBufSize
 
--- TODO rename to a TCP one ?
-data DiagCustom = DiagCustom {
-  -- AF_INET6 or AF_INET
-  sdiag_family :: Word8
+-- TODO rename to a TCP one ? SockDiagRequest
+data SockDiagRequest = SockDiagRequest {
+  sdiag_family :: Word8 -- ^AF_INET6 or AF_INET
 -- It should be set to the appropriate IPPROTO_* constant for AF_INET and AF_INET6, and to 0 otherwise.
   , sdiag_protocol :: Word8
   -- IPv4/v6 specific structure
   -- InetDiagInfo
-  , idiag_ext :: IDiagExt -- query extended info
-  , pad :: Word8        -- padding for backwards compatibility with v1
-
-  -- States to dump (based on TcpDump)
-  , idiag_states :: Word32
+  , idiag_ext :: IDiagExt -- ^query extended info
+  , req_pad :: Word8        -- ^ padding for backwards compatibility with v1
+  , idiag_states :: Word32 -- ^States to dump (based on TcpDump)
     -- struct inet_diag_sockid id;
   , diag_sockid :: InetDiagSockId
 } deriving (Eq, Show)
@@ -705,33 +702,35 @@ based on the message type.
 -- class Convertable a where
 --   getGet :: MessageType -> Get a -- ^get a 'Get' function for the static data
 --   getPut :: a -> Put -- ^get a 'Put' function for the static data
-instance Convertable DiagCustom where
-  getPut = putDiagCustomHeader
+instance Convertable SockDiagRequest where
+  getPut = putSockDiagRequestHeader
   -- MessageType
-  getGet _ = getDiagCustomHeader
+  getGet _ = getSockDiagRequestHeader
 
 -- |'Get' function for 'GenlHeader'
 -- applicative style Trade <$> getWord32le <*> getWord32le <*> getWord16le
-getDiagCustomHeader :: Get DiagCustom
-getDiagCustomHeader = do
+getSockDiagRequestHeader :: Get SockDiagRequest
+getSockDiagRequestHeader = do
     family <- getWord8
     protocol <- getWord8
     -- TODO convert it ?
     -- extended <- getWord8
-    let extended = InetDiagNone
+    -- TODO la ca foire
+    -- let extended = InetDiagNone
+    extended <- getWord32host
     _pad <- getWord8
     states <- getWord32host
     _sockid <- getInetDiagSockid
-    return $ DiagCustom family protocol extended _pad states _sockid
+    return $ SockDiagRequest family protocol (toEnum (fromIntegral extended) :: IDiagExt) _pad states _sockid
 
 -- |'Put' function for 'GenlHeader'
-putDiagCustomHeader :: DiagCustom -> Put
-putDiagCustomHeader hdr = do
+putSockDiagRequestHeader :: SockDiagRequest -> Put
+putSockDiagRequestHeader hdr = do
   putWord8 $ sdiag_family hdr
   putWord8 $ sdiag_protocol hdr
   -- extended
-  putWord8 $ fromIntegral $ fromEnum InetDiagInfo
-  putWord8 $ 0
+  putWord8 $ fromIntegral $ fromEnum $ idiag_ext hdr
+  putWord8 $ req_pad hdr
   -- TODO check endianness
   putWord32be $ idiag_states hdr
   putInetDiagSockid $ diag_sockid hdr
@@ -762,7 +761,7 @@ eIPPROTO_TCP = 6
 -- 
 -- instance Bits TcpState where
 
--- Sends a DiagCustom
+-- Sends a SockDiagRequest
 -- expects INetDiag 
 queryTcpStats :: NetlinkSocket -> IO ()
 queryTcpStats sock = let
@@ -774,24 +773,34 @@ queryTcpStats sock = let
   -- flags sont pas bons
   -- NLM_F_ROOT|NLM_F_MATCH|NLM_F_REQUEST,\
   flags = (fNLM_F_REQUEST .|. fNLM_F_MATCH .|. fNLM_F_ROOT)
-  hdr = Header msgTypeSockDiag flags  0 0
+
+  -- might be a trick with seqnum
+  hdr = Header msgTypeSockDiag flags magicSeq 0
   -- IPPROTO_TCP = 6,
   -- -1 => ignore cookie content
-  _cookie = [ maxBound :: Word32, maxBound :: Word32]
+  -- _cookie = [ maxBound :: Word32, maxBound :: Word32]
+  _cookie = [ 0 :: Word32, 0 :: Word32]
 
   -- TODO hardcoded for now
-  iperfSrcPort = iperfHardcodedSrcPort
-  iperfDstPort = 5201
+  iperfSrcPort = 0
+  iperfDstPort = 0
+  -- iperfSrcPort = iperfHardcodedSrcPort
+  -- iperfDstPort = 5201
   -- 4 Word32
-  ipSrc = [ fromOctetsLE [ 127, 0, 0, 1], 0, 0, 0]
-  ipDst = [ fromOctetsLE [ 127, 0, 0, 1], 0, 0, 0]
+  -- ipSrc = [ fromOctetsLE [ 127, 0, 0, 1], 0, 0, 0]
+  -- ipDst = [ fromOctetsLE [ 127, 0, 0, 1], 0, 0, 0]
+  ipSrc = [ 0, 0, 0, 0]
+  ipDst = [ 0, 0, 0, 0]
   -- 1 => "lo". Check with ip link ?
   ifIndex = 0
   diag_req = InetDiagSockId iperfSrcPort iperfDstPort ipSrc ipDst ifIndex _cookie
   -- TCP states taken from include/net/tcp_states.h TCP_LISTEN,
   -- idiag_states = TCPF_ALL & ~(TCPF_SYN_RECV | TCPF_TIME_WAIT | TCPF_CLOSE);
-  stateFilter = fromIntegral (fromEnum TcpListen) :: Word32
-  custom = DiagCustom eAF_INET eIPPROTO_TCP InetDiagInfo 0 (stateFilter) diag_req
+  stateFilter = 0 :: Word32
+  -- stateFilter = fromIntegral (fromEnum TcpListen) :: Word32
+  -- requestedInfo = InetDiagInfo
+  requestedInfo = InetDiagNone   -- <=> 0
+  custom = SockDiagRequest eAF_INET eIPPROTO_TCP requestedInfo 0 (stateFilter) diag_req
       -- NLC.eRTM_GETLINK (NLC.fNLM_F_ROOT .|. NLC.fNLM_F_MATCH .|. NLC.fNLM_F_REQUEST) 0 0)
   -- packet header Custom Attributes
   -- pkt = Packet
@@ -810,9 +819,12 @@ fromOctetsBE = foldl' accum 0
 fromOctetsLE :: [Word8] -> Word32
 fromOctetsLE = fromOctetsBE . reverse
 
-inspectIDiagAnswer :: Packet InetDiagMsg -> IO ()
--- inspectIDiagAnswer packet = putStrLn ("Inspecting answer:\n" ++ (showPacket packet))
-inspectIDiagAnswer =  putStrLn . showPacket
+inspectIDiagAnswer :: (Packet InetDiagMsg) -> IO ()
+inspectIDiagAnswer (Packet hdr cus attrs) = do
+   -- dumpAttribute
+   putStrLn $ "Idiag answer" ++ showAttributes attrs
+inspectIDiagAnswer p =  putStrLn $ showPacket p
+-- inspectIDiagAnswer _ =  putStrLn "toto"
 
 -- inspectIDiagAnswer (DoneMsg err) = putStrLn "DONE MSG"
 -- (GenlData NoData)
@@ -858,11 +870,8 @@ main = do
   -- sendPacket
   queryTcpStats sockMetrics >> putStrLn "Sent the TCP SS request"
 
-    -- pkts <- recvMulti sock
-    -- case pkts of
-    --   [x] -> return x
-    --   _ -> fail ("Expected one packet, received " ++ (show . length $pkts))
-  recvOne sockMetrics >>= inspectIdiagAnswers
+  recvMulti sockMetrics >>= inspectIdiagAnswers
+  -- recvOne sockMetrics >>= inspectIdiagAnswers
 
 -- NetlinkSocket
   putStr "socket created. MPTCP Family id " >> print fid
