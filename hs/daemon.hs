@@ -40,6 +40,7 @@ import Generated
 -- for replicateM
 -- import Control.Monad
 import Data.Maybe
+import Data.Foldable (foldl')
 import Data.Bits ((.|.))
 import Foreign.C.Types (CInt)
 import Foreign.C.Error
@@ -82,6 +83,11 @@ import qualified Data.Map as Map
 -- The Netlink socket with Family Id, so we don't need as many arguments
 -- everywhere
 -- |Wrapper for 'NetlinkSocket' we also need the family id for messages we construct
+
+-- iproute uses this seq number
+-- #define MAGIC_SEQ 123456
+magicSeq :: Word32
+magicSeq = 123000
 
 -- how can I retreive the word16 without pattern matching ?
 data MptcpSocket = MptcpSocket NetlinkSocket Word16
@@ -598,6 +604,7 @@ dispatchPacket s (ErrorMsg hdr errCode errPacket) = do
 showError :: Show a => Packet a -> IO ()
 showError (ErrorMsg hdr errCode errPacket) = do
   putStrLn $ "Error msg of type " ++ showErrCode errCode ++ " Packet content:\n" ++ show errPacket
+showError _ = error "Not the good overload"
 
 -- netlink must contain sthg for it
 -- /usr/include/asm/errno.h
@@ -757,14 +764,17 @@ eIPPROTO_TCP = 6
 
 -- Sends a DiagCustom
 -- expects INetDiag 
-queryTcpStats :: NetlinkSocket -> IO (Packet DiagCustom)
+queryTcpStats :: NetlinkSocket -> IO ()
 queryTcpStats sock = let
   req = Packet
   -- Mesge type / flags /seqNum /pid
   -- or DUMP_INTR or DUMP_FILTERED ?
   -- NLM_F_DUMP flag set, it means that a list of sockets is being
   -- requested; otherwise it is a query about an individual socket.
-  hdr = Header msgTypeSockDiag (fNLM_F_REQUEST .|. fNLM_F_DUMP_INTR) 0 0
+  -- flags sont pas bons
+  -- NLM_F_ROOT|NLM_F_MATCH|NLM_F_REQUEST,\
+  flags = (fNLM_F_REQUEST .|. fNLM_F_MATCH .|. fNLM_F_ROOT)
+  hdr = Header msgTypeSockDiag flags  0 0
   -- IPPROTO_TCP = 6,
   -- -1 => ignore cookie content
   _cookie = [ maxBound :: Word32, maxBound :: Word32]
@@ -773,8 +783,11 @@ queryTcpStats sock = let
   iperfSrcPort = iperfHardcodedSrcPort
   iperfDstPort = 5201
   -- 4 Word32
-  ipSrc = [ fromOctets [ 127, 3, 2, 1], 0, 0, 0]
-  diag_req = InetDiagSockId iperfSrcPort iperfDstPort ipSrc  [127, 0, 0, 1] 0 _cookie
+  ipSrc = [ fromOctetsLE [ 127, 0, 0, 1], 0, 0, 0]
+  ipDst = [ fromOctetsLE [ 127, 0, 0, 1], 0, 0, 0]
+  -- 1 => "lo". Check with ip link ?
+  ifIndex = 0
+  diag_req = InetDiagSockId iperfSrcPort iperfDstPort ipSrc ipDst ifIndex _cookie
   -- TCP states taken from include/net/tcp_states.h TCP_LISTEN,
   -- idiag_states = TCPF_ALL & ~(TCPF_SYN_RECV | TCPF_TIME_WAIT | TCPF_CLOSE);
   stateFilter = fromIntegral (fromEnum TcpListen) :: Word32
@@ -783,23 +796,23 @@ queryTcpStats sock = let
   -- packet header Custom Attributes
   -- pkt = Packet
   in
-    queryOne sock $ Packet hdr custom Map.empty
+    sendPacket sock $ Packet hdr custom Map.empty
 
 -- for big endian
 -- https://mail.haskell.org/pipermail/beginners/2010-October/005571.html
 -- foldl' :: (b -> a -> b) -> b -> Maybe a -> b
-fromOctets :: [Word8] -> Word32
-fromOctets = Prelude.foldl' accum 0
+fromOctetsBE :: [Word8] -> Word32
+fromOctetsBE = foldl' accum 0
   where
     accum a o = (a `shiftL` 8) .|. fromIntegral o
     -- maybe I could use putIArrayOf instead
 
+fromOctetsLE :: [Word8] -> Word32
+fromOctetsLE = fromOctetsBE . reverse
+
 inspectIDiagAnswer :: Packet InetDiagMsg -> IO ()
-inspectIDiagAnswer packet = putStrLn $ "Inspecting answer:\n" ++ showPacket packet
-
-
--- inspectIDiagAnswer :: ErrorMsg -> IO ()
-inspectIDiagAnswer p =  putStrLn $ showPacket p
+-- inspectIDiagAnswer packet = putStrLn ("Inspecting answer:\n" ++ (showPacket packet))
+inspectIDiagAnswer =  putStrLn . showPacket
 
 -- inspectIDiagAnswer (DoneMsg err) = putStrLn "DONE MSG"
 -- (GenlData NoData)
@@ -842,9 +855,7 @@ main = do
   sockMetrics <- makeMetricsSocket
 
 
--- sendmsg
-  -- _ <- queryTcpStats sockMetrics
-  -- sendPacket or recvOne
+  -- sendPacket
   queryTcpStats sockMetrics >> putStrLn "Sent the TCP SS request"
 
     -- pkts <- recvMulti sock

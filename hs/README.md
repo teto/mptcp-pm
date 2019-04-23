@@ -27,10 +27,10 @@ Enter the nix-shell shell-test.nix and start the daemon:
 $ buildNRun
 
 In a shell:
-$ nix run nixpkgs.iperf -c iperf -s
+`$ nix run nixpkgs.iperf -c iperf -s`
 
-In another
-$ nix run nixpkgs.iperf -c iperf -c localhost -b 1KiB -t 4 --cport 5500
+In another:
+`$ nix run nixpkgs.iperf -c iperf -c localhost -b 1KiB -t 4 --cport 5500 -4`
 
 TODO:
 - [ ] generate the enums via FFI from include/uapi/linux/mptcp.h
