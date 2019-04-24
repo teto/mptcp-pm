@@ -242,13 +242,9 @@ makeMptcpSocket = do
 -- sock <- makeSocket
 makeMetricsSocket :: IO NetlinkSocket
 makeMetricsSocket = do
-  sock <- makeSocketGeneric eNETLINK_INET_DIAG
+    -- NETLINK_SOCK_DIAG == NETLINK_INET_DIAG
+  sock <- makeSocketGeneric eNETLINK_SOCK_DIAG
   return sock
-  -- res <- getFamilyIdS sock tcpMetricsGenlName
-  -- case res of
-  --   Nothing -> error $ "Could not find family " ++ tcpMetricsGenlName
-  --   -- (trace ("family id"++ show fid )
-  --   Just fid -> return (sock, fid)
 
 
 runMptcpNumerics :: IO String
@@ -256,10 +252,6 @@ runMptcpNumerics  =
   -- TODO run readProcessWithExitCode instead
   readProcess "seq" ["1", "10"] ""
 
--- tcp_metrics is a multicast group
-
--- errout:
--- 	return err;
 
 -- inspectPacket :: GenlPacket NoData -> IO ()
 -- inspectPacket = Prelude.putStrLn show
@@ -823,8 +815,7 @@ inspectIDiagAnswer :: (Packet InetDiagMsg) -> IO ()
 inspectIDiagAnswer (Packet hdr cus attrs) = do
    -- dumpAttribute
    putStrLn $ "Idiag answer" ++ showAttributes attrs
-inspectIDiagAnswer p =  putStrLn $ showPacket p
--- inspectIDiagAnswer _ =  putStrLn "toto"
+inspectIDiagAnswer p = putStrLn $ "test" ++ (showPacket p)
 
 -- inspectIDiagAnswer (DoneMsg err) = putStrLn "DONE MSG"
 -- (GenlData NoData)
