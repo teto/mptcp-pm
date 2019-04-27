@@ -62,7 +62,6 @@ import Data.Bits (shiftL, )
 -- imported from cereal  hiding (runGet)
 import Data.Serialize.Get
 import Data.Serialize.Put
-
 import IDiag
 
 -- import Data.Either (fromRight)
@@ -77,6 +76,7 @@ import Debug.Trace
 
 
 import qualified Data.Map as Map
+-- import Data.Map (fromList, lookup, toList, Map)
 -- import Data.ByteString.Char8 as C8 hiding (putStrLn, putStr)
  -- (unpack)
 
@@ -97,18 +97,16 @@ instance Show MptcpSocket where
 data MetricsSocket = MetricsSocket NetlinkSocket Word16
 
 -- inspired by NoData80211
-data NoDataMptcp = NoDataMptcp deriving (Eq, Show)
-instance Convertable NoDataMptcp where
-  getPut _ = return ()
-  getGet _ = return NoDataMptcp
+-- data NoDataMptcp = NoDataMptcp deriving (Eq, Show)
+-- instance Convertable NoDataMptcp where
+--   getPut _ = return ()
+--   getGet _ = return NoDataMptcp
 
 iperfHardcodedSrcPort :: Word16
 iperfHardcodedSrcPort = 5500
 
 -- isIPv4address
---
--- data TcpMetrics = TcpMetrics {
--- }
+-- rename  or extend subflow
 data TcpConnection = TcpConnection {
   -- TODO use libraries to deal with that ? filter from the command line for instance ?
   srcIp :: String
@@ -145,7 +143,9 @@ data MyState = MyState {
   --
 -- type GenlPacket a = Packet (GenlData a)
 -- type Mptcp
-type MptcpPacket = Packet (GenlData NoDataMptcp)
+    --
+type MptcpPacket = GenlPacket NoData
+-- type MptcpPacket = Packet (GenlData NoDataMptcp)
 
 -- inspired by CtrlPacket
   -- token :: MptcpToken
@@ -154,14 +154,37 @@ type MptcpPacket = Packet (GenlData NoDataMptcp)
 --       mptcpHeader     :: Header
 --     , mptcpGeHeader   :: GenlHeader
 --     , mptcpData   :: MptcpData
+
 -- data MptcpData = MptcpData {
 --     mptcpAttributes :: [MptcpAttr]
 --   } deriving (Eq)
+data MptcpAttributes = MptcpAttributes {
+    token :: Word32
+    , localLocatorID :: Maybe Word8
+    , remoteLocatorID :: Maybe Word8
+    , family :: Word16
+    -- |Pointer to the Attributes map used to build this struct. This is purely
+    -- |for forward compat, please file a feature report if you have to use this.
+    , staSelf       :: Attributes
+} deriving (Show, Eq, Read)
+
+  -- CTRL_ATTR_UNSPEC       ByteString |
+  -- CTRL_ATTR_FAMILY_ID    Word16 |
+  -- CTRL_ATTR_FAMILY_NAME  String |
+  -- CTRL_ATTR_VERSION      Word32 |
+  -- CTRL_ATTR_HDRSIZE      Word32 |
+  -- CTRL_ATTR_MAXATTR      Word32 |
+  -- CTRL_ATTR_OPS          [CtrlAttrOpData] |
 
 type MptcpToken = Word32
 type LocId    = Word8
 type MptcpFamily    = Word16
 
+
+-- TODO prefix with 'e' for enum
+getAttribute :: MptcpAttr -> Attributes -> MptcpAttribute
+getAttribute attr m =
+    | attr == MPTCP_ATTR_TOKEN => M.lookup attr
 
 -- https://stackoverflow.com/questions/18606827/how-to-write-customised-show-function-in-haskell
 -- TODO could use templateHaskell
@@ -194,10 +217,6 @@ data Sample = Sample
   , enthusiasm :: Int }
 
 
--- TODO should be an enum
--- data IDiagExt = IDiagExt {
--- INET_DIAG_MEMINFO
--- }
 
 -- TODO register subcommands instead
 sample :: Parser Sample
@@ -257,15 +276,17 @@ runMptcpNumerics  =
 -- inspectPacket = Prelude.putStrLn show
 -- inspectPacket packet = Prelude.putStrLn $show packet
 
+
+-- TODO merge default attributes
+-- explain what "dump" does
+-- todo pass a list of (Int, Bytestring) and build the map with fromList ?
 getRequestPacket :: Word16 -> MptcpGenlEvent -> Bool -> Attributes -> GenlPacket NoData
 getRequestPacket fid cmd dump attrs =
   let
     -- The message type/ flag / sequence number / pid  (0 => from the kernel)
-    myHeader = Header (fromIntegral fid) (flags .|. fNLM_F_ACK) 0 0
-    -- GenlHeader <cmd> <version>
-    geheader = GenlHeader word8Cmd mptcpGenlVer
-    -- NLM_F_ACK
     -- https://elixir.bootlin.com/linux/latest/source/include/uapi/linux/netlink.h#L54
+    myHeader = Header (fromIntegral fid) (flags .|. fNLM_F_ACK) 0 0
+    geheader = GenlHeader word8Cmd mptcpGenlVer
     flags = if dump then fNLM_F_REQUEST .|. fNLM_F_MATCH .|. fNLM_F_ROOT else fNLM_F_REQUEST
     word8Cmd = fromIntegral (fromEnum cmd) :: Word8
   in
@@ -274,7 +295,10 @@ getRequestPacket fid cmd dump attrs =
     -- Packet header (GenlData geheader NoData80211) attrs
     Packet myHeader (GenlData geheader NoData) attrs
 
-  --   System.Linux.Netlink.ErrorMsg -> error "error msg"
+--   System.Linux.Netlink.ErrorMsg -> error "error msg"
+--
+
+-- clampWindowRequest
 
 toIpv4 :: ByteString -> String
 toIpv4 val = Data.List.intercalate "." ( map show (unpack val))
@@ -345,15 +369,26 @@ showAttributes attrs =
     -- putStrLn $ intercalate "," $ mapped
     mapped
 
-
+-- getMptcpAttribute :: MptcpAttr -> Attributes -> MptcpAttribute
+-- getMptcpAttribute attr 
 
 -- TODO prefix with --cmd
-createNewSubflow :: MptcpSocket -> MptcpToken -> Attributes -> IO ()
+-- mptcp_nl_genl_create
+-- sport/backup/intf are optional
+-- family AF_INET/loc id/remid are not
+createNewSubflow :: MptcpSocket -> MptcpToken -> Attributes -> (GenlPacket NoData)
 createNewSubflow (MptcpSocket sock fid) token attrs = let
-  localId = readLocId $ Map.lookup (fromEnum MPTCP_ATTR_LOC_ID) attrs
-  remoteId = readLocId $ Map.lookup (fromEnum MPTCP_ATTR_REM_ID) attrs
+    -- localId = readLocId $ Map.lookup (fromEnum MPTCP_ATTR_LOC_ID) attrs
+    -- remoteId = readLocId $ Map.lookup (fromEnum MPTCP_ATTR_REM_ID) attrs
+
+    -- TODO put attributes to create a new subflow
+    pkt = getRequestPacket fid cmd False attributes
   in
-  putStrLn "createNewSubflow TODO"
+    pkt
+    -- putStrLn ("Remove subflow " ++ showAttributes attributes)
+    --   >> query sock pkt
+
+  -- putStrLn "createNewSubflow TODO"
   -- if (!info->attrs[MPTCP_ATTR_TOKEN] || !info->attrs[MPTCP_ATTR_FAMILY] ||
   --     !info->attrs[MPTCP_ATTR_LOC_ID] || !info->attrs[MPTCP_ATTR_REM_ID])
 
@@ -379,6 +414,7 @@ removeLocId (MptcpSocket sock fid) token locId = let
     -- intCmd = fromEnum cmd
     cmd = MPTCP_CMD_REMOVE
     pkt = getRequestPacket fid cmd False attributes
+    
   in
     putStrLn ("Remove subflow " ++ showAttributes attributes)
       >> query sock pkt
@@ -427,11 +463,13 @@ convertToken val =
 
 -- need to prepare a request
 -- type GenlPacket a = Packet (GenlData a)
+-- getResetPacket
 resetTheConnection :: MptcpSocket -> Attributes -> IO [GenlPacket NoData]
 resetTheConnection (MptcpSocket sock fid) receivedAttributes = let
     m0 = Map.empty
     m1 = Map.insert intCmd (convertToken token) m0
     token = readToken $ Map.lookup (fromEnum MPTCP_ATTR_TOKEN) receivedAttributes
+    -- family eAF_INET 
     attributes = m1
     intCmd = fromEnum cmd
     cmd = MPTCP_CMD_REMOVE
@@ -480,7 +518,7 @@ onNewConnection sock attributes = do
     case answer of
       "c" -> do
         putStrLn "Creating new subflow !!"
-        createNewSubflow sock token attributes
+        let pkt = createNewSubflow sock token attributes
         return ()
       "d" -> putStrLn "Not implemented"
         -- removeSubflow sock token locId >>= inspectAnswers >> putStrLn "Finished announcing"
@@ -534,7 +572,7 @@ subflowFromAttributes attrs =
     TcpConnection _srcIp _dstIp _srcPort _dstPort
 
 dispatchPacket :: MyState -> MptcpPacket -> IO MyState
-dispatchPacket oldState (Packet hdr (GenlData genlHeader NoDataMptcp) attributes) = let
+dispatchPacket oldState (Packet hdr (GenlData genlHeader NoData) attributes) = let
     cmd = genlCmd genlHeader
     (MyState sock conns) = oldState
 
@@ -861,6 +899,7 @@ main = do
   -- sendPacket
   queryTcpStats sockMetrics >> putStrLn "Sent the TCP SS request"
 
+  -- exported from my own version !!
   recvMulti sockMetrics >>= inspectIdiagAnswers
   -- recvOne sockMetrics >>= inspectIdiagAnswers
 

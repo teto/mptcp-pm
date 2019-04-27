@@ -89,7 +89,7 @@ putInetDiagMsg msg = do
   putWord32le $ idiag_uid msg
   putWord32le $ idiag_inode msg
 
--- TODO
+-- TODO add support for OWDs
 getInetDiagSockid :: Get InetDiagSockId
 getInetDiagSockid  = do
 -- getWord32host

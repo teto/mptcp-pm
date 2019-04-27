@@ -20,8 +20,6 @@ Flag Dev {
   Default:     True
 }
 
--- binary, 
--- kinda conflicts with cereal
 common shared-properties
     build-depends: base, optparse-applicative, bytestring-conversion,
         containers, bytestring, fast-logger, process, cereal
@@ -30,32 +28,20 @@ common shared-properties
     default-language: Haskell2010
     if flag(Dev)
         build-depends: netlink>= 1.1.1.1
-    -- else
-    --     build-depends: 
 
 
 
 executable daemon
     import: shared-properties
--- -no-global-package-db
     -- ghc-options: -i/home/teto/netlink-hs
     ghc-options: -Wall -Werror -fno-warn-unused-binds -fno-warn-unused-matches
-    -- build-depends: 
     main-is: daemon.hs
     default-language: Haskell2010
     -- for the generated.hsc , c2hs seems good to generate headers
     Build-tools:       hsc2hs, c2hs
-    Includes:          tcp_states.h
-    include-dirs:      .
+    -- Includes:          tcp_states.h
     Other-modules:     Generated, IDiag
     -- extra-packages: netlink
     -- extra-lib-dirs: /home/teto/netlink-hs
   -- hs-source-dirs: Utils
 
-Library
--- executable test
-    -- import: shared-properties
---     build-depends: base, netlink, optparse-applicative, bytestring-conversion, binary, containers, bytestring, cereal, fast-logger
---     main-is: test.hs
---     default-language: Haskell2010
---	-- extra-lib-dirs: /home/teto/netlink-hs

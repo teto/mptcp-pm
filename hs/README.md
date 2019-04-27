@@ -18,7 +18,10 @@ AF_INET => netlink family 2
 # Compilation
 
 With a custom netlink:
-$ cabal configure --package-db /home/teto/netlink-hs/dist/package.conf.inplace -v
+
+```
+$ cabal configure --package-db /home/teto/netlink-hs/dist/package.conf.inplace --extra-include-dirs=/home/teto/mptcp/include/uapi/linux/ -v
+```
 
 
 Testing procedure:
