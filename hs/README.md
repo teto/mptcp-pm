@@ -17,10 +17,10 @@ AF_INET => netlink family 2
 
 # Compilation
 
-With a custom netlink:
-
+With a custom netlink and kernel
 ```
-$ cabal configure --package-db /home/teto/netlink-hs/dist/package.conf.inplace --extra-include-dirs=/home/teto/mptcp/include/uapi/linux/ -v
+kernel $ make headers_install
+$ cabal configure --package-db /home/teto/netlink-hs/dist/package.conf.inplace --extra-include-dirs=/home/teto/mptcp2/build/usr/include -v3
 ```
 
 

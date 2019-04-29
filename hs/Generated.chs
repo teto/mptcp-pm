@@ -28,10 +28,10 @@ import Data.Bits ()
 {#enum TCP_ESTABLISHED as TcpState {underscoreToCase} deriving (Eq, Show)#}
 
 -- copy from include/uapi/linux/mptcp.h
-#include "mptcp.h"
+#include <linux/mptcp.h>
 
 -- {underscoreToCase}
-{#enum MPTCP_ATTR_UNSPEC as MptcpAttr {} deriving (Eq, Show)#}
+{#enum MPTCP_ATTR_UNSPEC as MptcpAttr {} with prefix "e" deriving (Eq, Show)#}
 
 -- {underscoreToCase}
 {#enum MPTCP_CMD_UNSPEC as MptcpGenlEvent {} deriving (Eq, Show)#}
@@ -47,13 +47,13 @@ mptcpGenlEvGrpName :: String
 mptcpGenlEvGrpName  = {#const MPTCP_GENL_EV_GRP_NAME #}
 
 -- copy from include/uapi/linux/inet_diag.h
-#include "inet_diag.h"
+#include <linux/inet_diag.h>
 
 -- let it use Bits as well as fNLM_F_REQUEST so that I can chain them with .|.
 -- , Bits
 {#enum INET_DIAG_NONE as IDiagExt {underscoreToCase} deriving (Eq, Show)#}
 
-#include "sock_diag.h"
+#include <linux/sock_diag.h>
 
 -- cccaa
 msgTypeSockDiag :: MessageType

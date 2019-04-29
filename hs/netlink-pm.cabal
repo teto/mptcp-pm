@@ -39,8 +39,11 @@ executable daemon
     default-language: Haskell2010
     -- for the generated.hsc , c2hs seems good to generate headers
     Build-tools:       hsc2hs, c2hs
-    -- Includes:          tcp_states.h
+    -- apparently this just helps getting a better error messages
+    Includes:          tcp_states.h, linux/sock_diag.h, linux/inet_diag.h
     Other-modules:     Generated, IDiag
+    -- TODO try to pass it from CLI instead
+    include-dirs: .
     -- extra-packages: netlink
     -- extra-lib-dirs: /home/teto/netlink-hs
   -- hs-source-dirs: Utils

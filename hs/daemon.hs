@@ -168,6 +168,8 @@ data MptcpAttributes = MptcpAttributes {
     , staSelf       :: Attributes
 } deriving (Show, Eq, Read)
 
+data MptcpAttribute =
+    MptcpToken Word32
   -- CTRL_ATTR_UNSPEC       ByteString |
   -- CTRL_ATTR_FAMILY_ID    Word16 |
   -- CTRL_ATTR_FAMILY_NAME  String |
@@ -182,9 +184,14 @@ type MptcpFamily    = Word16
 
 
 -- TODO prefix with 'e' for enum
-getAttribute :: MptcpAttr -> Attributes -> MptcpAttribute
-getAttribute attr m =
-    | attr == MPTCP_ATTR_TOKEN => M.lookup attr
+-- Map.lookup (fromEnum attr) m
+getAttribute :: MptcpAttr -> Attributes -> Maybe MptcpAttribute
+getAttribute attr m
+    | attr == MPTCP_ATTR_TOKEN = Nothing
+    | otherwise = Nothing
+
+-- ctrlAttributesFromAttributes :: Map Int ByteString -> [CtrlAttribute]
+-- ctrlAttributesFromAttributes = map getAttribute . toList
 
 -- https://stackoverflow.com/questions/18606827/how-to-write-customised-show-function-in-haskell
 -- TODO could use templateHaskell
@@ -193,8 +200,6 @@ getAttribute attr m =
 -- instance Show MptcpPacket where
 --   show MPTCP_EVENT_CREATED = "MPTCP_EVENT_CREATED"
 --   show x = x
-
--- dumpEnum
 dumpCommand :: MptcpGenlEvent -> String
 dumpCommand x = show x ++ " = " ++ show (fromEnum x)
 -- dumpCommand MPTCP_CMD_UNSPEC  = " MPTCP_CMD_UNSPEC  0"
@@ -382,6 +387,8 @@ createNewSubflow (MptcpSocket sock fid) token attrs = let
     -- remoteId = readLocId $ Map.lookup (fromEnum MPTCP_ATTR_REM_ID) attrs
 
     -- TODO put attributes to create a new subflow
+    attributes = Map.empty
+    cmd = MPTCP_CMD_SUB_CREATE
     pkt = getRequestPacket fid cmd False attributes
   in
     pkt
