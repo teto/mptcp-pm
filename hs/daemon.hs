@@ -159,7 +159,7 @@ type MptcpPacket = GenlPacket NoData
 --     mptcpAttributes :: [MptcpAttr]
 --   } deriving (Eq)
 data MptcpAttributes = MptcpAttributes {
-    token :: Word32
+    connToken :: Word32
     , localLocatorID :: Maybe Word8
     , remoteLocatorID :: Maybe Word8
     , family :: Word16
@@ -169,18 +169,18 @@ data MptcpAttributes = MptcpAttributes {
 } deriving (Show, Eq, Read)
 
 data MptcpAttribute =
-    MptcpToken Word32
-  -- CTRL_ATTR_UNSPEC       ByteString |
-  -- CTRL_ATTR_FAMILY_ID    Word16 |
-  -- CTRL_ATTR_FAMILY_NAME  String |
-  -- CTRL_ATTR_VERSION      Word32 |
-  -- CTRL_ATTR_HDRSIZE      Word32 |
-  -- CTRL_ATTR_MAXATTR      Word32 |
-  -- CTRL_ATTR_OPS          [CtrlAttrOpData] |
+    MptcpAttrToken MptcpToken |
+    -- v4 or v6, AddressFamily is a netlink def
+    SubflowFamily AddressFamily |
+    -- remote/local ?
+    RemoteLocatorId Word8 |
+    LocalLocatorId Word8 |
+    MptcpAddr ByteString |
+    MptcpIntf Word8
 
 type MptcpToken = Word32
 type LocId    = Word8
-type MptcpFamily    = Word16
+-- type MptcpFamily    = Word16
 
 
 -- TODO prefix with 'e' for enum
@@ -190,8 +190,53 @@ getAttribute attr m
     | attr == MPTCP_ATTR_TOKEN = Nothing
     | otherwise = Nothing
 
--- ctrlAttributesFromAttributes :: Map Int ByteString -> [CtrlAttribute]
--- ctrlAttributesFromAttributes = map getAttribute . toList
+-- getAttribute :: (Int, ByteString) -> CtrlAttribute
+-- getAttribute (i, x) = fromMaybe (CTRL_ATTR_UNKNOWN i x) $makeAttribute i x
+
+-- getW16 :: ByteString -> Maybe Word16
+-- getW16 x = e2M (runGet g16 x)
+
+-- getW32 :: ByteString -> Maybe Word32
+-- getW32 x = e2M (runGet g32 x)
+
+-- "either2Maybe"
+-- e2M :: Either a b -> Maybe b
+-- e2M (Right x) = Just x
+-- e2M _ = Nothing
+
+makeAttribute :: Int -> ByteString -> Maybe MptcpAttribute
+makeAttribute i val
+    | i == fromEnum MPTCP_ATTR_TOKEN = Just (MptcpAttrToken $ readToken $ Just val)
+    | i == fromEnum MPTCP_ATTR_FAMILY = Just (SubflowFamily $ AddressFamily fromByteString val  )
+    | i == fromEnum MPTCP_ATTR_DADDR4 = Just (MptcpAddr $ getWord8 )
+    | i == fromEnum MPTCP_ATTR_LOC_ID = Just (MptcpAddr $ getWord8 )
+    -- | i == fromEnum MPTCP_ATTR_REM_ID = Just (MptcpAddr $ getWord8 )
+    -- | i == MPTCP_ATTR_FAMILY = Just (MptcpAttrToken $ runGet getWord32le val)
+
+dumpAttribute :: Int -> ByteString -> String
+dumpAttribute attr value = let
+  -- enumFromTo ?
+  attrStr = case toEnum (fromIntegral attr) of
+      MPTCP_ATTR_UNSPEC -> "UNSPECIFIED"
+      MPTCP_ATTR_TOKEN -> "token: " ++ show (readToken $ Just value)
+      MPTCP_ATTR_FAMILY -> "family: " ++ show value
+      MPTCP_ATTR_LOC_ID -> "Locator id: " ++ show (readLocId $ Just value)
+      MPTCP_ATTR_REM_ID -> "Remote id: " ++ show value
+      MPTCP_ATTR_SADDR4 -> "ipv4.src: " ++ toIpv4 value
+      MPTCP_ATTR_SADDR6 -> "ipv6.src: " ++ show value
+      MPTCP_ATTR_DADDR4 -> "ipv4.dest: " ++ toIpv4 value
+      MPTCP_ATTR_DADDR6 -> "ipv6.dest: " ++ show value
+      MPTCP_ATTR_SPORT -> "sport: " ++ show (getPort value)
+      MPTCP_ATTR_DPORT -> "dport: " ++ show (getPort value)
+      MPTCP_ATTR_BACKUP -> "backup" ++ show value
+      MPTCP_ATTR_ERROR -> "Error: " ++ show value
+      MPTCP_ATTR_FLAGS -> "Flags: " ++ show value
+      MPTCP_ATTR_TIMEOUT -> "timeout: " ++ show value
+      MPTCP_ATTR_IF_IDX -> "ifId: " ++ show value
+      -- _ -> "unhandled case"
+  in
+    attrStr
+
 
 -- https://stackoverflow.com/questions/18606827/how-to-write-customised-show-function-in-haskell
 -- TODO could use templateHaskell
@@ -301,8 +346,6 @@ getRequestPacket fid cmd dump attrs =
     Packet myHeader (GenlData geheader NoData) attrs
 
 --   System.Linux.Netlink.ErrorMsg -> error "error msg"
---
-
 -- clampWindowRequest
 
 toIpv4 :: ByteString -> String
@@ -335,30 +378,6 @@ readLocId maybeVal = case maybeVal of
   Just val -> fromJust $ fromByteString val
   -- runGet getWord8 val
 
-dumpAttribute :: Int -> ByteString -> String
-dumpAttribute attr value = let
-  -- enumFromTo ?
-  attrStr = case toEnum (fromIntegral attr) of
-      MPTCP_ATTR_UNSPEC -> "UNSPECIFIED"
-      MPTCP_ATTR_TOKEN -> "token: " ++ show (readToken $ Just value)
-      MPTCP_ATTR_FAMILY -> "family: " ++ show value
-      MPTCP_ATTR_LOC_ID -> "Locator id: " ++ show (readLocId $ Just value)
-      MPTCP_ATTR_REM_ID -> "Remote id: " ++ show value
-      MPTCP_ATTR_SADDR4 -> "ipv4.src: " ++ toIpv4 value
-      MPTCP_ATTR_SADDR6 -> "ipv6.src: " ++ show value
-      MPTCP_ATTR_DADDR4 -> "ipv4.dest: " ++ toIpv4 value
-      MPTCP_ATTR_DADDR6 -> "ipv6.dest: " ++ show value
-      MPTCP_ATTR_SPORT -> "sport: " ++ show (getPort value)
-      MPTCP_ATTR_DPORT -> "dport: " ++ show (getPort value)
-      MPTCP_ATTR_BACKUP -> "backup" ++ show value
-      MPTCP_ATTR_ERROR -> "Error: " ++ show value
-      MPTCP_ATTR_FLAGS -> "Flags: " ++ show value
-      MPTCP_ATTR_TIMEOUT -> "timeout: " ++ show value
-      MPTCP_ATTR_IF_IDX -> "ifId: " ++ show value
-
-      _ -> "unhandled case"
-  in
-    attrStr
 
 
 
@@ -385,20 +404,41 @@ createNewSubflow :: MptcpSocket -> MptcpToken -> Attributes -> (GenlPacket NoDat
 createNewSubflow (MptcpSocket sock fid) token attrs = let
     -- localId = readLocId $ Map.lookup (fromEnum MPTCP_ATTR_LOC_ID) attrs
     -- remoteId = readLocId $ Map.lookup (fromEnum MPTCP_ATTR_REM_ID) attrs
+        -- [ MptcpToken ]
 
     -- TODO put attributes to create a new subflow
-    attributes = Map.empty
+
+    -- attributes = Map.empty
+    attributes = toAttributes [
+        (MptcpAttrToken token),
+        (LocalLocatorId 0) , (RemoteLocatorId 0)
+        , SubflowFamily eAF_INET ]
     cmd = MPTCP_CMD_SUB_CREATE
     pkt = getRequestPacket fid cmd False attributes
   in
     pkt
-    -- putStrLn ("Remove subflow " ++ showAttributes attributes)
-    --   >> query sock pkt
 
   -- putStrLn "createNewSubflow TODO"
   -- if (!info->attrs[MPTCP_ATTR_TOKEN] || !info->attrs[MPTCP_ATTR_FAMILY] ||
   --     !info->attrs[MPTCP_ATTR_LOC_ID] || !info->attrs[MPTCP_ATTR_REM_ID])
 
+
+putW32 :: Word32 -> ByteString
+putW32 x = runPut (putWord32host x)
+
+-- inspired by netlink cATA :: CtrlAttribute -> (Int, ByteString)
+attrToPair :: MptcpAttribute -> (Int, ByteString)
+attrToPair (MptcpAttrToken token) = (fromEnum MPTCP_ATTR_TOKEN, runPut $ putWord32host token)
+attrToPair (RemoteLocatorId loc) = (fromEnum MPTCP_ATTR_REM_ID, runPut $ putWord8 loc)
+attrToPair (LocalLocatorId loc) = (fromEnum MPTCP_ATTR_REM_ID, runPut $ putWord8 loc)
+attrToPair (SubflowFamily fam) = let
+        fam8 = (fromIntegral $ fromEnum fam) :: Word8
+    in (fromEnum MPTCP_ATTR_FAMILY, runPut $ putWord8 fam8)
+-- attrToPair _ = error "unsupported"
+
+
+toAttributes :: [MptcpAttribute] -> Attributes
+toAttributes attrs = Map.fromList $map attrToPair attrs
 
 -- removeSubflow :: MptcpSocket -> MptcpToken -> LocId -> IO [GenlPacket NoData]
 -- removeSubflow (MptcpSocket socket fid) token locId = let
@@ -410,21 +450,19 @@ instance Show GenlHeaderMptcp where
     "Header: Cmd = " ++ show cmd ++ ", Version: " ++ show ver ++ "\n"
 
 
-removeLocId :: MptcpSocket -> MptcpToken -> LocId -> IO [GenlPacket NoData]
-removeLocId (MptcpSocket sock fid) token locId = let
-    m0 = Map.empty
-    m1 = Map.insert (fromEnum MPTCP_ATTR_TOKEN) (convertToken token) m0
-    m2 = Map.insert (fromEnum MPTCP_ATTR_LOC_ID) (convertLocId locId) m1
-    -- MPTCP_ATTR_IF_IDX and MPTCP_ATTR_BACKUP should be optional
-    --
-    attributes = m2
-    -- intCmd = fromEnum cmd
-    cmd = MPTCP_CMD_REMOVE
-    pkt = getRequestPacket fid cmd False attributes
-    
-  in
-    putStrLn ("Remove subflow " ++ showAttributes attributes)
-      >> query sock pkt
+-- removeLocId :: MptcpSocket -> MptcpAttribute -> IO [GenlPacket NoData]
+-- removeLocId (MptcpSocket sock fid) token locId = let
+--     m0 = Map.empty
+--     m1 = Map.insert (fromEnum MPTCP_ATTR_TOKEN) (convertToken token) m0
+--     m2 = Map.insert (fromEnum MPTCP_ATTR_LOC_ID) (convertLocId locId) m1
+--     -- MPTCP_ATTR_IF_IDX and MPTCP_ATTR_BACKUP should be optional
+--     attributes = m2
+--     -- intCmd = fromEnum cmd
+--     cmd = MPTCP_CMD_REMOVE
+--     pkt = getRequestPacket fid cmd False attributes
+--   in
+--     putStrLn ("Remove subflow " ++ showAttributes attributes)
+--       >> query sock pkt
 
 
 checkIfSocketExists :: MptcpSocket -> MptcpToken  -> IO [GenlPacket NoData]
@@ -516,6 +554,7 @@ inspectAnswer pkt = putStrLn $ "Inspecting answer:\n" ++ showPacket pkt
 
 onNewConnection :: MptcpSocket -> Attributes -> IO ()
 onNewConnection sock attributes = do
+    -- TODO use getAttribute instead 
     let token = readToken $ Map.lookup (fromEnum MPTCP_ATTR_TOKEN) attributes
     let locId = readLocId $ Map.lookup (fromEnum MPTCP_ATTR_LOC_ID) attributes
     let answer = "e"
@@ -748,7 +787,7 @@ instance Convertable SockDiagRequest where
 -- applicative style Trade <$> getWord32le <*> getWord32le <*> getWord16le
 getSockDiagRequestHeader :: Get SockDiagRequest
 getSockDiagRequestHeader = do
-    family <- getWord8
+    addressFamily <- getWord8 -- AF_INET for instance
     protocol <- getWord8
     -- TODO convert it ?
     -- extended <- getWord8
@@ -758,7 +797,7 @@ getSockDiagRequestHeader = do
     _pad <- getWord8
     states <- getWord32host
     _sockid <- getInetDiagSockid
-    return $ SockDiagRequest family protocol (toEnum (fromIntegral extended) :: IDiagExt) _pad states _sockid
+    return $ SockDiagRequest addressFamily protocol (toEnum (fromIntegral extended) :: IDiagExt) _pad states _sockid
 
 -- |'Put' function for 'GenlHeader'
 putSockDiagRequestHeader :: SockDiagRequest -> Put
@@ -858,7 +897,6 @@ fromOctetsLE = fromOctetsBE . reverse
 
 inspectIDiagAnswer :: (Packet InetDiagMsg) -> IO ()
 inspectIDiagAnswer (Packet hdr cus attrs) = do
-   -- dumpAttribute
    putStrLn $ "Idiag answer" ++ showAttributes attrs
 inspectIDiagAnswer p = putStrLn $ "test" ++ (showPacket p)
 

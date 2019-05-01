@@ -31,7 +31,8 @@ import Data.Bits ()
 #include <linux/mptcp.h>
 
 -- {underscoreToCase}
-{#enum MPTCP_ATTR_UNSPEC as MptcpAttr {} with prefix "e" deriving (Eq, Show)#}
+-- add prefix = "e"
+{#enum MPTCP_ATTR_UNSPEC as MptcpAttr {} omit (__MPTCP_ATTR_AFTER_LAST) deriving (Eq, Show)#}
 
 -- {underscoreToCase}
 {#enum MPTCP_CMD_UNSPEC as MptcpGenlEvent {} deriving (Eq, Show)#}
@@ -50,7 +51,7 @@ mptcpGenlEvGrpName  = {#const MPTCP_GENL_EV_GRP_NAME #}
 #include <linux/inet_diag.h>
 
 -- let it use Bits as well as fNLM_F_REQUEST so that I can chain them with .|.
--- , Bits
+-- , Bits TODO rename to eDiagExt ?
 {#enum INET_DIAG_NONE as IDiagExt {underscoreToCase} deriving (Eq, Show)#}
 
 #include <linux/sock_diag.h>
@@ -59,6 +60,8 @@ mptcpGenlEvGrpName  = {#const MPTCP_GENL_EV_GRP_NAME #}
 msgTypeSockDiag :: MessageType
 msgTypeSockDiag  = {#const SOCK_DIAG_BY_FAMILY #}
 
+
+-- {#enum AF_UNSPEC as eAddressFamily {underscoreToCase} deriving (Eq, Show)#}
 -- TODO generate AF_INET (6) from include/linux/socket.h
 -- IPPROTO_TCP defined in include/uapi/linux/in.h
 
