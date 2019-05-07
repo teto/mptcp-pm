@@ -40,7 +40,9 @@ in
   nativeBuildInputs = [
     # # defined from my overlay, builds instead of using cachix
     # hie-nixpkgs.haskellPackages.hie
-    hie
+    # hie
+    # haskellPackages.all-hies.versions.ghc864
+    all-hies.versions.ghc864
 
     haskellPackages.cabal-install
     # haskellPackages.bytestring-conversion
