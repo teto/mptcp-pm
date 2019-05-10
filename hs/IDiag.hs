@@ -1,5 +1,5 @@
 {-|
-Module      : 
+Module      : IDiag
 Description : Implementation of mptcp netlink path manager
 Maintainer  : matt
 Stability   : testing
@@ -21,6 +21,11 @@ import Control.Monad
 
 -- for Convertable
 import System.Linux.Netlink
+-- For TcpState, FFI generated
+import Generated (IDiagExt)
+
+import Data.Bits (shiftL, )
+import Data.Bits ((.|.))
 
 data InetDiagSockId  = InetDiagSockId  {
   sport :: Word16
@@ -37,19 +42,18 @@ data InetDiagSockId  = InetDiagSockId  {
 
 
 -- This generates a response of inet_diag_msg
+-- rename to answer ?
 data InetDiagMsg = InetDiagMsg {
   idiag_family :: Word8
   , idiag_state :: Word8
   , idiag_timer :: Word8
   , idiag_retrans :: Word8
-
   , idiag_sockid :: InetDiagSockId
-
-, idiag_expires :: Word32
-, idiag_rqueue :: Word32
-, idiag_wqueue :: Word32
-, idiag_uid :: Word32
-, idiag_inode :: Word32
+  , idiag_expires :: Word32
+  , idiag_rqueue :: Word32
+  , idiag_wqueue :: Word32
+  , idiag_uid :: Word32
+  , idiag_inode :: Word32
 } deriving (Eq, Show)
 
 
@@ -57,6 +61,69 @@ instance Convertable InetDiagMsg where
   getPut = putInetDiagMsg
   -- MessageType
   getGet _ = getInetDiagMsg
+
+-- TODO rename to a TCP one ? SockDiagRequest
+data SockDiagRequest = SockDiagRequest {
+  sdiag_family :: Word8 -- ^AF_INET6 or AF_INET (TODO rename)
+-- It should be set to the appropriate IPPROTO_* constant for AF_INET and AF_INET6, and to 0 otherwise.
+  , sdiag_protocol :: Word8 -- always TCP ?
+  -- IPv4/v6 specific structure
+  -- InetDiagInfo
+  , idiag_ext :: IDiagExt -- ^query extended info (word8 size)
+  , req_pad :: Word8        -- ^ padding for backwards compatibility with v1
+
+  -- c la ou ca foire
+  -- in principle, any kind of state, but for now we only deal with TcpStates
+  , idiag_states :: [TcpState] -- ^States to dump (based on TcpDump)
+    -- struct inet_diag_sockid id;
+  , diag_sockid :: InetDiagSockId
+} deriving (Eq, Show)
+
+{- |Typeclase used by the system. Basically 'Storable' for 'Get' and 'Put'
+getGet Returns a 'Get' function for the convertable.
+The MessageType is passed so that the function can parse different data structures
+based on the message type.
+-}
+-- class Convertable a where
+--   getGet :: MessageType -> Get a -- ^get a 'Get' function for the static data
+--   getPut :: a -> Put -- ^get a 'Put' function for the static data
+instance Convertable SockDiagRequest where
+  getPut = putSockDiagRequestHeader
+  -- MessageType
+  getGet _ = getSockDiagRequestHeader
+
+-- |'Get' function for 'GenlHeader'
+-- applicative style Trade <$> getWord32le <*> getWord32le <*> getWord16le
+getSockDiagRequestHeader :: Get SockDiagRequest
+getSockDiagRequestHeader = do
+    addressFamily <- getWord8 -- AF_INET for instance
+    protocol <- getWord8
+    -- TODO convert it ?
+    -- extended <- getWord8
+    -- TODO la ca foire
+    -- let extended = InetDiagNone
+    extended <- getWord32host
+    _pad <- getWord8
+    states <- getWord32host
+    _sockid <- getInetDiagSockid
+    -- TODO the conversion
+    -- TcpMaxStates
+    return $ SockDiagRequest addressFamily protocol (toEnum (fromIntegral extended) :: IDiagExt) _pad states _sockid
+
+-- |'Put' function for 'GenlHeader'
+putSockDiagRequestHeader :: SockDiagRequest -> Put
+putSockDiagRequestHeader hdr = do
+  let
+    idiag
+  in
+  putWord8 $ sdiag_family hdr
+  putWord8 $ sdiag_protocol hdr
+  -- extended
+  putWord8 $ fromIntegral $ fromEnum $ idiag_ext hdr
+  putWord8 $ req_pad hdr
+  -- TODO check endianness
+  putWord32be $ idiag_states hdr
+  putInetDiagSockid $ diag_sockid hdr
 
 getInetDiagMsg :: Get InetDiagMsg
 getInetDiagMsg  = do

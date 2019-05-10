@@ -1,6 +1,6 @@
 {-# LANGUAGE ForeignFunctionInterface #-}
 {-|
-Module      : Generated
+Module      : 
 Description : A module to bridge the haskell code to underlying C code
 Maintainer  : ongy
 Stability   : testing

@@ -24,9 +24,13 @@ $ cabal configure --package-db /home/teto/netlink-hs/dist/package.conf.inplace -
 ```
 
 
-Testing procedure:
+# Testing procedure:
 
 Enter the nix-shell shell-test.nix and start the daemon:
+
+$ cabal run test
+
+or
 $ buildNRun
 
 In a shell:
@@ -37,3 +41,9 @@ In another:
 
 TODO:
 - [ ] generate the enums via FFI from include/uapi/linux/mptcp.h
+
+
+# BUGS
+
+- conversion of IDiagExt is bad everywhere ? req.r.idiag_ext |= (1<<(INET_DIAG_INFO-1));
+- we need to request more states

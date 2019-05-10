@@ -6,9 +6,6 @@ Stability   : testing
 Portability : Linux
 
 
-This module providis utility functions for NL80211 subsystem.
-For more information see /usr/include/linux/nl80211.h
-
 To interact
 GENL_ADMIN_PERM
 The operation requires the CAP_NET_ADMIN privilege
@@ -23,6 +20,7 @@ eNETLINK_INET_DIAG
 
 http://kristrev.github.io/2013/07/26/passive-monitoring-of-sockets-on-linux
 
+iproute2/misc/ss.c to see how `ss` utility interacts with the kernel
 
 -}
 
@@ -41,7 +39,6 @@ import Generated
 -- import Control.Monad
 import Data.Maybe
 import Data.Foldable (foldl')
-import Data.Bits ((.|.))
 import Foreign.C.Types (CInt)
 import Foreign.C.Error
 import System.Linux.Netlink hiding (makeSocket)
@@ -58,6 +55,7 @@ import System.Linux.Netlink.GeNetlink.Control as C
 import Data.Word (Word8, Word16, Word32)
 import Data.List (intercalate)
 import Data.Bits (shiftL, )
+import Data.Bits ((.|.))
 
 -- imported from cereal  hiding (runGet)
 import Data.Serialize.Get
@@ -135,17 +133,7 @@ data MyState = MyState {
   -- TODO pass the socket as well ?
 } deriving Show
 
--- data GenlData a = GenlData
---     {
---       genlDataHeader :: GenlHeader
---     , genlDataData   :: a
---     } deriving (Eq)
-  --
--- type GenlPacket a = Packet (GenlData a)
--- type Mptcp
-    --
 type MptcpPacket = GenlPacket NoData
--- type MptcpPacket = Packet (GenlData NoDataMptcp)
 
 -- inspired by CtrlPacket
   -- token :: MptcpToken
@@ -200,16 +188,27 @@ getAttribute attr m
 -- getW32 x = e2M (runGet g32 x)
 
 -- "either2Maybe"
--- e2M :: Either a b -> Maybe b
--- e2M (Right x) = Just x
--- e2M _ = Nothing
+e2M :: Either a b -> Maybe b
+e2M (Right x) = Just x
+e2M _ = Nothing
 
+-- TODO use e2m
 makeAttribute :: Int -> ByteString -> Maybe MptcpAttribute
 makeAttribute i val
     | i == fromEnum MPTCP_ATTR_TOKEN = Just (MptcpAttrToken $ readToken $ Just val)
-    | i == fromEnum MPTCP_ATTR_FAMILY = Just (SubflowFamily $ AddressFamily fromByteString val  )
-    | i == fromEnum MPTCP_ATTR_DADDR4 = Just (MptcpAddr $ getWord8 )
-    | i == fromEnum MPTCP_ATTR_LOC_ID = Just (MptcpAddr $ getWord8 )
+    -- TODO fix $ Just fromByteString val  )
+    | i == fromEnum MPTCP_ATTR_FAMILY = Just (SubflowFamily $ eAF_INET)
+    -- this is a bytestring
+    | i == fromEnum MPTCP_ATTR_DADDR4 = Just (MptcpAddr $ val )
+    -- | i == fromEnum MPTCP_ATTR_LOC_ID = Just (RemoteLocatorId $ val )
+    -- | i == fromEnum MPTCP_ATTR_LOC_ID = Just (MptcpAddr $ val )
+    | i == fromEnum MPTCP_ATTR_IF_IDX =
+             case runGet getWord8 val of
+                Right x -> Just $ MptcpIntf x
+                _ -> Nothing
+    | otherwise = error "Unsupported attribute"
+        -- Just (MptcpIntf $ fromMaybe $ e2M () )
+
     -- | i == fromEnum MPTCP_ATTR_REM_ID = Just (MptcpAddr $ getWord8 )
     -- | i == MPTCP_ATTR_FAMILY = Just (MptcpAttrToken $ runGet getWord32le val)
 
@@ -434,6 +433,9 @@ attrToPair (LocalLocatorId loc) = (fromEnum MPTCP_ATTR_REM_ID, runPut $ putWord8
 attrToPair (SubflowFamily fam) = let
         fam8 = (fromIntegral $ fromEnum fam) :: Word8
     in (fromEnum MPTCP_ATTR_FAMILY, runPut $ putWord8 fam8)
+
+attrToPair ( MptcpIntf idx) = (fromEnum MPTCP_ATTR_IF_IDX, runPut $ putWord8 idx)
+attrToPair ( MptcpAddr addr) = (fromEnum MPTCP_ATTR_SADDR4, addr)
 -- attrToPair _ = error "unsupported"
 
 
@@ -756,60 +758,7 @@ listenToMetricEvents sock myGroup = do
 createLogger :: IO LoggerSet
 createLogger = newStdoutLoggerSet defaultBufSize
 
--- TODO rename to a TCP one ? SockDiagRequest
-data SockDiagRequest = SockDiagRequest {
-  sdiag_family :: Word8 -- ^AF_INET6 or AF_INET
--- It should be set to the appropriate IPPROTO_* constant for AF_INET and AF_INET6, and to 0 otherwise.
-  , sdiag_protocol :: Word8
-  -- IPv4/v6 specific structure
-  -- InetDiagInfo
-  , idiag_ext :: IDiagExt -- ^query extended info
-  , req_pad :: Word8        -- ^ padding for backwards compatibility with v1
-  , idiag_states :: Word32 -- ^States to dump (based on TcpDump)
-    -- struct inet_diag_sockid id;
-  , diag_sockid :: InetDiagSockId
-} deriving (Eq, Show)
 
-{- |Typeclase used by the system. Basically 'Storable' for 'Get' and 'Put'
-getGet Returns a 'Get' function for the convertable.
-The MessageType is passed so that the function can parse different data structures
-based on the message type.
--}
--- class Convertable a where
---   getGet :: MessageType -> Get a -- ^get a 'Get' function for the static data
---   getPut :: a -> Put -- ^get a 'Put' function for the static data
-instance Convertable SockDiagRequest where
-  getPut = putSockDiagRequestHeader
-  -- MessageType
-  getGet _ = getSockDiagRequestHeader
-
--- |'Get' function for 'GenlHeader'
--- applicative style Trade <$> getWord32le <*> getWord32le <*> getWord16le
-getSockDiagRequestHeader :: Get SockDiagRequest
-getSockDiagRequestHeader = do
-    addressFamily <- getWord8 -- AF_INET for instance
-    protocol <- getWord8
-    -- TODO convert it ?
-    -- extended <- getWord8
-    -- TODO la ca foire
-    -- let extended = InetDiagNone
-    extended <- getWord32host
-    _pad <- getWord8
-    states <- getWord32host
-    _sockid <- getInetDiagSockid
-    return $ SockDiagRequest addressFamily protocol (toEnum (fromIntegral extended) :: IDiagExt) _pad states _sockid
-
--- |'Put' function for 'GenlHeader'
-putSockDiagRequestHeader :: SockDiagRequest -> Put
-putSockDiagRequestHeader hdr = do
-  putWord8 $ sdiag_family hdr
-  putWord8 $ sdiag_protocol hdr
-  -- extended
-  putWord8 $ fromIntegral $ fromEnum $ idiag_ext hdr
-  putWord8 $ req_pad hdr
-  -- TODO check endianness
-  putWord32be $ idiag_states hdr
-  putInetDiagSockid $ diag_sockid hdr
 
 -- where struct inet_diag_sockid is defined as follows:
 --     struct inet_diag_sockid {
@@ -872,11 +821,17 @@ queryTcpStats sock = let
   diag_req = InetDiagSockId iperfSrcPort iperfDstPort ipSrc ipDst ifIndex _cookie
   -- TCP states taken from include/net/tcp_states.h TCP_LISTEN,
   -- idiag_states = TCPF_ALL & ~(TCPF_SYN_RECV | TCPF_TIME_WAIT | TCPF_CLOSE);
-  stateFilter = 0 :: Word32
+--   C la qu on se foire !!
+    --  
+
+    -- #define SS_ALL ((1 << SS_MAX) - 1)
+    -- #define SS_CONN (SS_ALL & ~((1<<SS_LISTEN)|(1<<SS_CLOSE)|(1<<SS_TIME_WAIT)|(1<<SS_SYN_RECV)))
+  stateFilter = [TcpListen, TcpEstablished, TcpSynSent ]
   -- stateFilter = fromIntegral (fromEnum TcpListen) :: Word32
-  -- requestedInfo = InetDiagInfo
-  requestedInfo = InetDiagNone   -- <=> 0
-  custom = SockDiagRequest eAF_INET eIPPROTO_TCP requestedInfo 0 (stateFilter) diag_req
+  requestedInfo = InetDiagInfo
+  -- requestedInfo = InetDiagNone   -- <=> 0
+  padding = 0 -- useless
+  custom = SockDiagRequest eAF_INET eIPPROTO_TCP requestedInfo padding (stateFilter) diag_req
       -- NLC.eRTM_GETLINK (NLC.fNLM_F_ROOT .|. NLC.fNLM_F_MATCH .|. NLC.fNLM_F_REQUEST) 0 0)
   -- packet header Custom Attributes
   -- pkt = Packet
@@ -910,8 +865,13 @@ inspectIDiagAnswer p = putStrLn $ "test" ++ (showPacket p)
 --             ++ "Supposing it's a mptcp command: " ++ dumpCommand ( toEnum $ fromIntegral cmd)
 
 
-
--- Packet of 
+-- le 00 00 37 0b different (entre protocol et source port)
+-- 0000   00 04 03 38 00 00 00 00 00 00 00 00 00 00 00 04
+-- 0010   48 00 00 00 14 00 01 03 40 e2 01 00 00 00 00 00
+-- 0020   02 06 00 00 37 0b 00 00 00 00 00 00 00 00 00 00
+-- 0030   00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+-- 0040   00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+-- 0050   00 00 00 00 00 00 00 00
 inspectIdiagAnswers :: [Packet InetDiagMsg] -> IO ()
 inspectIdiagAnswers packets = do
   putStrLn "Start inspecting IDIAG answers"
