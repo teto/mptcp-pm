@@ -3,7 +3,8 @@ import Prelude hiding (length, concat)
 -- import qualified Options.Applicative (value)
 
 -- import Generated
-import Data.Bits (( .|.))
+import Data.Bits ()
+import Data.Bits (( .|.), Bits, shiftL)
 -- import System.Linux.Netlink hiding (makeSocket)
 -- import System.Linux.Netlink (query, bufferSize)
 -- import System.Linux.Netlink.GeNetlink
@@ -120,6 +121,9 @@ instance Enum TcpState where
   toEnum 12 = TcpNewSynRecv
   toEnum 13 = TcpMaxStates
   toEnum unmatched = error ("TcpState.toEnum: Cannot match " ++ show unmatched)
+
+instance Bits TcpState where
+  shiftL x = shiftL 1 (fromEnum x - 1)
 
 
 -- in fact it's 1 << fromEnum TcpListen)

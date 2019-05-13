@@ -100,6 +100,12 @@ data MetricsSocket = MetricsSocket NetlinkSocket Word16
 --   getPut _ = return ()
 --   getGet _ = return NoDataMptcp
 
+
+
+instance Bits TcpSate where
+  shiftL x = shiftL 1 (fromEnum x - 1)
+
+
 iperfHardcodedSrcPort :: Word16
 iperfHardcodedSrcPort = 5500
 
