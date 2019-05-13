@@ -24,7 +24,7 @@ import System.Linux.Netlink
 -- For TcpState, FFI generated
 import Generated (IDiagExt, TcpState)
 
-import Data.Bits (shiftL, )
+import qualified Data.Bits as B
 import Data.Bits ((.|.))
 
 data InetDiagSockId  = InetDiagSockId  {
@@ -40,13 +40,28 @@ data InetDiagSockId  = InetDiagSockId  {
 
 } deriving (Eq, Show)
 
--- converts TcpState into Bits
-shiftCustom :: TcpState -> Word32
-shiftCustom state = shiftL 1 (fromEnum state - 1)
+class Enum2Bits a where
+  -- toBits :: [a] -> Word32
+  shiftL :: a -> Word32
 
-tcpStatesToWord :: [TcpState] -> Word32
-tcpStatesToWord [] = 0
-tcpStatesToWord (x:xs) = (shiftCustom x) .|. (tcpStatesToWord xs)
+instance Enum2Bits TcpState where
+  -- toBits = enumsToWord
+  shiftL state = B.shiftL 1 (fromEnum state)
+
+instance Enum2Bits IDiagExt where
+  -- toBits = enumsToWord
+  shiftL state = B.shiftL 1 ((fromEnum state) - 1)
+
+-- instance Enum2Bits INetDiag where
+--   toBits = enumsToWord
+
+-- converts TcpState into Bits
+-- shiftState :: TcpState -> Word32
+-- shiftCustom state = shiftL 1 (fromEnum state)
+
+enumsToWord :: Enum2Bits a => [a] -> Word32
+enumsToWord [] = 0
+enumsToWord (x:xs) = (shiftL x) .|. (enumsToWord xs)
 
 -- This generates a response of inet_diag_msg
 -- rename to answer ?
@@ -66,13 +81,17 @@ data InetDiagMsg = InetDiagMsg {
 -- see https://stackoverflow.com/questions/8633470/illegal-instance-declaration-when-declaring-instance-of-isstring
 {-# LANGUAGE FlexibleInstances #-}
 
-instance Convertable [TcpState] where
-  getPut = putWord32be . tcpStatesToWord
-  getGet _ = []
+-- TODO this generates the  error "Orphan instance: instance Convertable [TcpState]"
+-- instance Convertable [TcpState] where
+--   getPut = putStates
+--   getGet _ = return []
+
+putStates :: [TcpState] -> Put
+putStates states = putWord32host $ enumsToWord states
+
 
 instance Convertable InetDiagMsg where
   getPut = putInetDiagMsg
-  -- MessageType
   getGet _ = getInetDiagMsg
 
 -- TODO rename to a TCP one ? SockDiagRequest
@@ -120,14 +139,14 @@ getSockDiagRequestHeader = do
 -- |'Put' function for 'GenlHeader'
 putSockDiagRequestHeader :: SockDiagRequest -> Put
 putSockDiagRequestHeader request = do
-  -- let states = tcpStatesToWord $ idiag_states request
+  -- let states = enumsToWord $ idiag_states request
   putWord8 $ sdiag_family request
   putWord8 $ sdiag_protocol request
   -- extended
   putWord8 $ fromIntegral $ fromEnum $ idiag_ext request
-  putWord8 $ req_pad request
+  putWord8 0
   -- TODO check endianness
-  putWord32be $ idiag_states request
+  putStates $ idiag_states request
   putInetDiagSockid $ diag_sockid request
 
 getInetDiagMsg :: Get InetDiagMsg

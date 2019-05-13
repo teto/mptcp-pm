@@ -54,7 +54,7 @@ import System.Process
 import System.Linux.Netlink.GeNetlink.Control as C
 import Data.Word (Word8, Word16, Word32)
 import Data.List (intercalate)
-import Data.Bits (shiftL, )
+import qualified Data.Bits as Bits -- (shiftL, )
 import Data.Bits ((.|.))
 
 -- imported from cereal  hiding (runGet)
@@ -777,20 +777,12 @@ eIPPROTO_TCP = 6
 
 -- inspired by http://man7.org/linux/man-pages/man7/sock_diag.7.html
 
--- 
--- instance Bits TcpState where
 
 -- Sends a SockDiagRequest
 -- expects INetDiag 
-queryTcpStats :: NetlinkSocket -> IO ()
-queryTcpStats sock = let
-  req = Packet
+genQueryPacket :: Packet SockDiagRequest
+genQueryPacket = let
   -- Mesge type / flags /seqNum /pid
-  -- or DUMP_INTR or DUMP_FILTERED ?
-  -- NLM_F_DUMP flag set, it means that a list of sockets is being
-  -- requested; otherwise it is a query about an individual socket.
-  -- flags sont pas bons
-  -- NLM_F_ROOT|NLM_F_MATCH|NLM_F_REQUEST,\
   flags = (fNLM_F_REQUEST .|. fNLM_F_MATCH .|. fNLM_F_ROOT)
 
   -- might be a trick with seqnum
@@ -813,24 +805,17 @@ queryTcpStats sock = let
   -- 1 => "lo". Check with ip link ?
   ifIndex = 0
   diag_req = InetDiagSockId iperfSrcPort iperfDstPort ipSrc ipDst ifIndex _cookie
-  -- TCP states taken from include/net/tcp_states.h TCP_LISTEN,
-  -- idiag_states = TCPF_ALL & ~(TCPF_SYN_RECV | TCPF_TIME_WAIT | TCPF_CLOSE);
---   C la qu on se foire !!
-    --  
 
     -- #define SS_ALL ((1 << SS_MAX) - 1)
     -- #define SS_CONN (SS_ALL & ~((1<<SS_LISTEN)|(1<<SS_CLOSE)|(1<<SS_TIME_WAIT)|(1<<SS_SYN_RECV)))
-  stateFilter = [TcpListen, TcpEstablished, TcpSynSent ]
-  -- stateFilter = fromIntegral (fromEnum TcpListen) :: Word32
-  requestedInfo = InetDiagInfo
-  -- requestedInfo = InetDiagNone   -- <=> 0
+  stateFilter = [TcpEstablished]
+  -- stateFilter = [TcpListen, TcpEstablished, TcpSynSent ]
+  -- InetDiagInfo
+  requestedInfo = InetDiagNone
   padding = 0 -- useless
   custom = SockDiagRequest eAF_INET eIPPROTO_TCP requestedInfo padding (stateFilter) diag_req
-      -- NLC.eRTM_GETLINK (NLC.fNLM_F_ROOT .|. NLC.fNLM_F_MATCH .|. NLC.fNLM_F_REQUEST) 0 0)
-  -- packet header Custom Attributes
-  -- pkt = Packet
   in
-    sendPacket sock $ Packet hdr custom Map.empty
+     Packet hdr custom Map.empty
 
 -- for big endian
 -- https://mail.haskell.org/pipermail/beginners/2010-October/005571.html
@@ -838,7 +823,7 @@ queryTcpStats sock = let
 fromOctetsBE :: [Word8] -> Word32
 fromOctetsBE = foldl' accum 0
   where
-    accum a o = (a `shiftL` 8) .|. fromIntegral o
+    accum a o = (a `Bits.shiftL` 8) .|. fromIntegral o
     -- maybe I could use putIArrayOf instead
 
 fromOctetsLE :: [Word8] -> Word32
@@ -859,13 +844,6 @@ inspectIDiagAnswer p = putStrLn $ "test" ++ (showPacket p)
 --             ++ "Supposing it's a mptcp command: " ++ dumpCommand ( toEnum $ fromIntegral cmd)
 
 
--- le 00 00 37 0b different (entre protocol et source port)
--- 0000   00 04 03 38 00 00 00 00 00 00 00 00 00 00 00 04
--- 0010   48 00 00 00 14 00 01 03 40 e2 01 00 00 00 00 00
--- 0020   02 06 00 00 37 0b 00 00 00 00 00 00 00 00 00 00
--- 0030   00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
--- 0040   00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
--- 0050   00 00 00 00 00 00 00 00
 inspectIdiagAnswers :: [Packet InetDiagMsg] -> IO ()
 inspectIdiagAnswers packets = do
   putStrLn "Start inspecting IDIAG answers"
@@ -896,7 +874,7 @@ main = do
 
 
   -- sendPacket
-  queryTcpStats sockMetrics >> putStrLn "Sent the TCP SS request"
+  sendPacket sockMetrics genQueryPacket >> putStrLn "Sent the TCP SS request"
 
   -- exported from my own version !!
   recvMulti sockMetrics >>= inspectIdiagAnswers

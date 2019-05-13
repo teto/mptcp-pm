@@ -4,7 +4,7 @@ import Prelude hiding (length, concat)
 
 import Generated
 import Data.Bits ()
-import Data.Bits (( .|.), shiftL)
+import Data.Bits (( .|.))
 -- import System.Linux.Netlink hiding (makeSocket)
 -- import System.Linux.Netlink (query, bufferSize)
 -- import System.Linux.Netlink.GeNetlink
@@ -57,9 +57,9 @@ main :: IO ()
 main = let 
     -- TODO test with shiftL
     toto = (fromEnum TcpListen) .|. (fromEnum TcpEstablished)
-    zut = shiftL (fromEnum TcpListen)
   in do
-  putStrLn $ "TcpListen =" ++ show (tcpStatesToWord [TcpListen])
-  putStrLn $ "TcpEstablished =" ++ show (tcpStatesToWord [TcpEstablished])
-  putStrLn $ "combo !!" ++ show (tcpStatesToWord [TcpEstablished, TcpListen])
+  putStrLn $ "InetDiag =" ++ show (fromEnum InetDiagMeminfo)
+  putStrLn $ "TcpListen =" ++ show (enumsToWord [TcpListen])
+  putStrLn $ "TcpEstablished =" ++ show (enumsToWord [TcpEstablished])
+  putStrLn $ "combo !!" ++ show (enumsToWord [TcpEstablished, TcpListen])
   putStrLn "finished"
