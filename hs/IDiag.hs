@@ -5,9 +5,9 @@ Maintainer  : matt
 Stability   : testing
 Portability : Linux
 
-
 -}
-module IDiag 
+{-# LANGUAGE FlexibleInstances #-}
+module IDiag
 where
 
 -- import Generated
@@ -22,7 +22,7 @@ import Control.Monad
 -- for Convertable
 import System.Linux.Netlink
 -- For TcpState, FFI generated
-import Generated (IDiagExt)
+import Generated (IDiagExt, TcpState)
 
 import Data.Bits (shiftL, )
 import Data.Bits ((.|.))
@@ -40,6 +40,13 @@ data InetDiagSockId  = InetDiagSockId  {
 
 } deriving (Eq, Show)
 
+-- converts TcpState into Bits
+shiftCustom :: TcpState -> Word32
+shiftCustom state = shiftL 1 (fromEnum state - 1)
+
+tcpStatesToWord :: [TcpState] -> Word32
+tcpStatesToWord [] = 0
+tcpStatesToWord (x:xs) = (shiftCustom x) .|. (tcpStatesToWord xs)
 
 -- This generates a response of inet_diag_msg
 -- rename to answer ?
@@ -56,6 +63,12 @@ data InetDiagMsg = InetDiagMsg {
   , idiag_inode :: Word32
 } deriving (Eq, Show)
 
+-- see https://stackoverflow.com/questions/8633470/illegal-instance-declaration-when-declaring-instance-of-isstring
+{-# LANGUAGE FlexibleInstances #-}
+
+instance Convertable [TcpState] where
+  getPut = putWord32be . tcpStatesToWord
+  getGet _ = []
 
 instance Convertable InetDiagMsg where
   getPut = putInetDiagMsg
@@ -66,17 +79,15 @@ instance Convertable InetDiagMsg where
 data SockDiagRequest = SockDiagRequest {
   sdiag_family :: Word8 -- ^AF_INET6 or AF_INET (TODO rename)
 -- It should be set to the appropriate IPPROTO_* constant for AF_INET and AF_INET6, and to 0 otherwise.
-  , sdiag_protocol :: Word8 -- always TCP ?
+  , sdiag_protocol :: Word8 -- ^IPPROTO_XXX always TCP ?
   -- IPv4/v6 specific structure
-  -- InetDiagInfo
   , idiag_ext :: IDiagExt -- ^query extended info (word8 size)
   , req_pad :: Word8        -- ^ padding for backwards compatibility with v1
 
   -- c la ou ca foire
   -- in principle, any kind of state, but for now we only deal with TcpStates
-  , idiag_states :: [TcpState] -- ^States to dump (based on TcpDump)
-    -- struct inet_diag_sockid id;
-  , diag_sockid :: InetDiagSockId
+  , idiag_states :: [TcpState] -- ^States to dump (based on TcpDump) Word32
+  , diag_sockid :: InetDiagSockId -- ^inet_diag_sockid 
 } deriving (Eq, Show)
 
 {- |Typeclase used by the system. Basically 'Storable' for 'Get' and 'Put'
@@ -98,32 +109,26 @@ getSockDiagRequestHeader :: Get SockDiagRequest
 getSockDiagRequestHeader = do
     addressFamily <- getWord8 -- AF_INET for instance
     protocol <- getWord8
-    -- TODO convert it ?
-    -- extended <- getWord8
-    -- TODO la ca foire
-    -- let extended = InetDiagNone
     extended <- getWord32host
     _pad <- getWord8
+    -- TODO discarded later
     states <- getWord32host
     _sockid <- getInetDiagSockid
-    -- TODO the conversion
-    -- TcpMaxStates
-    return $ SockDiagRequest addressFamily protocol (toEnum (fromIntegral extended) :: IDiagExt) _pad states _sockid
+    -- TODO reestablish states
+    return $ SockDiagRequest addressFamily protocol (toEnum (fromIntegral extended) :: IDiagExt) _pad [] _sockid
 
 -- |'Put' function for 'GenlHeader'
 putSockDiagRequestHeader :: SockDiagRequest -> Put
-putSockDiagRequestHeader hdr = do
-  let
-    idiag
-  in
-  putWord8 $ sdiag_family hdr
-  putWord8 $ sdiag_protocol hdr
+putSockDiagRequestHeader request = do
+  -- let states = tcpStatesToWord $ idiag_states request
+  putWord8 $ sdiag_family request
+  putWord8 $ sdiag_protocol request
   -- extended
-  putWord8 $ fromIntegral $ fromEnum $ idiag_ext hdr
-  putWord8 $ req_pad hdr
+  putWord8 $ fromIntegral $ fromEnum $ idiag_ext request
+  putWord8 $ req_pad request
   -- TODO check endianness
-  putWord32be $ idiag_states hdr
-  putInetDiagSockid $ diag_sockid hdr
+  putWord32be $ idiag_states request
+  putInetDiagSockid $ diag_sockid request
 
 getInetDiagMsg :: Get InetDiagMsg
 getInetDiagMsg  = do

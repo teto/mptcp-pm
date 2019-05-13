@@ -27,7 +27,7 @@ import Data.Bits ()
 -- For anonymous C enums, we can use , Bits
 {#enum TCP_ESTABLISHED as TcpState {underscoreToCase} deriving (Eq, Show)#}
 
--- copy from include/uapi/linux/mptcp.h
+-- from include/uapi/linux/mptcp.h
 #include <linux/mptcp.h>
 
 -- {underscoreToCase}
@@ -47,7 +47,7 @@ mptcpGenlCmdGrpName = {#const MPTCP_GENL_CMD_GRP_NAME #}
 mptcpGenlEvGrpName :: String
 mptcpGenlEvGrpName  = {#const MPTCP_GENL_EV_GRP_NAME #}
 
--- copy from include/uapi/linux/inet_diag.h
+-- from include/uapi/linux/inet_diag.h
 #include <linux/inet_diag.h>
 
 -- let it use Bits as well as fNLM_F_REQUEST so that I can chain them with .|.
@@ -56,7 +56,6 @@ mptcpGenlEvGrpName  = {#const MPTCP_GENL_EV_GRP_NAME #}
 
 #include <linux/sock_diag.h>
 
--- cccaa
 msgTypeSockDiag :: MessageType
 msgTypeSockDiag  = {#const SOCK_DIAG_BY_FAMILY #}
 

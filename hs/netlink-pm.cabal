@@ -31,6 +31,13 @@ common shared-properties
     ghc-options: -Wall -Werror -fno-warn-unused-binds -fno-warn-unused-matches
     if flag(Dev)
         build-depends: netlink>= 1.1.1.1
+    -- for the generated.hsc , c2hs seems good to generate headers
+    Build-tools:       hsc2hs, c2hs
+    -- apparently this just helps getting a better error messages
+    Includes:          tcp_states.h, linux/sock_diag.h, linux/inet_diag.h
+    Other-modules:     Generated, IDiag
+    -- TODO try to pass it from CLI instead
+    include-dirs: .
 
 
 
@@ -39,21 +46,32 @@ executable daemon
     -- ghc-options: -i/home/teto/netlink-hs
     ghc-options: -Wall -Werror -fno-warn-unused-binds -fno-warn-unused-matches
     main-is: daemon.hs
-    default-language: Haskell2010
-    -- for the generated.hsc , c2hs seems good to generate headers
-    Build-tools:       hsc2hs, c2hs
-    -- apparently this just helps getting a better error messages
-    Includes:          tcp_states.h, linux/sock_diag.h, linux/inet_diag.h
-    Other-modules:     Generated, IDiag
-    -- TODO try to pass it from CLI instead
-    include-dirs: .
     -- extra-packages: netlink
     -- extra-lib-dirs: /home/teto/netlink-hs
-  -- hs-source-dirs: Utils
+    -- hs-source-dirs: Utils
 
-executable test
+executable short
     import: shared-properties
     main-is: test.hs
-    -- Build-tools:       hsc2hs, c2hs
-    -- Includes:          tcp_states.h, linux/sock_diag.h, linux/inet_diag.h
-    -- Other-modules:     Generated, IDiag
+
+library Generated
+    import: shared-properties
+
+Test-Suite test
+  -- 2 types supported, exitcode is based on ... exit codes ....
+  type:               exitcode-stdio-1.0
+  main-is:            test/Main.hs
+  -- test-module:       Detailed
+  hs-source-dirs:     .
+  default-language: Haskell2010
+  -- import: shared-properties
+  Build-tools:       hsc2hs, c2hs
+  Includes:          tcp_states.h, linux/sock_diag.h, linux/inet_diag.h
+  Other-modules:     Generated, IDiag
+  include-dirs:      .
+  build-depends:      base >=4.6
+                     , HUnit
+                     , netlink
+                     , cereal
+                     -- , test-framework
+                     -- , test-framework-hunit

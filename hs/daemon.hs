@@ -94,18 +94,6 @@ instance Show MptcpSocket where
 
 data MetricsSocket = MetricsSocket NetlinkSocket Word16
 
--- inspired by NoData80211
--- data NoDataMptcp = NoDataMptcp deriving (Eq, Show)
--- instance Convertable NoDataMptcp where
---   getPut _ = return ()
---   getGet _ = return NoDataMptcp
-
-
-
-instance Bits TcpSate where
-  shiftL x = shiftL 1 (fromEnum x - 1)
-
-
 iperfHardcodedSrcPort :: Word16
 iperfHardcodedSrcPort = 5500
 

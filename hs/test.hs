@@ -2,9 +2,9 @@ import Prelude hiding (length, concat)
 -- import Options.Applicative hiding (value)
 -- import qualified Options.Applicative (value)
 
--- import Generated
+import Generated
 import Data.Bits ()
-import Data.Bits (( .|.), Bits, shiftL)
+import Data.Bits (( .|.), shiftL)
 -- import System.Linux.Netlink hiding (makeSocket)
 -- import System.Linux.Netlink (query, bufferSize)
 -- import System.Linux.Netlink.GeNetlink
@@ -14,6 +14,8 @@ import Data.Bits (( .|.), Bits, shiftL)
 -- import Data.Word (Word8, Word16, Word32)
 -- import Data.List (intercalate)
 -- import Data.Serialize.Put
+
+import IDiag
 
 -- import Data.ByteString as BS hiding (putStrLn, putStr, map, intercalate)
 -- import qualified Data.ByteString.Lazy as BSL
@@ -39,91 +41,9 @@ import Data.Bits (( .|.), Bits, shiftL)
 --     Nothing -> error $ "Could not find family " ++ mptcpGenlName
 --     Just fid -> return  (MptcpSocket sock (trace ("family id"++ show fid ) fid))
 
--- For anonymous C enums, we can use , Bits
-data TcpState = TcpEstablished
-              | TcpSynSent
-              | TcpSynRecv
-              | TcpFinWait1
-              | TcpFinWait2
-              | TcpTimeWait
-              | TcpClose
-              | TcpCloseWait
-              | TcpLastAck
-              | TcpListen
-              | TcpClosing
-              | TcpNewSynRecv
-              | TcpMaxStates
-  deriving (Eq,Show)
-instance Enum TcpState where
-  succ TcpEstablished = TcpSynSent
-  succ TcpSynSent = TcpSynRecv
-  succ TcpSynRecv = TcpFinWait1
-  succ TcpFinWait1 = TcpFinWait2
-  succ TcpFinWait2 = TcpTimeWait
-  succ TcpTimeWait = TcpClose
-  succ TcpClose = TcpCloseWait
-  succ TcpCloseWait = TcpLastAck
-  succ TcpLastAck = TcpListen
-  succ TcpListen = TcpClosing
-  succ TcpClosing = TcpNewSynRecv
-  succ TcpNewSynRecv = TcpMaxStates
-  succ TcpMaxStates = error "TcpState.succ: TcpMaxStates has no successor"
 
-  pred TcpSynSent = TcpEstablished
-  pred TcpSynRecv = TcpSynSent
-  pred TcpFinWait1 = TcpSynRecv
-  pred TcpFinWait2 = TcpFinWait1
-  pred TcpTimeWait = TcpFinWait2
-  pred TcpClose = TcpTimeWait
-  pred TcpCloseWait = TcpClose
-  pred TcpLastAck = TcpCloseWait
-  pred TcpListen = TcpLastAck
-  pred TcpClosing = TcpListen
-  pred TcpNewSynRecv = TcpClosing
-  pred TcpMaxStates = TcpNewSynRecv
-  pred TcpEstablished = error "TcpState.pred: TcpEstablished has no predecessor"
-
-  enumFromTo from to = go from
-    where
-      end = fromEnum to
-      go v = case compare (fromEnum v) end of
-                 LT -> v : go (succ v)
-                 EQ -> [v]
-                 GT -> []
-
-  enumFrom from = enumFromTo from TcpMaxStates
-
-  fromEnum TcpEstablished = 1
-  fromEnum TcpSynSent = 2
-  fromEnum TcpSynRecv = 3
-  fromEnum TcpFinWait1 = 4
-  fromEnum TcpFinWait2 = 5
-  fromEnum TcpTimeWait = 6
-  fromEnum TcpClose = 7
-  fromEnum TcpCloseWait = 8
-  fromEnum TcpLastAck = 9
-  fromEnum TcpListen = 10
-  fromEnum TcpClosing = 11
-  fromEnum TcpNewSynRecv = 12
-  fromEnum TcpMaxStates = 13
-
-  toEnum 1 = TcpEstablished
-  toEnum 2 = TcpSynSent
-  toEnum 3 = TcpSynRecv
-  toEnum 4 = TcpFinWait1
-  toEnum 5 = TcpFinWait2
-  toEnum 6 = TcpTimeWait
-  toEnum 7 = TcpClose
-  toEnum 8 = TcpCloseWait
-  toEnum 9 = TcpLastAck
-  toEnum 10 = TcpListen
-  toEnum 11 = TcpClosing
-  toEnum 12 = TcpNewSynRecv
-  toEnum 13 = TcpMaxStates
-  toEnum unmatched = error ("TcpState.toEnum: Cannot match " ++ show unmatched)
-
-instance Bits TcpState where
-  shiftL x = shiftL 1 (fromEnum x - 1)
+-- instance Bits TcpState where
+--   shiftL x = shiftL (fromEnum x - 1)
 
 
 -- in fact it's 1 << fromEnum TcpListen)
@@ -139,9 +59,7 @@ main = let
     toto = (fromEnum TcpListen) .|. (fromEnum TcpEstablished)
     zut = shiftL (fromEnum TcpListen)
   in do
-  putStrLn "making socket"
-  -- makeMptcpSocket
-  putStrLn $ "TcpListen =" ++ show (fromEnum TcpListen)
-  putStrLn $ "TcpEstablished =" ++ show (fromEnum TcpEstablished)
-  putStrLn $ show toto
+  putStrLn $ "TcpListen =" ++ show (tcpStatesToWord [TcpListen])
+  putStrLn $ "TcpEstablished =" ++ show (tcpStatesToWord [TcpEstablished])
+  putStrLn $ "combo !!" ++ show (tcpStatesToWord [TcpEstablished, TcpListen])
   putStrLn "finished"
