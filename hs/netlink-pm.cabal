@@ -41,6 +41,8 @@ common shared-properties
 
 
 
+-- monitor new mptcp connections
+-- and delegate the behavior to a monitor
 executable daemon
     import: shared-properties
     -- ghc-options: -i/home/teto/netlink-hs
@@ -50,12 +52,19 @@ executable daemon
     -- extra-lib-dirs: /home/teto/netlink-hs
     -- hs-source-dirs: Utils
 
+-- will monitor a specific mptcp connection
+executable monitor
+    import: shared-properties
+    main-is: monitor.hs
+
+-- for short tests
 executable short
     import: shared-properties
     main-is: test.hs
 
 library Generated
     import: shared-properties
+
 
 Test-Suite test
   -- 2 types supported, exitcode is based on ... exit codes ....

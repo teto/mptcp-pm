@@ -34,6 +34,7 @@ import qualified Options.Applicative (value)
 
 -- For TcpState, FFI generated
 import Generated
+import Mptcp
 
 -- for replicateM
 -- import Control.Monad
@@ -61,6 +62,7 @@ import Data.Bits ((.|.))
 import Data.Serialize.Get
 import Data.Serialize.Put
 import IDiag
+import Mptcp
 
 -- import Data.Either (fromRight)
 
@@ -249,10 +251,6 @@ dumpMptcpCommands x = dumpCommand x ++ "\n" ++ dumpMptcpCommands (succ x)
 
 
 
-tcpMetricsGenlName :: String
-tcpMetricsGenlName = "tcp_metrics"
-tcpMetricsGenlVer :: Word8
-tcpMetricsGenlVer = 1
 
 data Sample = Sample
   { command    :: String
