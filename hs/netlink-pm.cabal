@@ -35,7 +35,7 @@ common shared-properties
     Build-tools:       hsc2hs, c2hs
     -- apparently this just helps getting a better error messages
     Includes:          tcp_states.h, linux/sock_diag.h, linux/inet_diag.h
-    Other-modules:     Generated, IDiag
+    Other-modules:     Generated, IDiag, Mptcp
     -- TODO try to pass it from CLI instead
     include-dirs: .
 
@@ -50,7 +50,7 @@ executable daemon
     main-is: daemon.hs
     -- extra-packages: netlink
     -- extra-lib-dirs: /home/teto/netlink-hs
-    -- hs-source-dirs: Utils
+    hs-source-dirs: .
 
 -- will monitor a specific mptcp connection
 executable monitor
