@@ -5,6 +5,8 @@ Maintainer  : matt
 Stability   : testing
 Portability : Linux
 
+Monitors new MPTCP connections and runs a specific monitor instance
+
 
 To interact
 GENL_ADMIN_PERM
@@ -13,6 +15,9 @@ The operation requires the CAP_NET_ADMIN privilege
 
 
 Helpful links:
+
+- inspired by https://stackoverflow.com/questions/6009384/exception-handling-in-haskell
+- super nice tutorial on optparse applicative: https://github.com/pcapriotti/optparse-applicative#regular-options
 - How to use Map https://lotz84.github.io/haskellbyexample/ex/maps
 = How to update a single field https://stackoverflow.com/questions/14955627/shorthand-way-for-assigning-a-single-field-in-a-record-while-copying-the-rest-o
 - get tcp stats via netlink https://www.vividcortex.com/blog/2014/09/22/using-netlink-to-optimize-socket-statistics/
@@ -21,7 +26,9 @@ eNETLINK_INET_DIAG
 http://kristrev.github.io/2013/07/26/passive-monitoring-of-sockets-on-linux
 
 iproute2/misc/ss.c to see how `ss` utility interacts with the kernel
+-- https://downloads.haskell.org/~ghc/latest/docs/html/libraries/process-1.6.5.0/System-Process.html
 
+- https://lotz84.github.io/haskellbyexample/ex/timers
 -}
 
 -- !/usr/bin/env nix-shell
@@ -34,7 +41,8 @@ import qualified Options.Applicative (value)
 
 -- For TcpState, FFI generated
 import Generated
-import Mptcp
+import IDiag
+import Mptcp ()
 
 -- for replicateM
 -- import Control.Monad
@@ -46,11 +54,9 @@ import System.Linux.Netlink hiding (makeSocket)
 -- import System.Linux.Netlink (query, Packet(..))
 import System.Linux.Netlink.GeNetlink
 import System.Linux.Netlink.Constants
--- for pX and gY
 -- import System.Linux.Netlink.Helpers
 import System.Log.FastLogger
 
--- https://downloads.haskell.org/~ghc/latest/docs/html/libraries/process-1.6.5.0/System-Process.html
 import System.Process
 import System.Linux.Netlink.GeNetlink.Control as C
 import Data.Word (Word8, Word16, Word32)
@@ -61,8 +67,6 @@ import Data.Bits ((.|.))
 -- imported from cereal  hiding (runGet)
 import Data.Serialize.Get
 import Data.Serialize.Put
-import IDiag
-import Mptcp
 
 -- import Data.Either (fromRight)
 
@@ -89,38 +93,12 @@ import qualified Data.Map as Map
 magicSeq :: Word32
 magicSeq = 123456
 
--- how can I retreive the word16 without pattern matching ?
-data MptcpSocket = MptcpSocket NetlinkSocket Word16
-instance Show MptcpSocket where
-  show sock = let (MptcpSocket nlSock fid) = sock in ("Mptcp netlink socket: " ++ show fid)
 
-data MetricsSocket = MetricsSocket NetlinkSocket Word16
 
 iperfHardcodedSrcPort :: Word16
 iperfHardcodedSrcPort = 5500
 
--- isIPv4address
--- rename  or extend subflow
-data TcpConnection = TcpConnection {
-  -- TODO use libraries to deal with that ? filter from the command line for instance ?
-  srcIp :: String
-  , dstIp :: String
-  , srcPort :: Word16
-  , dstPort :: Word16
-  -- , localId :: Word8
-  -- , remoteId :: Word8
-  -- add loc id
-  -- add TcpMetrics member
 
--- TODO derive Eq as well
-} deriving Show
-
--- instance Show TcpConnection where
---   show (TcpConnection srcIp dstIP srcPort dstPort) = "Src IP: " ++ srcIp
-
-newtype MptcpConnection = MptcpConnection {
-  subflows :: [TcpConnection]
-} deriving Show
 
 data MyState = MyState {
   -- Use a map instead to map on token
@@ -142,95 +120,6 @@ type MptcpPacket = GenlPacket NoData
 -- data MptcpData = MptcpData {
 --     mptcpAttributes :: [MptcpAttr]
 --   } deriving (Eq)
-data MptcpAttributes = MptcpAttributes {
-    connToken :: Word32
-    , localLocatorID :: Maybe Word8
-    , remoteLocatorID :: Maybe Word8
-    , family :: Word16
-    -- |Pointer to the Attributes map used to build this struct. This is purely
-    -- |for forward compat, please file a feature report if you have to use this.
-    , staSelf       :: Attributes
-} deriving (Show, Eq, Read)
-
-data MptcpAttribute =
-    MptcpAttrToken MptcpToken |
-    -- v4 or v6, AddressFamily is a netlink def
-    SubflowFamily AddressFamily |
-    -- remote/local ?
-    RemoteLocatorId Word8 |
-    LocalLocatorId Word8 |
-    MptcpAddr ByteString |
-    MptcpIntf Word8
-
-type MptcpToken = Word32
-type LocId    = Word8
--- type MptcpFamily    = Word16
-
-
--- TODO prefix with 'e' for enum
--- Map.lookup (fromEnum attr) m
-getAttribute :: MptcpAttr -> Attributes -> Maybe MptcpAttribute
-getAttribute attr m
-    | attr == MPTCP_ATTR_TOKEN = Nothing
-    | otherwise = Nothing
-
--- getAttribute :: (Int, ByteString) -> CtrlAttribute
--- getAttribute (i, x) = fromMaybe (CTRL_ATTR_UNKNOWN i x) $makeAttribute i x
-
--- getW16 :: ByteString -> Maybe Word16
--- getW16 x = e2M (runGet g16 x)
-
--- getW32 :: ByteString -> Maybe Word32
--- getW32 x = e2M (runGet g32 x)
-
--- "either2Maybe"
-e2M :: Either a b -> Maybe b
-e2M (Right x) = Just x
-e2M _ = Nothing
-
--- TODO use e2m
-makeAttribute :: Int -> ByteString -> Maybe MptcpAttribute
-makeAttribute i val
-    | i == fromEnum MPTCP_ATTR_TOKEN = Just (MptcpAttrToken $ readToken $ Just val)
-    -- TODO fix $ Just fromByteString val  )
-    | i == fromEnum MPTCP_ATTR_FAMILY = Just (SubflowFamily $ eAF_INET)
-    -- this is a bytestring
-    | i == fromEnum MPTCP_ATTR_DADDR4 = Just (MptcpAddr $ val )
-    -- | i == fromEnum MPTCP_ATTR_LOC_ID = Just (RemoteLocatorId $ val )
-    -- | i == fromEnum MPTCP_ATTR_LOC_ID = Just (MptcpAddr $ val )
-    | i == fromEnum MPTCP_ATTR_IF_IDX =
-             case runGet getWord8 val of
-                Right x -> Just $ MptcpIntf x
-                _ -> Nothing
-    | otherwise = error "Unsupported attribute"
-        -- Just (MptcpIntf $ fromMaybe $ e2M () )
-
-    -- | i == fromEnum MPTCP_ATTR_REM_ID = Just (MptcpAddr $ getWord8 )
-    -- | i == MPTCP_ATTR_FAMILY = Just (MptcpAttrToken $ runGet getWord32le val)
-
-dumpAttribute :: Int -> ByteString -> String
-dumpAttribute attr value = let
-  -- enumFromTo ?
-  attrStr = case toEnum (fromIntegral attr) of
-      MPTCP_ATTR_UNSPEC -> "UNSPECIFIED"
-      MPTCP_ATTR_TOKEN -> "token: " ++ show (readToken $ Just value)
-      MPTCP_ATTR_FAMILY -> "family: " ++ show value
-      MPTCP_ATTR_LOC_ID -> "Locator id: " ++ show (readLocId $ Just value)
-      MPTCP_ATTR_REM_ID -> "Remote id: " ++ show value
-      MPTCP_ATTR_SADDR4 -> "ipv4.src: " ++ toIpv4 value
-      MPTCP_ATTR_SADDR6 -> "ipv6.src: " ++ show value
-      MPTCP_ATTR_DADDR4 -> "ipv4.dest: " ++ toIpv4 value
-      MPTCP_ATTR_DADDR6 -> "ipv6.dest: " ++ show value
-      MPTCP_ATTR_SPORT -> "sport: " ++ show (getPort value)
-      MPTCP_ATTR_DPORT -> "dport: " ++ show (getPort value)
-      MPTCP_ATTR_BACKUP -> "backup" ++ show value
-      MPTCP_ATTR_ERROR -> "Error: " ++ show value
-      MPTCP_ATTR_FLAGS -> "Flags: " ++ show value
-      MPTCP_ATTR_TIMEOUT -> "timeout: " ++ show value
-      MPTCP_ATTR_IF_IDX -> "ifId: " ++ show value
-      -- _ -> "unhandled case"
-  in
-    attrStr
 
 
 -- https://stackoverflow.com/questions/18606827/how-to-write-customised-show-function-in-haskell
@@ -305,6 +194,22 @@ makeMetricsSocket = do
     -- NETLINK_SOCK_DIAG == NETLINK_INET_DIAG
   sock <- makeSocketGeneric eNETLINK_SOCK_DIAG
   return sock
+
+--createProcess 
+startMonitor :: MptcpToken -> CreateProcess
+startMonitor token =
+  let
+    params = proc "daemon" [ show token ]
+    -- todo pass the token via the environment
+    newParams = params {
+        -- cmdspec = RawCommand "monitor" [ show token ] 
+        new_session = True
+        -- cwd
+        -- env
+    }
+  in
+    -- return "toto"
+    newParams
 
 
 runMptcpNumerics :: IO String
@@ -546,6 +451,8 @@ inspectAnswer (Packet _ (GenlData hdr NoData) attributes) = let
 
 inspectAnswer pkt = putStrLn $ "Inspecting answer:\n" ++ showPacket pkt
 
+
+--
 onNewConnection :: MptcpSocket -> Attributes -> IO ()
 onNewConnection sock attributes = do
     -- TODO use getAttribute instead 
@@ -590,26 +497,6 @@ onNewConnection sock attributes = do
 --     -- cmd = genlCmd genlHeader
 --     putStrLn "Genldata"
 
-subflowFromAttributes :: Attributes -> TcpConnection
-subflowFromAttributes attrs =
-  let
-    -- expects a ByteString
-    _srcPort = getPort $ fromJust (Map.lookup (fromEnum MPTCP_ATTR_SPORT) attrs)
-    -- toIpv4 $ fromJust
-    _srcIp =  case (Map.lookup (fromEnum MPTCP_ATTR_SADDR4) attrs) of
-      -- TODO toIpv4 ip
-      Just ip -> toIpv4 ip
-      -- assume v6, throws otherwise
-      -- Nothing -> fromJust (Map.lookup (fromEnum MPTCP_ATTR_SADDR6) attrs)
-      Nothing -> "ipv6 src"
-    _dstPort = getPort $ fromJust (Map.lookup (fromEnum MPTCP_ATTR_DPORT) attrs)
-    _dstIp = case (Map.lookup (fromEnum MPTCP_ATTR_DADDR4) attrs) of
-      Just ip -> toIpv4 ip
-      -- assume v6, throws otherwise
-      -- Nothing -> fromJust (Map.lookup (fromEnum MPTCP_ATTR_SADDR6) attrs)
-      Nothing -> "ipv6 dst"
-  in
-    TcpConnection _srcIp _dstIp _srcPort _dstPort
 
 dispatchPacket :: MyState -> MptcpPacket -> IO MyState
 dispatchPacket oldState (Packet hdr (GenlData genlHeader NoData) attributes) = let
@@ -625,11 +512,11 @@ dispatchPacket oldState (Packet hdr (GenlData genlHeader NoData) attributes) = l
         let subflow = subflowFromAttributes attributes
         let newMptcpConn = MptcpConnection [ subflow ]
         putStrLn $ "Connection created !!\n" ++ showAttributes attributes
-        onNewConnection sock attributes
+        -- TODO filter connections via command line settings
+        -- onNewConnection sock attributes
+        r <- createProces $ startMonitor token
         putStrLn $ "Connection created !!\n" ++ show subflow
-        -- showAttributes attributes
 
-        -- syntax seen at https://stackoverflow.com/questions/14955627/shorthand-way-for-assigning-a-single-field-in-a-record-while-copying-the-rest-o
         let newState = oldState { connections = Map.insert token newMptcpConn (connections oldState) }
         putStrLn $ "New state after creation: " ++ show newState
         return newState
@@ -689,50 +576,23 @@ showErrCode err
 --   ePERM -> "EPERM"
 --   eNOTCONN -> "NOT connected"
 
-
---
 inspectResult :: MyState -> Either String MptcpPacket -> IO()
 inspectResult myState result =  case result of
     Left ex -> putStrLn $ "An error in parsing happened" ++ show ex
     Right myPack -> dispatchPacket myState myPack >> putStrLn "Valid packet"
 
--- CtrlAttrMcastGroup
--- copied from utils/GenlInfo.hs
 doDumpLoop :: MyState -> IO MyState
 doDumpLoop myState = do
     let (MptcpSocket simpleSock fid) = socket myState
-    putStrLn "doDumpLoop"
-    -- TODO do less filtering here ?
-    -- myPack <- trace "recvOne" (recvOne simpleSock :: IO [GenlPacket NoData])
 
-    -- inspired by https://stackoverflow.com/questions/6009384/exception-handling-in-haskell
-    -- to work around "user error (too few bytes       From: demandInput     )"
     results <- recvOne' simpleSock ::  IO [Either String MptcpPacket]
 
     -- TODO retrieve packets
     mapM_ (inspectResult myState) results
 
-    -- ca me retourne un tas de paquet en fait ?
-    -- For a version that ignores the results see mapM_.
-    -- _ <- mapM_ (dispatchPacket mptcpSocket) myPack
-    -- _ <- mapM inspectPacket  pack
     newState <- doDumpLoop myState
     return newState
 
--- regarder dans query/joinMulticastGroup/recvOne
--- doDumpLoop / dumpGeneric
--- why doesnt it complain that
-listenToEvents :: MptcpSocket -> CtrlAttrMcastGroup -> IO ()
-listenToEvents (MptcpSocket sock fid) my_group = do
-  -- joinMulticastGroup  returns IO ()
-  -- TODO should check it works correctly !
-  joinMulticastGroup sock (grpId my_group)
-  putStrLn $ "Joined grp " ++ grpName my_group
-  _ <- doDumpLoop globalState
-  putStrLn "TOTO"
-  where
-    mptcpSocket = MptcpSocket sock fid
-    globalState = MyState mptcpSocket Map.empty
 
 -- testing
 listenToMetricEvents :: NetlinkSocket -> CtrlAttrMcastGroup  -> IO ()
@@ -750,70 +610,6 @@ listenToMetricEvents sock myGroup = do
 createLogger :: IO LoggerSet
 createLogger = newStdoutLoggerSet defaultBufSize
 
-
-
--- where struct inet_diag_sockid is defined as follows:
---     struct inet_diag_sockid {
---         __be16  idiag_sport;
---         __be16  idiag_dport;
---         __be32  idiag_src[4];
---         __be32  idiag_dst[4];
---         __u32   idiag_if;
---         __u32   idiag_cookie[2];
---     };
-
--- data IDiagFamily = AF_INET | AF_INET6
-
--- this is inspired
---  All values are in network byte order.
---  idiag_sport prefix them
-
-
--- TODO generate via FFI ?
-eIPPROTO_TCP :: Word8
-eIPPROTO_TCP = 6
-
--- inspired by http://man7.org/linux/man-pages/man7/sock_diag.7.html
-
-
--- Sends a SockDiagRequest
--- expects INetDiag 
-genQueryPacket :: Packet SockDiagRequest
-genQueryPacket = let
-  -- Mesge type / flags /seqNum /pid
-  flags = (fNLM_F_REQUEST .|. fNLM_F_MATCH .|. fNLM_F_ROOT)
-
-  -- might be a trick with seqnum
-  hdr = Header msgTypeSockDiag flags magicSeq 0
-  -- IPPROTO_TCP = 6,
-  -- -1 => ignore cookie content
-  -- _cookie = [ maxBound :: Word32, maxBound :: Word32]
-  _cookie = [ 0 :: Word32, 0 :: Word32]
-
-  -- TODO hardcoded for now
-  iperfSrcPort = 0
-  iperfDstPort = 0
-  -- iperfSrcPort = iperfHardcodedSrcPort
-  -- iperfDstPort = 5201
-  -- 4 Word32
-  -- ipSrc = [ fromOctetsLE [ 127, 0, 0, 1], 0, 0, 0]
-  -- ipDst = [ fromOctetsLE [ 127, 0, 0, 1], 0, 0, 0]
-  ipSrc = [ 0, 0, 0, 0]
-  ipDst = [ 0, 0, 0, 0]
-  -- 1 => "lo". Check with ip link ?
-  ifIndex = 0
-  diag_req = InetDiagSockId iperfSrcPort iperfDstPort ipSrc ipDst ifIndex _cookie
-
-    -- #define SS_ALL ((1 << SS_MAX) - 1)
-    -- #define SS_CONN (SS_ALL & ~((1<<SS_LISTEN)|(1<<SS_CLOSE)|(1<<SS_TIME_WAIT)|(1<<SS_SYN_RECV)))
-  stateFilter = [TcpEstablished]
-  -- stateFilter = [TcpListen, TcpEstablished, TcpSynSent ]
-  -- InetDiagInfo
-  requestedInfo = InetDiagNone
-  padding = 0 -- useless
-  custom = SockDiagRequest eAF_INET eIPPROTO_TCP requestedInfo padding (stateFilter) diag_req
-  in
-     Packet hdr custom Map.empty
 
 -- for big endian
 -- https://mail.haskell.org/pipermail/beginners/2010-October/005571.html
@@ -853,32 +649,16 @@ inspectIdiagAnswers packets = do
 main :: IO ()
 main = do
 
-  -- super nice tutorial on optparse applicative:
-  -- https://github.com/pcapriotti/optparse-applicative#regular-options
   let mptcpConnections = []
   options <- execParser opts
   logger <- createLogger
   pushLogStr logger (toLogStr "ok")
   putStrLn "dumping important values:"
-  -- putStrLn $ "buffer size " ++ show bufferSize
   putStrLn $ "RESET" ++ show MPTCP_CMD_REMOVE
   putStrLn $ dumpMptcpCommands MPTCP_CMD_UNSPEC
   putStrLn "Creating MPTCP netlink socket..."
   (MptcpSocket sock  fid) <- makeMptcpSocket
-  -- (sockMetrics, fidMetrics) <- makeMetricsSocket
-  --
-  putStrLn "Creating metrics netlink socket..."
-  sockMetrics <- makeMetricsSocket
 
-
-  -- sendPacket
-  sendPacket sockMetrics genQueryPacket >> putStrLn "Sent the TCP SS request"
-
-  -- exported from my own version !!
-  recvMulti sockMetrics >>= inspectIdiagAnswers
-  -- recvOne sockMetrics >>= inspectIdiagAnswers
-
--- NetlinkSocket
   putStr "socket created. MPTCP Family id " >> print fid
   -- putStr "socket created. tcp_metrics Family id " >> print fidMetrics
   -- That's what I should use in fact !! (Word16, [CtrlAttrMcastGroup])
@@ -887,22 +667,9 @@ main = do
   -- mcastMetricGroups <- getMulticastGroups sockMetrics fidMetrics
   mcastMptcpGroups <- getMulticastGroups sock fid
   mapM_ print mcastMptcpGroups
-  -- mapM_ print mcastMetricGroups
 
   -- mapM_ (listenToMetricEvents sockMetrics) mcastMetricGroups
   -- mapM_ (listenToEvents (MptcpSocket sock fid)) mcastMptcpGroups
   -- putStrLn $ " Groups: " ++ unwords ( map grpName mcastMptcpGroups )
   putStrLn "finished"
 
-    -- let flags   = foldr (.|.) 0 [fNLM_F_REQUEST]
-    --     header  = Header eRTM_GETLINK flags 42 0
-    --     message = LinkMsg 0 2 0
-    --     attrs   = empty
-    -- iface <- queryOne sock (Packet header message attrs)
-    -- print (packetMessage iface)
-    -- let attrs = packetAttributes iface
-    -- print $ getLinkAddress attrs
-    -- print $ getLinkBroadcast attr
-
--- dumpNumeric :: ByteString -> IO ()
--- dumpNumeric b = print $ unpack b
