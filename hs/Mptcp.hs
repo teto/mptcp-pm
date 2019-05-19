@@ -18,6 +18,7 @@ import System.Linux.Netlink hiding (makeSocket)
 -- import System.Linux.Netlink (query, Packet(..))
 import System.Linux.Netlink.GeNetlink
 import System.Linux.Netlink.Constants
+import System.Linux.Netlink.GeNetlink.Control
 import Data.ByteString (ByteString, unpack)
 
 -- how can I retreive the word16 without pattern matching ?
@@ -40,7 +41,7 @@ data TcpConnection = TcpConnection {
 -- TODO derive Eq as well
 } deriving Show
 
-newtype MptcpConnection = MptcpConnection {
+data MptcpConnection = MptcpConnection {
   token :: MptcpToken,
   subflows :: [TcpConnection]
 } deriving Show

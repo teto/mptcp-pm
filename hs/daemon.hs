@@ -56,9 +56,9 @@ import System.Linux.Netlink.GeNetlink
 import System.Linux.Netlink.Constants
 -- import System.Linux.Netlink.Helpers
 import System.Log.FastLogger
+import System.Linux.Netlink.GeNetlink.Control
 
 import System.Process
-import System.Linux.Netlink.GeNetlink.Control as C
 import Data.Word (Word8, Word16, Word32)
 import Data.List (intercalate)
 import qualified Data.Bits as Bits -- (shiftL, )

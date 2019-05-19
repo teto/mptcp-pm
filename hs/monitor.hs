@@ -2,6 +2,8 @@ import Options.Applicative hiding (value, ErrorMsg)
 import qualified Options.Applicative (value)
 import qualified System.Environment as Env
 import System.Log.FastLogger ()
+import Data.Word (Word8, Word16, Word32)
+import Mptcp
 
 
 -- instance Show TcpConnection where
