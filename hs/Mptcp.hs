@@ -20,6 +20,13 @@ import System.Linux.Netlink.GeNetlink
 import System.Linux.Netlink.Constants
 import System.Linux.Netlink.GeNetlink.Control
 import Data.ByteString (ByteString, unpack)
+import Data.Maybe (fromJust)
+import Data.ByteString.Conversion (fromByteString)
+
+import Data.Serialize.Get
+import Data.Serialize.Put
+
+import Data.List (intercalate)
 
 -- how can I retreive the word16 without pattern matching ?
 data MptcpSocket = MptcpSocket NetlinkSocket Word16
@@ -41,14 +48,115 @@ data TcpConnection = TcpConnection {
 -- TODO derive Eq as well
 } deriving Show
 
+data MyState = MyState {
+  -- Use a map instead to map on token
+  socket :: MptcpSocket
+  , connections :: Map.Map MptcpToken MptcpConnection
+  -- TODO pass the socket as well ?
+} deriving Show
+
+type MptcpPacket = GenlPacket NoData
+
 data MptcpConnection = MptcpConnection {
   token :: MptcpToken,
   subflows :: [TcpConnection]
 } deriving Show
 
+getPort :: ByteString -> Word16
+getPort val =
+  -- decode (BSL.fromStrict value) :: Word16
+  -- runGet getWord16le (BSL.fromStrict val)
+  -- runGet getWord16le val
+  fromJust $ fromByteString val
+  -- getWord16le val
+  -- runGet getWord16le val
+
+readToken :: Maybe ByteString -> MptcpToken
+readToken maybeVal = case maybeVal of
+  Nothing -> error "Missing token"
+  Just val -> case ( runGet getWord32le val) of
+    Left err -> error "could not decode"
+    Right token -> token
+
+readLocId :: Maybe ByteString -> LocId
+readLocId maybeVal = case maybeVal of
+  Nothing -> error "Missing locator id"
+  Just val -> fromJust $ fromByteString val
+  -- runGet getWord8 val
+
+inspectResult :: MyState -> Either String MptcpPacket -> IO()
+inspectResult myState result =  case result of
+    Left ex -> putStrLn $ "An error in parsing happened" ++ show ex
+    -- Right myPack -> dispatchPacket myState myPack >> putStrLn "Valid packet"
+    Right myPack ->  putStrLn "Valid packet"
+
+-- dispatchPacket :: MyState -> MptcpPacket -> IO MyState
+-- dispatchPacket oldState (Packet hdr (GenlData genlHeader NoData) attributes) = let
+--     cmd = genlCmd genlHeader
+--     (MyState sock conns) = oldState
+
+--     -- i suppose token is always available right ?
+--     token = readToken $ Map.lookup (fromEnum MPTCP_ATTR_TOKEN) attributes
+--     mptcpConn = Map.lookup token (connections oldState)
+--   in
+--     case toEnum (fromIntegral cmd) of
+--       MPTCP_EVENT_CREATED -> do
+--         putStrLn $ "Connection created !!\n" ++ showAttributes attributes
+--         -- TODO filter connections via command line settings
+--         -- onNewConnection sock attributes
+--         return newState
+
+--       MPTCP_EVENT_ESTABLISHED -> do
+--         putStrLn "Connection established !"
+--         return oldState
+
+--       -- this might be true for subflow
+--       MPTCP_EVENT_CLOSED -> do
+--         -- case mptcpConn of
+--         --   Nothing -> putStrLn "Not found"
+--         --   Just
+--         putStrLn "Connection closed, deleting token "
+--         let newState = oldState { connections = Map.delete token (connections oldState) }
+--         putStrLn $ "New state" ++ show newState
+--         return newState
+--       MPTCP_EVENT_SUB_ESTABLISHED -> do
+--         let subflow = subflowFromAttributes attributes
+--         putStrLn "Subflow established"
+--         case mptcpConn of
+--             Nothing -> putStrLn "No connection with this token" >> return oldState
+--             Just con -> do
+--                 let newCon = con { subflows = subflows con ++ [subflow] }
+--                 let newState = oldState { connections = Map.insert token newCon (connections oldState) }
+--                 return newState
+--       -- TODO remove
+--       MPTCP_EVENT_SUB_CLOSED -> putStrLn "Subflow closed" >> return oldState
+--       MPTCP_CMD_EXIST -> putStrLn "this token exists" >> return oldState
+--       _ -> putStrLn "undefined event !!" >> return oldState
+
+
+-- -- dispatchPacket sock (ErrorMsg err) attributes) = let
+-- dispatchPacket s (DoneMsg err) =
+--   putStrLn "Done msg" >> return s
+
+
+-- dispatchPacket s (ErrorMsg hdr errCode errPacket) = do
+--   putStrLn $ "Error msg of type " ++ showErrCode errCode ++ " Packet content:\n" ++ show errPacket
+--   return s
+
+
+doDumpLoop :: MyState -> IO MyState
+doDumpLoop myState = do
+    let (MptcpSocket simpleSock fid) = socket myState
+
+    results <- recvOne' simpleSock ::  IO [Either String MptcpPacket]
+
+    -- TODO retrieve packets
+    mapM_ (inspectResult myState) results
+
+    newState <- doDumpLoop myState
+    return newState
+
 -- regarder dans query/joinMulticastGroup/recvOne
--- doDumpLoop / dumpGeneric
--- why doesnt it complain that
 listenToEvents :: MptcpSocket -> CtrlAttrMcastGroup -> IO ()
 listenToEvents (MptcpSocket sock fid) my_group = do
   -- joinMulticastGroup  returns IO ()
@@ -89,6 +197,9 @@ data MptcpAttribute =
 type MptcpToken = Word32
 type LocId    = Word8
 -- type MptcpFamily    = Word16
+
+toIpv4 :: ByteString -> String
+toIpv4 val = Data.List.intercalate "." ( map show (unpack val))
 
 subflowFromAttributes :: Attributes -> TcpConnection
 subflowFromAttributes attrs =

@@ -69,6 +69,7 @@ in
     export PATH="${my_nvim}/bin:$PATH"
 
     echo "to regenerate C bindings"
+    echo "make headers_install in the linux kernel"
     echo "cabal clean"
     echo "cabal configure --package-db /home/teto/netlink-hs/dist/package.conf.inplace --extra-include-dirs=/home/teto/mptcp2/build/usr/include -v3"
 

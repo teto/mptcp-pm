@@ -60,7 +60,6 @@ import System.Linux.Netlink.GeNetlink.Control
 
 import System.Process
 import Data.Word (Word8, Word16, Word32)
-import Data.List (intercalate)
 import qualified Data.Bits as Bits -- (shiftL, )
 import Data.Bits ((.|.))
 
@@ -99,15 +98,10 @@ iperfHardcodedSrcPort :: Word16
 iperfHardcodedSrcPort = 5500
 
 
+monitorConnection :: MptcpToken
+monitorConnection token =
+  putStrLn "Monitoring a connection"
 
-data MyState = MyState {
-  -- Use a map instead to map on token
-  socket :: MptcpSocket
-  , connections :: Map.Map MptcpToken MptcpConnection
-  -- TODO pass the socket as well ?
-} deriving Show
-
-type MptcpPacket = GenlPacket NoData
 
 -- inspired by CtrlPacket
   -- token :: MptcpToken
@@ -224,7 +218,6 @@ runMptcpNumerics  =
 
 
 -- TODO merge default attributes
--- explain what "dump" does
 -- todo pass a list of (Int, Bytestring) and build the map with fromList ?
 getRequestPacket :: Word16 -> MptcpGenlEvent -> Bool -> Attributes -> GenlPacket NoData
 getRequestPacket fid cmd dump attrs =
@@ -244,35 +237,9 @@ getRequestPacket fid cmd dump attrs =
 --   System.Linux.Netlink.ErrorMsg -> error "error msg"
 -- clampWindowRequest
 
-toIpv4 :: ByteString -> String
-toIpv4 val = Data.List.intercalate "." ( map show (unpack val))
 
 
 -- TODO convert port
--- t = BS.pack [ 232, 229 ]
--- Data.ByteString.Conversion.fromByteString t :: Maybe Data.Word.Word16
-
-getPort :: ByteString -> Word16
-getPort val =
-  -- decode (BSL.fromStrict value) :: Word16
-  -- runGet getWord16le (BSL.fromStrict val)
-  -- runGet getWord16le val
-  fromJust $ fromByteString val
-  -- getWord16le val
-  -- runGet getWord16le val
-
-readToken :: Maybe ByteString -> MptcpToken
-readToken maybeVal = case maybeVal of
-  Nothing -> error "Missing token"
-  Just val -> case ( runGet getWord32le val) of
-    Left err -> error "could not decode"
-    Right token -> token
-
-readLocId :: Maybe ByteString -> LocId
-readLocId maybeVal = case maybeVal of
-  Nothing -> error "Missing locator id"
-  Just val -> fromJust $ fromByteString val
-  -- runGet getWord8 val
 
 
 
@@ -514,10 +481,11 @@ dispatchPacket oldState (Packet hdr (GenlData genlHeader NoData) attributes) = l
         putStrLn $ "Connection created !!\n" ++ showAttributes attributes
         -- TODO filter connections via command line settings
         -- onNewConnection sock attributes
-        r <- createProces $ startMonitor token
-        putStrLn $ "Connection created !!\n" ++ show subflow
+        forkIO 
+        -- r <- createProces $ startMonitor token
+        -- putStrLn $ "Connection created !!\n" ++ show subflow
 
-        let newState = oldState { connections = Map.insert token newMptcpConn (connections oldState) }
+        -- let newState = oldState { connections = Map.insert token newMptcpConn (connections oldState) }
         putStrLn $ "New state after creation: " ++ show newState
         return newState
 
