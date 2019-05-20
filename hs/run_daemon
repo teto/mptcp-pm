@@ -2,7 +2,7 @@
 function buildNrun() {
 	cabal build -v
 	if [ $? -eq 0 ]; then
-		sudo ./daemon test
+		sudo ./daemon daemon
 	fi
 }
 

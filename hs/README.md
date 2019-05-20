@@ -18,9 +18,13 @@ AF_INET => netlink family 2
 # Compilation
 
 With a custom netlink and kernel
+Compile the custom netlink library with
+```
+$ cabal configure --enable-library-profiling
+```
 ```
 kernel $ make headers_install
-$ cabal configure --package-db /home/teto/netlink-hs/dist/package.conf.inplace --extra-include-dirs=/home/teto/mptcp2/build/usr/include -v3
+$ cabal configure --package-db /home/teto/netlink-hs/dist/package.conf.inplace --extra-include-dirs=/home/teto/mptcp2/build/usr/include -v3 --enable-profiling
 ```
 
 
@@ -32,6 +36,8 @@ $ cabal run test
 
 or
 $ buildNRun
+To print a stacktrace
+cabal run daemon toto -- +RTS -xc
 
 In a shell:
 `$ nix run nixpkgs.iperf -c iperf -s`

@@ -13,6 +13,8 @@ where
 -- import Generated
 import Data.Word (Word8, Word16, Word32)
 
+import Prelude hiding (length, concat)
+
 import Data.Serialize.Get
 import Data.Serialize.Put
 
@@ -21,11 +23,20 @@ import Control.Monad
 
 -- for Convertable
 import System.Linux.Netlink
+import System.Linux.Netlink.Constants
 -- For TcpState, FFI generated
-import Generated (IDiagExt, TcpState)
+import Generated
+-- (IDiagExt, TcpState, msgTypeSockDiag)
 
 import qualified Data.Bits as B
 import Data.Bits ((.|.))
+import qualified Data.Map as Map
+
+
+-- iproute uses this seq number #define MAGIC_SEQ 123456
+magicSeq :: Word32
+magicSeq = 123456
+
 
 data InetDiagSockId  = InetDiagSockId  {
   sport :: Word16
@@ -103,7 +114,6 @@ data SockDiagRequest = SockDiagRequest {
   , idiag_ext :: IDiagExt -- ^query extended info (word8 size)
   , req_pad :: Word8        -- ^ padding for backwards compatibility with v1
 
-  -- c la ou ca foire
   -- in principle, any kind of state, but for now we only deal with TcpStates
   , idiag_states :: [TcpState] -- ^States to dump (based on TcpDump) Word32
   , diag_sockid :: InetDiagSockId -- ^inet_diag_sockid 
@@ -208,4 +218,51 @@ putInetDiagSockid cust = do
   -- cookie ?
   mapM_ putWord32host $ take 2 (cookie cust)
   -- replicateM $ putWord32host (cookie cust) 4
+
+
+
+-- TODO generate via FFI ?
+eIPPROTO_TCP :: Word8
+eIPPROTO_TCP = 6
+
+-- Sends a SockDiagRequest
+-- expects INetDiag 
+-- TODO should take an Mptcp connection into account
+-- TcpConnection -> 
+genQueryPacket :: Packet SockDiagRequest
+genQueryPacket = let
+  -- Mesge type / flags /seqNum /pid
+  flags = (fNLM_F_REQUEST .|. fNLM_F_MATCH .|. fNLM_F_ROOT)
+
+  -- might be a trick with seqnum
+  hdr = Header msgTypeSockDiag flags magicSeq 0
+  -- IPPROTO_TCP = 6,
+  -- -1 => ignore cookie content
+  -- _cookie = [ maxBound :: Word32, maxBound :: Word32]
+  _cookie = [ 0 :: Word32, 0 :: Word32]
+
+  -- TODO hardcoded for now
+  iperfSrcPort = 0
+  iperfDstPort = 0
+  -- iperfSrcPort = iperfHardcodedSrcPort
+  -- iperfDstPort = 5201
+  -- 4 Word32
+  -- ipSrc = [ fromOctetsLE [ 127, 0, 0, 1], 0, 0, 0]
+  -- ipDst = [ fromOctetsLE [ 127, 0, 0, 1], 0, 0, 0]
+  ipSrc = [ 0, 0, 0, 0]
+  ipDst = [ 0, 0, 0, 0]
+  -- 1 => "lo". Check with ip link ?
+  ifIndex = 0
+  diag_req = InetDiagSockId iperfSrcPort iperfDstPort ipSrc ipDst ifIndex _cookie
+
+    -- #define SS_ALL ((1 << SS_MAX) - 1)
+    -- #define SS_CONN (SS_ALL & ~((1<<SS_LISTEN)|(1<<SS_CLOSE)|(1<<SS_TIME_WAIT)|(1<<SS_SYN_RECV)))
+  stateFilter = [TcpEstablished]
+  -- stateFilter = [TcpListen, TcpEstablished, TcpSynSent ]
+  -- InetDiagInfo
+  requestedInfo = InetDiagNone
+  padding = 0 -- useless
+  custom = SockDiagRequest eAF_INET eIPPROTO_TCP requestedInfo padding (stateFilter) diag_req
+  in
+     Packet hdr custom Map.empty
 

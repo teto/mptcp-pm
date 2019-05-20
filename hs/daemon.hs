@@ -7,12 +7,9 @@ Portability : Linux
 
 Monitors new MPTCP connections and runs a specific monitor instance
 
-
 To interact
 GENL_ADMIN_PERM
 The operation requires the CAP_NET_ADMIN privilege
-
-
 
 Helpful links:
 
@@ -22,6 +19,16 @@ Helpful links:
 = How to update a single field https://stackoverflow.com/questions/14955627/shorthand-way-for-assigning-a-single-field-in-a-record-while-copying-the-rest-o
 - get tcp stats via netlink https://www.vividcortex.com/blog/2014/09/22/using-netlink-to-optimize-socket-statistics/
 eNETLINK_INET_DIAG
+
+
+Concurrent values
+- https://www.oreilly.com/library/view/parallel-and-concurrent/9781449335939/ch07.html
+- https://stackoverflow.com/questions/22171895/using-tchan-with-timeout
+- https://www.reddit.com/r/haskellquestions/comments/5rh1d4/concurrency_and_shared_state/
+
+Mutable states:
+- https://blog.jakuba.net/2014/07/20/Mutable-State-in-Haskell/
+- http://mainisusuallyafunction.blogspot.com/2011/10/safe-top-level-mutable-variables-for.html
 
 http://kristrev.github.io/2013/07/26/passive-monitoring-of-sockets-on-linux
 
@@ -42,11 +49,12 @@ import qualified Options.Applicative (value)
 -- For TcpState, FFI generated
 import Generated
 import IDiag
-import Mptcp ()
+import Mptcp hiding (inspectResult, )
+-- import Mptcp
 
 -- for replicateM
 -- import Control.Monad
-import Data.Maybe
+import Data.Maybe ()
 import Data.Foldable (foldl')
 import Foreign.C.Types (CInt)
 import Foreign.C.Error
@@ -62,45 +70,42 @@ import System.Process
 import Data.Word (Word8, Word16, Word32)
 import qualified Data.Bits as Bits -- (shiftL, )
 import Data.Bits ((.|.))
-
--- imported from cereal  hiding (runGet)
-import Data.Serialize.Get
+-- import Data.Serialize.Get
 import Data.Serialize.Put
-
 -- import Data.Either (fromRight)
-
-import Data.ByteString (ByteString, unpack)
+import Data.ByteString (ByteString)
+import qualified Data.Map as Map
 
 -- https://hackage.haskell.org/package/bytestring-conversion-0.1/candidate/docs/Data-ByteString-Conversion.html#t:ToByteString
 -- contains ToByteString / FromByteString
-import Data.ByteString.Conversion
+-- import Data.ByteString.Conversion
 import Debug.Trace
 -- import Control.Exception
 
+import Control.Concurrent
+-- import Control.Concurrent.Chan
+import Data.IORef
+-- import Control.Concurrent.Async
+import System.IO.Unsafe
 
-import qualified Data.Map as Map
--- import Data.Map (fromList, lookup, toList, Map)
--- import Data.ByteString.Char8 as C8 hiding (putStrLn, putStr)
- -- (unpack)
+-- STM = State Thread Monad ST monad
+-- import Data.IORef
 
--- The Netlink socket with Family Id, so we don't need as many arguments
--- everywhere
--- |Wrapper for 'NetlinkSocket' we also need the family id for messages we construct
+-- MVar can be empty contrary to IORef !
+-- 
+-- globalMptcpSock :: IORef MptcpSocket
 
--- iproute uses this seq number
--- #define MAGIC_SEQ 123456
-magicSeq :: Word32
-magicSeq = 123456
+{-# NOINLINE globalMptcpSock #-}
+globalMptcpSock :: MVar MptcpSocket
+globalMptcpSock = unsafePerformIO $ newEmptyMVar
 
+{-# NOINLINE globalMetricsSock  #-}
+globalMetricsSock :: MVar NetlinkSocket
+globalMetricsSock = unsafePerformIO $ newEmptyMVar
 
 
 iperfHardcodedSrcPort :: Word16
 iperfHardcodedSrcPort = 5500
-
-
-monitorConnection :: MptcpToken
-monitorConnection token =
-  putStrLn "Monitoring a connection"
 
 
 -- inspired by CtrlPacket
@@ -115,14 +120,7 @@ monitorConnection token =
 --     mptcpAttributes :: [MptcpAttr]
 --   } deriving (Eq)
 
-
--- https://stackoverflow.com/questions/18606827/how-to-write-customised-show-function-in-haskell
--- TODO could use templateHaskell
--- TODO les generer via le netlink helper mkIncludeBlock
--- look at generate.hs
--- instance Show MptcpPacket where
---   show MPTCP_EVENT_CREATED = "MPTCP_EVENT_CREATED"
---   show x = x
+-- TODO are they generated
 dumpCommand :: MptcpGenlEvent -> String
 dumpCommand x = show x ++ " = " ++ show (fromEnum x)
 -- dumpCommand MPTCP_CMD_UNSPEC  = " MPTCP_CMD_UNSPEC  0"
@@ -134,7 +132,7 @@ dumpMptcpCommands x = dumpCommand x ++ "\n" ++ dumpMptcpCommands (succ x)
 
 
 
-
+-- todo use it as a filter
 data Sample = Sample
   { command    :: String
   , quiet      :: Bool
@@ -171,6 +169,7 @@ opts = info (sample <**> helper)
 -- inspired by makeNL80211Socket Create a 'NL80211Socket' this opens a genetlink
 -- socket and gets the family id
 -- TODO should record the token too
+-- TODO should join the group !!
 makeMptcpSocket :: IO MptcpSocket
 makeMptcpSocket = do
     -- for legacy reasons this opens a route socket
@@ -189,9 +188,9 @@ makeMetricsSocket = do
   sock <- makeSocketGeneric eNETLINK_SOCK_DIAG
   return sock
 
---createProcess 
-startMonitor :: MptcpToken -> CreateProcess
-startMonitor token =
+-- used in tests
+startMonitorExternalProcess :: MptcpToken -> CreateProcess
+startMonitorExternalProcess token =
   let
     params = proc "daemon" [ show token ]
     -- todo pass the token via the environment
@@ -205,6 +204,49 @@ startMonitor token =
     -- return "toto"
     newParams
 
+-- A utility function - threadDelay takes microseconds, which is slightly annoying.
+sleepMs :: Int -> IO()
+sleepMs n = threadDelay (n * 1000)
+
+-- Need a specific chan
+-- TODO it should start a forkIO that fetches metrics and updates stuff
+-- Chan ->
+-- readChan is blocking sadly
+-- modifyMVar_
+
+
+-- here we may want to run mptcpnumerics to get some results
+updateCwndCap :: IO ()
+updateCwndCap = do
+    let fakeCon = TcpConnection "127.0.0.1" "127.0.0.1" 0 0
+    sockMetrics <- readMVar globalMetricsSock
+    -- sendmsg genQueryPacket fakeCon
+    let queryPkt = genQueryPacket
+    sendPacket sockMetrics queryPkt >> putStrLn "Sent the TCP SS request"
+  -- -- exported from my own version !!
+  -- recvMulti sockMetrics >>= inspectIdiagAnswers
+    -- for now let's discard the answer
+    -- recvOne sockMetrics >>= inspectIdiagAnswers
+
+    let capCwndPkt = genCapCwnd
+    sendPacket capCwndPkt
+
+-- TODO 
+genCapCwnd :: IO ()
+genCapCwnd = putStrLn "while waiting for a real implementation"
+
+startMonitorConnection :: MVar MptcpConnection -> IO ()
+startMonitorConnection conn = do
+    -- ++ show token
+    putStrLn $ "Start monitoring token "
+    -- as long as conn is not empty we keep going ?
+    -- for this connection
+    updateCwndCap 
+    sleepMs 100
+    putStrLn $ "Finished monitoring token "
+    -- call ourself again
+    startMonitorConnection conn
+
 
 runMptcpNumerics :: IO String
 runMptcpNumerics  =
@@ -212,15 +254,10 @@ runMptcpNumerics  =
   readProcess "seq" ["1", "10"] ""
 
 
--- inspectPacket :: GenlPacket NoData -> IO ()
--- inspectPacket = Prelude.putStrLn show
--- inspectPacket packet = Prelude.putStrLn $show packet
-
-
 -- TODO merge default attributes
 -- todo pass a list of (Int, Bytestring) and build the map with fromList ?
-getRequestPacket :: Word16 -> MptcpGenlEvent -> Bool -> Attributes -> GenlPacket NoData
-getRequestPacket fid cmd dump attrs =
+genMptcpRequest :: Word16 -> MptcpGenlEvent -> Bool -> Attributes -> GenlPacket NoData
+genMptcpRequest fid cmd dump attrs =
   let
     -- The message type/ flag / sequence number / pid  (0 => from the kernel)
     -- https://elixir.bootlin.com/linux/latest/source/include/uapi/linux/netlink.h#L54
@@ -229,9 +266,7 @@ getRequestPacket fid cmd dump attrs =
     flags = if dump then fNLM_F_REQUEST .|. fNLM_F_MATCH .|. fNLM_F_ROOT else fNLM_F_REQUEST
     word8Cmd = fromIntegral (fromEnum cmd) :: Word8
   in
-
     -- inspired by System/Linux/Netlink/GeNetlink/NL80211.hs
-    -- Packet header (GenlData geheader NoData80211) attrs
     Packet myHeader (GenlData geheader NoData) attrs
 
 --   System.Linux.Netlink.ErrorMsg -> error "error msg"
@@ -256,18 +291,13 @@ showAttributes attrs =
     -- putStrLn $ intercalate "," $ mapped
     mapped
 
--- getMptcpAttribute :: MptcpAttr -> Attributes -> MptcpAttribute
--- getMptcpAttribute attr 
 
--- TODO prefix with --cmd
--- mptcp_nl_genl_create
 -- sport/backup/intf are optional
 -- family AF_INET/loc id/remid are not
 createNewSubflow :: MptcpSocket -> MptcpToken -> Attributes -> (GenlPacket NoData)
 createNewSubflow (MptcpSocket sock fid) token attrs = let
     -- localId = readLocId $ Map.lookup (fromEnum MPTCP_ATTR_LOC_ID) attrs
     -- remoteId = readLocId $ Map.lookup (fromEnum MPTCP_ATTR_REM_ID) attrs
-        -- [ MptcpToken ]
 
     -- TODO put attributes to create a new subflow
 
@@ -277,7 +307,7 @@ createNewSubflow (MptcpSocket sock fid) token attrs = let
         (LocalLocatorId 0) , (RemoteLocatorId 0)
         , SubflowFamily eAF_INET ]
     cmd = MPTCP_CMD_SUB_CREATE
-    pkt = getRequestPacket fid cmd False attributes
+    pkt = genMptcpRequest fid cmd False attributes
   in
     pkt
 
@@ -316,58 +346,22 @@ instance Show GenlHeaderMptcp where
     "Header: Cmd = " ++ show cmd ++ ", Version: " ++ show ver ++ "\n"
 
 
--- removeLocId :: MptcpSocket -> MptcpAttribute -> IO [GenlPacket NoData]
--- removeLocId (MptcpSocket sock fid) token locId = let
---     m0 = Map.empty
---     m1 = Map.insert (fromEnum MPTCP_ATTR_TOKEN) (convertToken token) m0
---     m2 = Map.insert (fromEnum MPTCP_ATTR_LOC_ID) (convertLocId locId) m1
---     -- MPTCP_ATTR_IF_IDX and MPTCP_ATTR_BACKUP should be optional
---     attributes = m2
---     -- intCmd = fromEnum cmd
---     cmd = MPTCP_CMD_REMOVE
---     pkt = getRequestPacket fid cmd False attributes
---   in
---     putStrLn ("Remove subflow " ++ showAttributes attributes)
---       >> query sock pkt
-
-
 checkIfSocketExists :: MptcpSocket -> MptcpToken  -> IO [GenlPacket NoData]
 checkIfSocketExists (MptcpSocket sock fid) token = let
     attributes = Map.insert (fromEnum MPTCP_ATTR_TOKEN) (convertToken token) Map.empty
-    pkt = getRequestPacket fid cmd False attributes
+    pkt = genMptcpRequest fid cmd False attributes
     cmd = MPTCP_CMD_EXIST
   in
     putStrLn ("Checking token exists\n" ++ showAttributes attributes ++ showPacket pkt)
       -- >> putStrLn $
       >> query sock pkt
 
---announceSubflow :: MptcpSocket -> MptcpToken -> IO [GenlPacket NoData]
---announceSubflow (MptcpSocket socket fid) token = let
---    m0 = Map.empty
---    -- TODO I should add the command at some point here
---    m1 = Map.insert MPTCP_ATTR_TOKEN (convertToken token) m0
---    -- the loc id should exist :/
---    m2 = Map.insert MPTCP_ATTR_LOC_ID (convertToken token) m1
---    -- MPTCP_ATTR_IF_IDX and MPTCP_ATTR_BACKUP should be optional
---    --
---    attributes = m1
---    intCmd = fromEnum cmd
---    cmd = MPTCP_CMD_ANNOUNCE
---    pkt = getRequestPacket fid cmd False attributes
---  in
---    query socket pkt
-
-
 -- TODO here I could helpers from the netlink library
 convertLocId :: Word8 -> ByteString
 convertLocId val =
-  -- putWord8 val
   runPut $ putWord8 val
-  -- toByteString val
 
 
--- put32 :: Word32 -> ByteString
--- put32 w = runPut (putWord32host w)
 convertToken :: Word32 -> ByteString
 convertToken val =
   runPut $ putWord32le val
@@ -384,13 +378,8 @@ resetTheConnection (MptcpSocket sock fid) receivedAttributes = let
     attributes = m1
     intCmd = fromEnum cmd
     cmd = MPTCP_CMD_REMOVE
-
-    -- getRequestPacket fid cmd dump attrs =
-    -- getRequestPacket :: Word16 -> MptcpGenlEvent -> Bool -> Attributes -> GenlPacket NoData
-    pkt = getRequestPacket fid cmd False attributes
+    pkt = genMptcpRequest fid cmd False attributes
   in
-    -- GenlPacket a with a acting as genlDataData
-    -- System.Linux.Netlink query :: (Convertable a, Eq a, Show a) => NetlinkSocket -> Packet a -> IO [Packet a]
     query sock pkt
 
 inspectAnswers :: [GenlPacket NoData] -> IO ()
@@ -449,26 +438,11 @@ onNewConnection sock attributes = do
     return ()
 
 
--- type GenlPacket a = Packet (GenlData a)
--- overloaded dispatching inspired by System/Linux/Netlink.hs:showPacket
--- dispatchPacket :: MptcpSocket -> Packet -> IO ()
--- dispatchPacket sock (System.Linux.Netlink.ErrorMsg hdr code packet) = do
---   putStrLn "a netlink error happened"
--- dispatchPacket sock (DoneMsg hdr) = do
---   putStrLn "Done Msg"
-
--- type GenlPacket a = Packet (GenlData a)
--- type MptcpPacket = GenlPacket NoDataMptcp
--- dispatchPacket :: MptcpSocket -> GenlPacket NoData -> IO ()
--- dispatchPacket sock (Packet hdr (GenlData NoData) attributes) = do
---     -- cmd = genlCmd genlHeader
---     putStrLn "Genldata"
-
-
 dispatchPacket :: MyState -> MptcpPacket -> IO MyState
 dispatchPacket oldState (Packet hdr (GenlData genlHeader NoData) attributes) = let
     cmd = genlCmd genlHeader
     (MyState sock conns) = oldState
+    -- (MyState sock ) = oldState
 
     -- i suppose token is always available right ?
     token = readToken $ Map.lookup (fromEnum MPTCP_ATTR_TOKEN) attributes
@@ -477,39 +451,48 @@ dispatchPacket oldState (Packet hdr (GenlData genlHeader NoData) attributes) = l
     case toEnum (fromIntegral cmd) of
       MPTCP_EVENT_CREATED -> do
         let subflow = subflowFromAttributes attributes
-        let newMptcpConn = MptcpConnection [ subflow ]
+        -- newConn <- newEmptyMVar
+        let newMptcpConn = MptcpConnection token [ subflow ]
+        newConn <- newMVar newMptcpConn 
         putStrLn $ "Connection created !!\n" ++ showAttributes attributes
-        -- TODO filter connections via command line settings
         -- onNewConnection sock attributes
-        forkIO 
+        -- we will need to monitor this action
+        -- _ <- forkOS (putStrLn "Yay! i'm in thread!")
+        -- newMptcpConn 
+        --    putStrLn "Waiting..."
+        -- putMVar result
+        -- value <- takeMVar result
+        -- putStrLn ("The answer is: " ++ show value)
+        handle <- forkOS (startMonitorConnection newConn)
         -- r <- createProces $ startMonitor token
         -- putStrLn $ "Connection created !!\n" ++ show subflow
-
-        -- let newState = oldState { connections = Map.insert token newMptcpConn (connections oldState) }
-        putStrLn $ "New state after creation: " ++ show newState
+        let newState = oldState { connections = Map.insert token newConn (connections oldState) }
+        -- let newState = oldState
+        -- putStrLn $ "New state after creation: " ++ show newState
         return newState
 
       MPTCP_EVENT_ESTABLISHED -> do
         putStrLn "Connection established !"
         return oldState
 
-      -- this might be true for subflow
       MPTCP_EVENT_CLOSED -> do
-        -- case mptcpConn of
-        --   Nothing -> putStrLn "Not found"
-        --   Just
         putStrLn "Connection closed, deleting token "
-        let newState = oldState { connections = Map.delete token (connections oldState) }
-        putStrLn $ "New state" ++ show newState
+        -- let newState = oldState { connections = Map.delete token (connections oldState) }
+        -- TODO we should kill the thread with killThread or empty the mVar !!
+        let newState = oldState
+        putStrLn $ "New state"
         return newState
+
       MPTCP_EVENT_SUB_ESTABLISHED -> do
         let subflow = subflowFromAttributes attributes
         putStrLn "Subflow established"
         case mptcpConn of
             Nothing -> putStrLn "No connection with this token" >> return oldState
-            Just con -> do
-                let newCon = con { subflows = subflows con ++ [subflow] }
-                let newState = oldState { connections = Map.insert token newCon (connections oldState) }
+            Just thread -> do
+                putStrLn "Found a match"
+                -- let newCon = con { subflows = subflows con ++ [subflow] }
+                let newState = oldState 
+                -- let newState = oldState { connections = Map.insert token newCon (connections oldState) }
                 return newState
       -- TODO remove
       MPTCP_EVENT_SUB_CLOSED -> putStrLn "Subflow closed" >> return oldState
@@ -517,7 +500,6 @@ dispatchPacket oldState (Packet hdr (GenlData genlHeader NoData) attributes) = l
       _ -> putStrLn "undefined event !!" >> return oldState
 
 
--- dispatchPacket sock (ErrorMsg err) attributes) = let
 dispatchPacket s (DoneMsg err) =
   putStrLn "Done msg" >> return s
 
@@ -560,6 +542,20 @@ doDumpLoop myState = do
 
     newState <- doDumpLoop myState
     return newState
+
+-- regarder dans query/joinMulticastGroup/recvOne
+listenToEvents :: MptcpSocket -> CtrlAttrMcastGroup -> IO ()
+listenToEvents (MptcpSocket sock fid) my_group = do
+  -- joinMulticastGroup  returns IO ()
+  -- TODO should check it works correctly !
+  joinMulticastGroup sock (grpId my_group)
+  putStrLn $ "Joined grp " ++ grpName my_group
+  let globalState = MyState mptcpSocket  Map.empty
+  _ <- doDumpLoop globalState
+  putStrLn "TOTO"
+  where
+    mptcpSocket = MptcpSocket sock fid
+    -- globalState = MyState mptcpSocket Map.empty
 
 
 -- testing
@@ -616,16 +612,27 @@ inspectIdiagAnswers packets = do
 -- https://github.com/vdorr/linux-live-netinfo/blob/24ead3dd84d6847483aed206ec4b0e001bfade02/System/Linux/NetInfo.hs
 main :: IO ()
 main = do
-
-  let mptcpConnections = []
   options <- execParser opts
-  logger <- createLogger
-  pushLogStr logger (toLogStr "ok")
-  putStrLn "dumping important values:"
-  putStrLn $ "RESET" ++ show MPTCP_CMD_REMOVE
-  putStrLn $ dumpMptcpCommands MPTCP_CMD_UNSPEC
+
+  -- crashes when threaded
+  -- logger <- createLogger
+  -- pushLogStr logger (toLogStr "ok")
+
+  -- globalState <- newIORef mempty
+  -- globalState <- newEmptyMVar
+  -- putStrLn "dumping important values:"
+  -- putStrLn $ "RESET" ++ show MPTCP_CMD_REMOVE
+  -- putStrLn $ dumpMptcpCommands MPTCP_CMD_UNSPEC
   putStrLn "Creating MPTCP netlink socket..."
+
+  -- add the socket too to an MVar ?
   (MptcpSocket sock  fid) <- makeMptcpSocket
+  globalState <- newMVar $ MyState (MptcpSocket sock  fid) Map.empty
+
+  putStrLn "Creating metrics netlink socket..."
+  -- sockMetrics <- makeMetricsSocket
+  -- putMVar
+  globalMetricsSock <- newMVar $ makeMetricsSocket
 
   putStr "socket created. MPTCP Family id " >> print fid
   -- putStr "socket created. tcp_metrics Family id " >> print fidMetrics
@@ -637,7 +644,7 @@ main = do
   mapM_ print mcastMptcpGroups
 
   -- mapM_ (listenToMetricEvents sockMetrics) mcastMetricGroups
-  -- mapM_ (listenToEvents (MptcpSocket sock fid)) mcastMptcpGroups
+  mapM_ (listenToEvents (MptcpSocket sock fid)) mcastMptcpGroups
   -- putStrLn $ " Groups: " ++ unwords ( map grpName mcastMptcpGroups )
   putStrLn "finished"
 
