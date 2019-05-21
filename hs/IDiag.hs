@@ -252,7 +252,7 @@ genQueryPacket = let
   ipSrc = [ 0, 0, 0, 0]
   ipDst = [ 0, 0, 0, 0]
   -- 1 => "lo". Check with ip link ?
-  ifIndex = 0
+  ifIndex = 1
   diag_req = InetDiagSockId iperfSrcPort iperfDstPort ipSrc ipDst ifIndex _cookie
 
     -- #define SS_ALL ((1 << SS_MAX) - 1)

@@ -84,7 +84,7 @@ import Debug.Trace
 
 import Control.Concurrent
 -- import Control.Concurrent.Chan
-import Data.IORef
+-- import Data.IORef
 -- import Control.Concurrent.Async
 import System.IO.Unsafe
 
@@ -97,11 +97,11 @@ import System.IO.Unsafe
 
 {-# NOINLINE globalMptcpSock #-}
 globalMptcpSock :: MVar MptcpSocket
-globalMptcpSock = unsafePerformIO $ newEmptyMVar
+globalMptcpSock = unsafePerformIO newEmptyMVar
 
 {-# NOINLINE globalMetricsSock  #-}
 globalMetricsSock :: MVar NetlinkSocket
-globalMetricsSock = unsafePerformIO $ newEmptyMVar
+globalMetricsSock = unsafePerformIO newEmptyMVar
 
 
 iperfHardcodedSrcPort :: Word16
@@ -219,31 +219,42 @@ sleepMs n = threadDelay (n * 1000)
 updateCwndCap :: IO ()
 updateCwndCap = do
     let fakeCon = TcpConnection "127.0.0.1" "127.0.0.1" 0 0
+    putStrLn "Reading metrics sock Mvar..."
     sockMetrics <- readMVar globalMetricsSock
+
+    putStrLn "Reading mptcp sock Mvar..."
+    mptcpSock <- readMVar globalMptcpSock
+    putStrLn "Finished reading"
     -- sendmsg genQueryPacket fakeCon
     let queryPkt = genQueryPacket
+    let (MptcpSocket testSock familyId ) = mptcpSock
     sendPacket sockMetrics queryPkt >> putStrLn "Sent the TCP SS request"
   -- -- exported from my own version !!
   -- recvMulti sockMetrics >>= inspectIdiagAnswers
     -- for now let's discard the answer
     -- recvOne sockMetrics >>= inspectIdiagAnswers
 
-    let capCwndPkt = genCapCwnd
-    sendPacket capCwndPkt
+    let capCwndPkt = genCapCwnd familyId
+    sendPacket testSock capCwndPkt >> putStrLn "Sent the Cap command"
 
 -- TODO 
-genCapCwnd :: IO ()
-genCapCwnd = putStrLn "while waiting for a real implementation"
+-- clude child configs in grub menu #45345
+-- send MPTCP_CMD_SND_CLAMP_WINDOW
+-- TODO we need the token to generate the command ?
+genCapCwnd :: Word16 -> MptcpPacket
+genCapCwnd familyId = 
+    genMptcpRequest familyId MPTCP_CMD_SND_CLAMP_WINDOW True Map.empty
+    -- putStrLn "while waiting for a real implementation"
 
 startMonitorConnection :: MVar MptcpConnection -> IO ()
 startMonitorConnection conn = do
     -- ++ show token
-    putStrLn $ "Start monitoring token "
+    putStrLn "Start monitoring token "
     -- as long as conn is not empty we keep going ?
     -- for this connection
-    updateCwndCap 
+    updateCwndCap
     sleepMs 100
-    putStrLn $ "Finished monitoring token "
+    putStrLn "Finished monitoring token "
     -- call ourself again
     startMonitorConnection conn
 
@@ -252,30 +263,6 @@ runMptcpNumerics :: IO String
 runMptcpNumerics  =
   -- TODO run readProcessWithExitCode instead
   readProcess "seq" ["1", "10"] ""
-
-
--- TODO merge default attributes
--- todo pass a list of (Int, Bytestring) and build the map with fromList ?
-genMptcpRequest :: Word16 -> MptcpGenlEvent -> Bool -> Attributes -> GenlPacket NoData
-genMptcpRequest fid cmd dump attrs =
-  let
-    -- The message type/ flag / sequence number / pid  (0 => from the kernel)
-    -- https://elixir.bootlin.com/linux/latest/source/include/uapi/linux/netlink.h#L54
-    myHeader = Header (fromIntegral fid) (flags .|. fNLM_F_ACK) 0 0
-    geheader = GenlHeader word8Cmd mptcpGenlVer
-    flags = if dump then fNLM_F_REQUEST .|. fNLM_F_MATCH .|. fNLM_F_ROOT else fNLM_F_REQUEST
-    word8Cmd = fromIntegral (fromEnum cmd) :: Word8
-  in
-    -- inspired by System/Linux/Netlink/GeNetlink/NL80211.hs
-    Packet myHeader (GenlData geheader NoData) attrs
-
---   System.Linux.Netlink.ErrorMsg -> error "error msg"
--- clampWindowRequest
-
-
-
--- TODO convert port
-
 
 
 
@@ -331,7 +318,6 @@ attrToPair (SubflowFamily fam) = let
 attrToPair ( MptcpIntf idx) = (fromEnum MPTCP_ATTR_IF_IDX, runPut $ putWord8 idx)
 attrToPair ( MptcpAddr addr) = (fromEnum MPTCP_ATTR_SADDR4, addr)
 -- attrToPair _ = error "unsupported"
-
 
 toAttributes :: [MptcpAttribute] -> Attributes
 toAttributes attrs = Map.fromList $map attrToPair attrs
@@ -587,10 +573,10 @@ fromOctetsBE = foldl' accum 0
 fromOctetsLE :: [Word8] -> Word32
 fromOctetsLE = fromOctetsBE . reverse
 
-inspectIDiagAnswer :: (Packet InetDiagMsg) -> IO ()
-inspectIDiagAnswer (Packet hdr cus attrs) = do
+inspectIDiagAnswer :: Packet InetDiagMsg -> IO ()
+inspectIDiagAnswer (Packet hdr cus attrs) =
    putStrLn $ "Idiag answer" ++ showAttributes attrs
-inspectIDiagAnswer p = putStrLn $ "test" ++ (showPacket p)
+inspectIDiagAnswer p = putStrLn $ "test" ++ showPacket p
 
 -- inspectIDiagAnswer (DoneMsg err) = putStrLn "DONE MSG"
 -- (GenlData NoData)
@@ -627,12 +613,14 @@ main = do
 
   -- add the socket too to an MVar ?
   (MptcpSocket sock  fid) <- makeMptcpSocket
-  globalState <- newMVar $ MyState (MptcpSocket sock  fid) Map.empty
+  -- putMVar instead !
+  -- globalState <- newMVar $ MyState (MptcpSocket sock  fid) Map.empty
+  putMVar globalMptcpSock (MptcpSocket sock  fid)
 
   putStrLn "Creating metrics netlink socket..."
-  -- sockMetrics <- makeMetricsSocket
+  sockMetrics <- makeMetricsSocket
   -- putMVar
-  globalMetricsSock <- newMVar $ makeMetricsSocket
+  putMVar globalMetricsSock sockMetrics
 
   putStr "socket created. MPTCP Family id " >> print fid
   -- putStr "socket created. tcp_metrics Family id " >> print fidMetrics

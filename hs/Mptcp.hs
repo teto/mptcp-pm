@@ -26,6 +26,8 @@ import Data.ByteString.Conversion (fromByteString)
 import Data.Serialize.Get
 -- import Data.Serialize.Put
 
+import Data.Bits ((.|.))
+
 import Data.List (intercalate)
 import Debug.Trace
 import Control.Concurrent (MVar)
@@ -74,6 +76,27 @@ getPort val =
     Nothing -> 0
     Just port -> port
 
+-- TODO merge default attributes
+-- todo pass a list of (Int, Bytestring) and build the map with fromList ?
+{-|
+  Generates an Mptcp netlink request
+-}
+genMptcpRequest :: Word16 -- ^ the family id
+                -> MptcpGenlEvent -- ^The MPTCP command
+                -> Bool           -- ^Dump answer
+                -> Attributes
+                -> MptcpPacket
+genMptcpRequest fid cmd dump attrs =
+  let
+    -- The message type/ flag / sequence number / pid  (0 => from the kernel)
+    -- https://elixir.bootlin.com/linux/latest/source/include/uapi/linux/netlink.h#L54
+    myHeader = Header (fromIntegral fid) (flags .|. fNLM_F_ACK) 0 0
+    geheader = GenlHeader word8Cmd mptcpGenlVer
+    flags = if dump then fNLM_F_REQUEST .|. fNLM_F_MATCH .|. fNLM_F_ROOT else fNLM_F_REQUEST
+    word8Cmd = fromIntegral (fromEnum cmd) :: Word8
+  in
+    Packet myHeader (GenlData geheader NoData) attrs
+
 
 readToken :: Maybe ByteString -> MptcpToken
 readToken maybeVal = case maybeVal of
@@ -108,11 +131,6 @@ inspectResult myState result =  case result of
 --     newState <- doDumpLoop myState
 --     return newState
 
-
-tcpMetricsGenlName :: String
-tcpMetricsGenlName = "tcp_metrics"
-tcpMetricsGenlVer :: Word8
-tcpMetricsGenlVer = 1
 
 data MptcpAttributes = MptcpAttributes {
     connToken :: Word32

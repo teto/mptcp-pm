@@ -35,8 +35,10 @@ import Data.Bits ()
 {#enum MPTCP_ATTR_UNSPEC as MptcpAttr {} omit (__MPTCP_ATTR_AFTER_LAST) deriving (Eq, Show)#}
 
 -- {underscoreToCase}
+-- can also be seen as a command
 {#enum MPTCP_CMD_UNSPEC as MptcpGenlEvent {} deriving (Eq, Show)#}
 
+-- |Generic netlink MPTCP version
 mptcpGenlVer :: Word8
 mptcpGenlVer = {#const MPTCP_GENL_VER #}
 
