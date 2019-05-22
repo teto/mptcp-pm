@@ -130,7 +130,9 @@ dumpMptcpCommands :: MptcpGenlEvent -> String
 dumpMptcpCommands MPTCP_CMD_EXIST = dumpCommand MPTCP_CMD_EXIST
 dumpMptcpCommands x = dumpCommand x ++ "\n" ++ dumpMptcpCommands (succ x)
 
-
+-- check ip link / localhost seems to be 1
+interfaceIdx :: Word8
+interfaceIdx :: 1
 
 -- todo use it as a filter
 data Sample = Sample
@@ -241,9 +243,19 @@ updateCwndCap = do
 -- clude child configs in grub menu #45345
 -- send MPTCP_CMD_SND_CLAMP_WINDOW
 -- TODO we need the token to generate the command ?
-genCapCwnd :: Word16 -> MptcpPacket
-genCapCwnd familyId = 
-    genMptcpRequest familyId MPTCP_CMD_SND_CLAMP_WINDOW True Map.empty
+genCapCwnd :: MptcpToken -> Word16 -> MptcpPacket
+genCapCwnd token familyId = 
+    genMptcpRequest familyId MPTCP_CMD_SND_CLAMP_WINDOW True
+    where
+        -- attrs = Map.empty
+        attrs = [
+            MptcpAttrToken token
+            SubflowFamily eAF_INET,
+            LocalLocatorId 0,
+            RemoteLocatorId 0,
+            MptcpAddr
+            MptcpIntf interfaceIdx 
+        ]
     -- putStrLn "while waiting for a real implementation"
 
 startMonitorConnection :: MVar MptcpConnection -> IO ()
@@ -253,7 +265,7 @@ startMonitorConnection conn = do
     -- as long as conn is not empty we keep going ?
     -- for this connection
     updateCwndCap
-    sleepMs 100
+    sleepMs 5000
     putStrLn "Finished monitoring token "
     -- call ourself again
     startMonitorConnection conn

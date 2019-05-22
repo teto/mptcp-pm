@@ -21,7 +21,6 @@ import Data.Serialize.Put
 -- for replicateM
 import Control.Monad
 
--- for Convertable
 import System.Linux.Netlink
 import System.Linux.Netlink.Constants
 -- For TcpState, FFI generated
@@ -31,11 +30,25 @@ import Generated
 import qualified Data.Bits as B
 import Data.Bits ((.|.))
 import qualified Data.Map as Map
+import Data.ByteString (ByteString)
 
 
 -- iproute uses this seq number #define MAGIC_SEQ 123456
 magicSeq :: Word32
 magicSeq = 123456
+
+
+-- we can later map ip to a proper type
+data IPAddress = IPAddress ByteString deriving (Show, Convertable)
+
+instance Convertable IPAddress where
+  -- getPut = putSockDiagRequestHeader
+  -- return a Put
+  getPut request = getWord32host
+
+    
+  -- MessageType
+  getGet _ = getSockDiagRequestHeader
 
 
 data InetDiagSockId  = InetDiagSockId  {

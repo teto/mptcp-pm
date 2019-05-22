@@ -29,7 +29,7 @@ import Data.Serialize.Get
 import Data.Bits ((.|.))
 
 import Data.List (intercalate)
-import Debug.Trace
+-- import Debug.Trace
 import Control.Concurrent (MVar)
 
 -- how can I retreive the word16 without pattern matching ?
@@ -62,6 +62,7 @@ data MyState = MyState {
 -- deriving Show
 
 type MptcpPacket = GenlPacket NoData
+
 
 -- |Data to hold MPTCP level information
 data MptcpConnection = MptcpConnection {
@@ -96,7 +97,6 @@ genMptcpRequest fid cmd dump attrs =
     word8Cmd = fromIntegral (fromEnum cmd) :: Word8
   in
     Packet myHeader (GenlData geheader NoData) attrs
-
 
 readToken :: Maybe ByteString -> MptcpToken
 readToken maybeVal = case maybeVal of
@@ -226,7 +226,8 @@ dumpAttribute :: Int -> ByteString -> String
 dumpAttribute attr value = let
   -- enumFromTo ?
   -- traceId $ toEnum (fromIntegral attr)
-  attrStr = case traceShowId ( toEnum (fromIntegral attr)) of
+  -- traceShowId
+  attrStr = case  ( toEnum (fromIntegral attr)) of
       MPTCP_ATTR_UNSPEC -> "UNSPECIFIED"
       MPTCP_ATTR_TOKEN -> "token: " ++ show (readToken $ Just value)
       MPTCP_ATTR_FAMILY -> "family: " ++ show value
