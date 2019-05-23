@@ -37,26 +37,36 @@ import Data.ByteString (ByteString)
 magicSeq :: Word32
 magicSeq = 123456
 
+-- toIpv4 :: ByteString -> String
+-- toIpv4 val = Data.List.intercalate "." ( map show (unpack val))
 
 -- we can later map ip to a proper type
-data IPAddress = IPAddress ByteString deriving (Show, Convertable)
+data IPAddress = IPAddress ByteString deriving (Show, Eq)
 
 instance Convertable IPAddress where
-  -- getPut = putSockDiagRequestHeader
-  -- return a Put
-  getPut request = getWord32host
+  -- putWord32host $ take 4 (src cust)
+  getPut (IPAddress x) = putByteString x
+  -- MessageType / getSockDiagRequestHeader
+  getGet _ = getIPAddress
 
-    
-  -- MessageType
-  getGet _ = getSockDiagRequestHeader
-
+-- TODO clean it up
+-- getNested Get Int Get a / getListOf Get a
+-- _dst <- replicateM 4 getWord32host
+getIPAddress :: Get IPAddress
+getIPAddress = do
+  --  Fails if fewer than n bytes are left in the input
+  address <- getNested Get Int Get agetByteString 0
+  return$ IPAddress address
 
 data InetDiagSockId  = InetDiagSockId  {
   sport :: Word16
   , dport :: Word16
   -- IP address, 4*
-  , src :: [Word32]
-  , dst :: [Word32]
+  -- TODO replace with IPAddress
+  -- , src :: [Word32]
+  -- , dst :: [Word32]
+  , src :: IPAddress
+  , dst :: IPAddress
 
   , intf :: Word32
   -- * 2
@@ -210,8 +220,8 @@ getInetDiagSockid  = do
     _sport <- getWord16host
     _dport <- getWord16host
     -- iterate/ grow
-    _src <- replicateM 4 getWord32host
-    _dst <- replicateM 4 getWord32host
+    _src <- getIPAddress
+    _dst <- getIPAddress
     _intf <- getWord32host
     _cookie <- replicateM 2 getWord32host
     return $ InetDiagSockId _sport _dport _src _dst _intf _cookie
@@ -223,8 +233,9 @@ putInetDiagSockid cust = do
   putWord16be $ sport cust
   putWord16be $ sport cust
   -- TODO fix
-  mapM_ putWord32host $ take 4 (src cust)
-  mapM_ putWord32host $ take 4 (dst cust)
+  getPut (src cust)
+  getPut (dst cust)
+
   -- replicateM 4 (putWord32be $ dst cust) -- dest
   putWord32host $ intf cust
 
