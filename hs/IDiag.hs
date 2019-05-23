@@ -30,8 +30,8 @@ import Generated
 import qualified Data.Bits as B
 import Data.Bits ((.|.))
 import qualified Data.Map as Map
-import Data.ByteString (ByteString)
-
+import Data.ByteString (ByteString, pack)
+-- import Data.ByteString.Char8 as C8 (pack)
 
 -- iproute uses this seq number #define MAGIC_SEQ 123456
 magicSeq :: Word32
@@ -55,7 +55,8 @@ instance Convertable IPAddress where
 getIPAddress :: Get IPAddress
 getIPAddress = do
   --  Fails if fewer than n bytes are left in the input
-  address <- getNested Get Int Get agetByteString 0
+  -- 4 Word32
+  address <- getByteString (4*8)
   return$ IPAddress address
 
 data InetDiagSockId  = InetDiagSockId  {
@@ -250,9 +251,10 @@ eIPPROTO_TCP :: Word8
 eIPPROTO_TCP = 6
 
 -- Sends a SockDiagRequest
--- expects INetDiag 
+-- expects INetDiag
 -- TODO should take an Mptcp connection into account
--- TcpConnection -> 
+-- TcpConnection ->
+-- We should use cookies later on
 genQueryPacket :: Packet SockDiagRequest
 genQueryPacket = let
   -- Mesge type / flags /seqNum /pid
@@ -265,18 +267,23 @@ genQueryPacket = let
   -- _cookie = [ maxBound :: Word32, maxBound :: Word32]
   _cookie = [ 0 :: Word32, 0 :: Word32]
 
-  -- TODO hardcoded for now
+  -- global for now
   iperfSrcPort = 0
   iperfDstPort = 0
   -- iperfSrcPort = iperfHardcodedSrcPort
   -- iperfDstPort = 5201
   -- 4 Word32
   -- ipSrc = [ fromOctetsLE [ 127, 0, 0, 1], 0, 0, 0]
-  -- ipDst = [ fromOctetsLE [ 127, 0, 0, 1], 0, 0, 0]
-  ipSrc = [ 0, 0, 0, 0]
-  ipDst = [ 0, 0, 0, 0]
+-- C8.pack [ 0 , 0, 0, 0]
+-- look at fmap
+  ipSrc = IPAddress $ pack <$> replicateM (4*8) getWord8
+  -- ipSrc = IPAddress . pack <$> replicateM (4*8) getWord8
+  ipDst = IPAddress . pack <$> replicateM (4*8) getWord8 
+  -- ipDst = IPAddress <$> pack <$> replicateM (4*8) getWord8
   -- 1 => "lo". Check with ip link ?
+  --  interfaceIdx
   ifIndex = 1
+  -- diag_req = InetDiagSockId iperfSrcPort iperfDstPort ipSrc ipDst ifIndex _cookie
   diag_req = InetDiagSockId iperfSrcPort iperfDstPort ipSrc ipDst ifIndex _cookie
 
     -- #define SS_ALL ((1 << SS_MAX) - 1)

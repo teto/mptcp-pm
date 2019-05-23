@@ -41,8 +41,8 @@ instance Show MptcpSocket where
 -- |Data to hold subflows information
 data TcpConnection = TcpConnection {
   -- TODO use libraries to deal with that ? filter from the command line for instance ?
-  srcIp :: String -- ^Source ip
-  , dstIp :: String
+  srcIp :: IPAddress -- ^Source ip
+  , dstIp :: IPAddress
   , srcPort :: Word16
   , dstPort :: Word16
   -- , localId :: Word8
