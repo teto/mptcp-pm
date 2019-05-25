@@ -1,4 +1,7 @@
 {-|
+    ipSrc <- IPAddress . pack <$> replicateM (4*8) getWord8
+    -- ipSrc = IPAddress . pack <$> replicateM (4*8) getWord8
+    ipDst <- IPAddress . pack <$> replicateM (4*8) getWord8 
 Module      : IDiag
 Description : Implementation of mptcp netlink path manager
 Maintainer  : matt
@@ -32,6 +35,7 @@ import Data.Bits ((.|.))
 import qualified Data.Map as Map
 import Data.ByteString (ByteString, pack)
 -- import Data.ByteString.Char8 as C8 (pack)
+-- import Data.IP
 
 -- iproute uses this seq number #define MAGIC_SEQ 123456
 magicSeq :: Word32
@@ -42,6 +46,11 @@ magicSeq = 123456
 
 -- we can later map ip to a proper type
 data IPAddress = IPAddress ByteString deriving (Show, Eq)
+
+-- showIPv4 :: IPv4 -> String
+-- showIPv4 (IPv4 ip) = concat . intersperse "." $ showOctets
+--   where
+--     showOctets = map show $ word8s ip
 
 instance Convertable IPAddress where
   -- putWord32host $ take 4 (src cust)
@@ -56,6 +65,7 @@ getIPAddress :: Get IPAddress
 getIPAddress = do
   --  Fails if fewer than n bytes are left in the input
   -- 4 Word32
+  -- IPAddress . pack <$> replicateM (4*8) getWord8
   address <- getByteString (4*8)
   return$ IPAddress address
 
@@ -250,6 +260,9 @@ putInetDiagSockid cust = do
 eIPPROTO_TCP :: Word8
 eIPPROTO_TCP = 6
 
+IPAddressFromString ::
+IPAddressFromString ip = 
+
 -- Sends a SockDiagRequest
 -- expects INetDiag
 -- TODO should take an Mptcp connection into account
@@ -276,9 +289,8 @@ genQueryPacket = let
   -- ipSrc = [ fromOctetsLE [ 127, 0, 0, 1], 0, 0, 0]
 -- C8.pack [ 0 , 0, 0, 0]
 -- look at fmap
-  ipSrc = IPAddress $ pack <$> replicateM (4*8) getWord8
-  -- ipSrc = IPAddress . pack <$> replicateM (4*8) getWord8
-  ipDst = IPAddress . pack <$> replicateM (4*8) getWord8 
+  ipSrc = IPAddressFromString
+  ipDst = IPAddressFromString
   -- ipDst = IPAddress <$> pack <$> replicateM (4*8) getWord8
   -- 1 => "lo". Check with ip link ?
   --  interfaceIdx
@@ -293,7 +305,9 @@ genQueryPacket = let
   -- InetDiagInfo
   requestedInfo = InetDiagNone
   padding = 0 -- useless
+
   custom = SockDiagRequest eAF_INET eIPPROTO_TCP requestedInfo padding (stateFilter) diag_req
   in
-     Packet hdr custom Map.empty
+
+    Packet hdr custom Map.empty
 
