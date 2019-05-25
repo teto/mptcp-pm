@@ -25,12 +25,31 @@ let
     allowBroken = true;
   };
 
-  compiler = pkgs.haskell.packages.ghc864;
+  # nixpkgs = fetchNixpkgs {
+  #   owner = "layer-3-communications";
+  #   repo = "nixpkgs";
+  #   rev = "2ac764de78a1e63009143e2ecd88aa378002190f";
+  #   sha256 = "0j0hrzr9b57ifwfhggpzm43zcf6wcsj8ffxv6rz7ni7ar1x99x2c";
+  # };
+
+  # taken from
+  layer3-nixpkgs = builtins.fetchTarball {
+    url = "https://github.com/layer-3-communications/nixpkgs/archive/2ac764de78a1e63009143e2ecd88aa378002190f.tar.gz";
+    sha256 = "0j0hrzr9b57ifwfhggpzm43zcf6wcsj8ffxv6rz7ni7ar1x99x2c";
+    # inherit sha256;
+  };
+  compilerName = "ghc844";
+
+  compiler = pkgs.haskell.packages."${compilerName}";
 
   # inherit config;
-  pkgs = import <nixpkgs> {  inherit config; };
+  # pkgs = import <nixpkgs> {  inherit config; };
+  # pkgs = import layer3-nixpkgs {};
+  pkgs = localPkgs;
 
-  my_nvim = pkgs.genNeovim  [ ] { withHaskell = true; };
+  localPkgs = import <nixpkgs> {};
+
+  # my_nvim = localPkgs.genNeovim  [ ] { withHaskell = true; };
 
 in
   with pkgs;
@@ -47,8 +66,8 @@ in
   ;
   withHoogle = true;
   nativeBuildInputs = [
-    all-hies.versions.ghc864
-    haskellPackages.ip_1_5_0 
+    all-hies.versions."${compilerName}"
+    # haskellPackages.ip_1_5_0 
 
     haskellPackages.cabal-install
     # haskellPackages.bytestring-conversion
@@ -72,7 +91,6 @@ in
     export HIE_HOOGLE_DATABASE="$NIX_GHC_LIBDIR/../../share/doc/hoogle/index.html"
     # export runghc=" "
     source ./run_daemon
-    export PATH="${my_nvim}/bin:$PATH"
 
     echo "to regenerate C bindings"
     echo "make headers_install in the linux kernel"
