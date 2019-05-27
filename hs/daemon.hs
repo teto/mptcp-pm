@@ -1,5 +1,4 @@
 {-|
-Module      : System.Linux.Netlink.GeNetlink.NL80211
 Description : Implementation of mptcp netlink path manager
 Maintainer  : matt
 Stability   : testing
@@ -49,8 +48,8 @@ import qualified Options.Applicative (value)
 -- For TcpState, FFI generated
 import Generated
 import IDiag
-import Mptcp hiding (inspectResult, )
--- import Mptcp
+import Net.Mptcp hiding (inspectResult, )
+import Net.IPv4 hiding (print)
 
 -- for replicateM
 -- import Control.Monad
@@ -59,7 +58,6 @@ import Data.Foldable (foldl')
 import Foreign.C.Types (CInt)
 import Foreign.C.Error
 import System.Linux.Netlink hiding (makeSocket)
--- import System.Linux.Netlink (query, Packet(..))
 import System.Linux.Netlink.GeNetlink
 import System.Linux.Netlink.Constants
 -- import System.Linux.Netlink.Helpers
@@ -133,7 +131,7 @@ dumpMptcpCommands x = dumpCommand x ++ "\n" ++ dumpMptcpCommands (succ x)
 -- check ip link / localhost seems to be 1
 -- global interface index
 interfaceIdx :: Word8
-interfaceIdx :: 1
+interfaceIdx = 1
 
 -- todo use it as a filter
 data Sample = Sample
@@ -221,7 +219,8 @@ sleepMs n = threadDelay (n * 1000)
 -- here we may want to run mptcpnumerics to get some results
 updateCwndCap :: IO ()
 updateCwndCap = do
-    let fakeCon = TcpConnection "127.0.0.1" "127.0.0.1" 0 0
+    -- TODO fix con
+    let fakeCon = TcpConnection localhost localhost 0 0
     putStrLn "Reading metrics sock Mvar..."
     sockMetrics <- readMVar globalMetricsSock
 
@@ -231,32 +230,35 @@ updateCwndCap = do
     -- sendmsg genQueryPacket fakeCon
     let queryPkt = genQueryPacket
     let (MptcpSocket testSock familyId ) = mptcpSock
-    sendPacket sockMetrics queryPkt >> putStrLn "Sent the TCP SS request"
+    sendPacket sockMetrics (Packet NoData)
+-- queryPkt
+    putStrLn "Sent the TCP SS request"
   -- -- exported from my own version !!
   -- recvMulti sockMetrics >>= inspectIdiagAnswers
     -- for now let's discard the answer
     -- recvOne sockMetrics >>= inspectIdiagAnswers
 
-    let capCwndPkt = genCapCwnd familyId
-    sendPacket testSock capCwndPkt >> putStrLn "Sent the Cap command"
+    -- let capCwndPkt = genCapCwnd familyId
+    -- sendPacket testSock capCwndPkt >> putStrLn "Sent the Cap command"
 
 -- TODO 
 -- clude child configs in grub menu #45345
 -- send MPTCP_CMD_SND_CLAMP_WINDOW
 -- TODO we need the token to generate the command ?
-genCapCwnd :: MptcpToken -> Word16 -> MptcpPacket
-genCapCwnd token familyId = 
-    genMptcpRequest familyId MPTCP_CMD_SND_CLAMP_WINDOW True
+genCapCwnd :: MptcpToken 
+              -> Word16 -- ^family id
+              -> MptcpPacket
+genCapCwnd token familyId =
+    genMptcpRequest familyId MPTCP_CMD_SND_CLAMP_WINDOW True attrs
     where
         -- attrs = Map.empty
         attrs = [
             MptcpAttrToken token
-            SubflowFamily eAF_INET,
-            LocalLocatorId 0,
-            RemoteLocatorId 0,
-            MptcpAddr
-            MptcpIntf interfaceIdx 
-        ]
+            , SubflowFamily eAF_INET
+            , LocalLocatorId 0
+            , RemoteLocatorId 0
+            , MptcpIntf interfaceIdx
+            ]
     -- putStrLn "while waiting for a real implementation"
 
 startMonitorConnection :: MVar MptcpConnection -> IO ()
@@ -296,13 +298,8 @@ showAttributes attrs =
 -- family AF_INET/loc id/remid are not
 createNewSubflow :: MptcpSocket -> MptcpToken -> Attributes -> (GenlPacket NoData)
 createNewSubflow (MptcpSocket sock fid) token attrs = let
-    -- localId = readLocId $ Map.lookup (fromEnum MPTCP_ATTR_LOC_ID) attrs
-    -- remoteId = readLocId $ Map.lookup (fromEnum MPTCP_ATTR_REM_ID) attrs
 
-    -- TODO put attributes to create a new subflow
-
-    -- attributes = Map.empty
-    attributes = toAttributes [
+    attributes = [
         (MptcpAttrToken token),
         (LocalLocatorId 0) , (RemoteLocatorId 0)
         , SubflowFamily eAF_INET ]
@@ -319,22 +316,6 @@ createNewSubflow (MptcpSocket sock fid) token attrs = let
 putW32 :: Word32 -> ByteString
 putW32 x = runPut (putWord32host x)
 
--- inspired by netlink cATA :: CtrlAttribute -> (Int, ByteString)
-attrToPair :: MptcpAttribute -> (Int, ByteString)
-attrToPair (MptcpAttrToken token) = (fromEnum MPTCP_ATTR_TOKEN, runPut $ putWord32host token)
-attrToPair (RemoteLocatorId loc) = (fromEnum MPTCP_ATTR_REM_ID, runPut $ putWord8 loc)
-attrToPair (LocalLocatorId loc) = (fromEnum MPTCP_ATTR_REM_ID, runPut $ putWord8 loc)
-attrToPair (SubflowFamily fam) = let
-        fam8 = (fromIntegral $ fromEnum fam) :: Word8
-    in (fromEnum MPTCP_ATTR_FAMILY, runPut $ putWord8 fam8)
-
-attrToPair ( MptcpIntf idx) = (fromEnum MPTCP_ATTR_IF_IDX, runPut $ putWord8 idx)
-attrToPair ( MptcpAddr addr) = (fromEnum MPTCP_ATTR_SADDR4, addr)
--- attrToPair _ = error "unsupported"
-
-toAttributes :: [MptcpAttribute] -> Attributes
-toAttributes attrs = Map.fromList $map attrToPair attrs
-
 -- removeSubflow :: MptcpSocket -> MptcpToken -> LocId -> IO [GenlPacket NoData]
 -- removeSubflow (MptcpSocket socket fid) token locId = let
 
@@ -345,15 +326,15 @@ instance Show GenlHeaderMptcp where
     "Header: Cmd = " ++ show cmd ++ ", Version: " ++ show ver ++ "\n"
 
 
-checkIfSocketExists :: MptcpSocket -> MptcpToken  -> IO [GenlPacket NoData]
-checkIfSocketExists (MptcpSocket sock fid) token = let
-    attributes = Map.insert (fromEnum MPTCP_ATTR_TOKEN) (convertToken token) Map.empty
-    pkt = genMptcpRequest fid cmd False attributes
-    cmd = MPTCP_CMD_EXIST
-  in
-    putStrLn ("Checking token exists\n" ++ showAttributes attributes ++ showPacket pkt)
-      -- >> putStrLn $
-      >> query sock pkt
+-- checkIfSocketExists :: MptcpSocket -> MptcpToken  -> IO [GenlPacket NoData]
+-- checkIfSocketExists (MptcpSocket sock fid) token = let
+--     attributes = Map.insert (fromEnum MPTCP_ATTR_TOKEN) (convertToken token) Map.empty
+--     pkt = genMptcpRequest fid cmd False attributes
+--     cmd = MPTCP_CMD_EXIST
+--   in
+--     putStrLn ("Checking token exists\n" ++ showAttributes attributes ++ showPacket pkt)
+--       -- >> putStrLn $
+--       >> query sock pkt
 
 -- TODO here I could helpers from the netlink library
 convertLocId :: Word8 -> ByteString
@@ -367,19 +348,18 @@ convertToken val =
 
 -- need to prepare a request
 -- type GenlPacket a = Packet (GenlData a)
--- getResetPacket
-resetTheConnection :: MptcpSocket -> Attributes -> IO [GenlPacket NoData]
-resetTheConnection (MptcpSocket sock fid) receivedAttributes = let
-    m0 = Map.empty
-    m1 = Map.insert intCmd (convertToken token) m0
-    token = readToken $ Map.lookup (fromEnum MPTCP_ATTR_TOKEN) receivedAttributes
-    -- family eAF_INET 
-    attributes = m1
-    intCmd = fromEnum cmd
-    cmd = MPTCP_CMD_REMOVE
-    pkt = genMptcpRequest fid cmd False attributes
-  in
-    query sock pkt
+-- resetTheConnection :: MptcpSocket -> Attributes -> IO [GenlPacket NoData]
+-- resetTheConnection (MptcpSocket sock fid) receivedAttributes = let
+--     m0 = Map.empty
+--     m1 = Map.insert intCmd (convertToken token) m0
+--     token = readToken $ Map.lookup (fromEnum MPTCP_ATTR_TOKEN) receivedAttributes
+--     -- family eAF_INET 
+--     attributes = m1
+--     intCmd = fromEnum cmd
+--     cmd = MPTCP_CMD_REMOVE
+--     pkt = genMptcpRequest fid cmd False attributes
+--   in
+--     query sock pkt
 
 inspectAnswers :: [GenlPacket NoData] -> IO ()
 inspectAnswers packets = do
@@ -424,10 +404,8 @@ onNewConnection sock attributes = do
         return ()
       "d" -> putStrLn "Not implemented"
         -- removeSubflow sock token locId >>= inspectAnswers >> putStrLn "Finished announcing"
-      "e" -> putStrLn "check for existence" >>
-          checkIfSocketExists sock token >>= inspectAnswers
-          -- checkIfSocketExists sock token >>= (dispatchPacket sock)
-          -- return ()
+      -- "e" -> putStrLn "check for existence" >>
+      --     checkIfSocketExists sock token >>= inspectAnswers
       "r" -> putStrLn "Reset the connection" >>
         -- TODO expects token
         -- TODO discard result
@@ -507,9 +485,10 @@ dispatchPacket s (ErrorMsg hdr errCode errPacket) = do
   putStrLn $ "Error msg of type " ++ showErrCode errCode ++ " Packet content:\n" ++ show errPacket
   return s
 
+-- ++ show errPacket
 showError :: Show a => Packet a -> IO ()
 showError (ErrorMsg hdr errCode errPacket) = do
-  putStrLn $ "Error msg of type " ++ showErrCode errCode ++ " Packet content:\n" ++ show errPacket
+  putStrLn $ "Error msg of type " ++ showErrCode errCode ++ " Packet content:\n" 
 showError _ = error "Not the good overload"
 
 -- netlink must contain sthg for it

@@ -17,9 +17,11 @@ where
 import Data.Word (Word8, Word16, Word32)
 
 import Prelude hiding (length, concat)
+import Prelude hiding (length, concat)
 
 import Data.Serialize.Get
 import Data.Serialize.Put
+
 
 -- for replicateM
 import Control.Monad
@@ -36,7 +38,8 @@ import qualified Data.Map as Map
 import Data.ByteString (ByteString, pack)
 -- import Data.ByteString.Char8 as C8 (pack)
 -- import Data.IP
-import Net.IP
+-- import Net.IP
+import Net.IPAddress
 import Net.IPv4
 
 -- iproute uses this seq number #define MAGIC_SEQ 123456
@@ -46,31 +49,6 @@ magicSeq = 123456
 -- toIpv4 :: ByteString -> String
 -- toIpv4 val = Data.List.intercalate "." ( map show (unpack val))
 
--- we can later map ip to a proper type
-type IPAddress = IPv4
-
--- showIPv4 :: IPv4 -> String
--- showIPv4 (IPv4 ip) = concat . intersperse "." $ showOctets
---   where
---     showOctets = map show $ word8s ip
-
-instance Convertable IPAddress where
-  -- putWord32host $ take 4 (src cust)
-  -- encodeUtf8
-  getPut x =  putByteString . encodeUtf8 x
-  -- MessageType / getSockDiagRequestHeader
-  getGet _ = getIPAddress
-
--- TODO clean it up
--- getNested Get Int Get a / getListOf Get a
--- _dst <- replicateM 4 getWord32host
-getIPAddress :: Get IPAddress
-getIPAddress = do
-  --  Fails if fewer than n bytes are left in the input
-  -- 4 Word32
-  -- IPAddress . pack <$> replicateM (4*8) getWord8
-  address <- getByteString (4*8)
-  return$ IP address
 
 data InetDiagSockId  = InetDiagSockId  {
   sport :: Word16

@@ -6,11 +6,12 @@ Stability   : testing
 Portability : Linux
 
 -}
-module Mptcp
+module Net.Mptcp
 where
 
 import Generated
 import IDiag ()
+import Net.IPAddress
 
 import Data.Word (Word8, Word16, Word32)
 import qualified Data.Map as Map
@@ -24,13 +25,14 @@ import Data.Maybe (fromJust)
 import Data.ByteString.Conversion (fromByteString)
 
 import Data.Serialize.Get
--- import Data.Serialize.Put
+import Data.Serialize.Put
 
 import Data.Bits ((.|.))
 
 import Data.List (intercalate)
 -- import Debug.Trace
 import Control.Concurrent (MVar)
+import Net.IPv4
 
 -- how can I retreive the word16 without pattern matching ?
 data MptcpSocket = MptcpSocket NetlinkSocket Word16
@@ -85,7 +87,8 @@ getPort val =
 genMptcpRequest :: Word16 -- ^ the family id
                 -> MptcpGenlEvent -- ^The MPTCP command
                 -> Bool           -- ^Dump answer
-                -> Attributes
+                -- -> Attributes
+                -> [MptcpAttribute]
                 -> MptcpPacket
 genMptcpRequest fid cmd dump attrs =
   let
@@ -96,7 +99,7 @@ genMptcpRequest fid cmd dump attrs =
     flags = if dump then fNLM_F_REQUEST .|. fNLM_F_MATCH .|. fNLM_F_ROOT else fNLM_F_REQUEST
     word8Cmd = fromIntegral (fromEnum cmd) :: Word8
   in
-    Packet myHeader (GenlData geheader NoData) attrs
+    Packet myHeader (GenlData geheader NoData) (mptcpListToAttributes attrs)
 
 readToken :: Maybe ByteString -> MptcpToken
 readToken maybeVal = case maybeVal of
@@ -136,11 +139,12 @@ data MptcpAttributes = MptcpAttributes {
     connToken :: Word32
     , localLocatorID :: Maybe Word8
     , remoteLocatorID :: Maybe Word8
-    , family :: Word16
+    , family :: Word16 -- Remove ?
     -- |Pointer to the Attributes map used to build this struct. This is purely
     -- |for forward compat, please file a feature report if you have to use this.
     , staSelf       :: Attributes
 } deriving (Show, Eq, Read)
+
 
 data MptcpAttribute =
     MptcpAttrToken MptcpToken |
@@ -149,15 +153,54 @@ data MptcpAttribute =
     -- remote/local ?
     RemoteLocatorId Word8 |
     LocalLocatorId Word8 |
-    MptcpAddr ByteString |
+    MptcpAddr IPAddress |
     MptcpIntf Word8
 
 type MptcpToken = Word32
 type LocId    = Word8
 -- type MptcpFamily    = Word16
 
+-- todo remove when possible
 toIpv4 :: ByteString -> String
 toIpv4 val = Data.List.intercalate "." ( map show (unpack val))
+
+-- taken from System/Linux/Netlink/GeNetlink/Control.hs
+-- ctrlAttributesFromAttributes :: Map Int ByteString -> [CtrlAttribute]
+-- ctrlAttributesFromAttributes = map getAttribute . toList
+-- |Convert the typesafe 'CtrPacket' into a 'CTRLPacket' so it can be sent
+-- ctrlPackettoGenl :: CtrlPacket -> CTRLPacket
+-- ctrlPackettoGenl (CtrlPacket h g attrs)= Packet h (GenlData g NoData) a
+--   where a = fromList $map ctrlAttributesToAttribute attrs
+
+-- mptcpAttributeToTuple :: MptcpAttribute -> (Int, ByteString)
+-- mptcpAttributeToTuple (MptcpAttrToken token) = (fromEnum MPTCP_ATTR_TOKEN, runPut $ putWord32host token)
+-- mptcpAttributeToTuple (MptcpIntf ifx) = (fromEnum MPTCP_ATTR_IF_IDX, runPut $ putWord8 ifx)
+-- mptcpAttributeToTuple (MptcpAddr addr) = (fromEnum MPTCP_ATTR_SADDR4, encodeUtf8 addr)
+-- -- (fromEnum family) :: Word8)
+-- mptcpAttributeToTuple (SubflowFamily _) = (fromEnum MPTCP_ATTR_FAMILY, runPut $ putWord8 eAF_INET)
+-- mptcpAttributeToTuple (RemoteLocatorId loc) = (fromEnum MPTCP_ATTR_FAMILY, runPut $ putWord8 loc)
+-- mptcpAttributeToTuple (LocalLocatorId loc) = (fromEnum MPTCP_ATTR_FAMILY, runPut $ putWord8 loc)
+
+-- inspired by netlink cATA :: CtrlAttribute -> (Int, ByteString)
+attrToPair :: MptcpAttribute -> (Int, ByteString)
+attrToPair (MptcpAttrToken token) = (fromEnum MPTCP_ATTR_TOKEN, runPut $ putWord32host token)
+attrToPair (RemoteLocatorId loc) = (fromEnum MPTCP_ATTR_REM_ID, runPut $ putWord8 loc)
+attrToPair (LocalLocatorId loc) = (fromEnum MPTCP_ATTR_REM_ID, runPut $ putWord8 loc)
+attrToPair (SubflowFamily fam) = let
+        fam8 = (fromIntegral $ fromEnum fam) :: Word8
+    in (fromEnum MPTCP_ATTR_FAMILY, runPut $ putWord8 fam8)
+
+attrToPair ( MptcpIntf idx) = (fromEnum MPTCP_ATTR_IF_IDX, runPut $ putWord8 idx)
+attrToPair ( MptcpAddr addr) = (fromEnum MPTCP_ATTR_SADDR4, encodeUtf8 addr)
+-- attrToPair _ = error "unsupported"
+
+mptcpListToAttributes :: [MptcpAttribute] -> Attributes
+mptcpListToAttributes attrs = Map.fromList $map attrToPair attrs
+
+
+-- mptcpAttributesToMap :: [MptcpAttribute] -> Attributes
+-- mptcpAttributesToMap attrs =
+--   Map.fromList $map mptcpAttributeToTuple attrs
 
 subflowFromAttributes :: Attributes -> TcpConnection
 subflowFromAttributes attrs =
@@ -167,16 +210,17 @@ subflowFromAttributes attrs =
     -- toIpv4 $ fromJust
     _srcIp =  case (Map.lookup (fromEnum MPTCP_ATTR_SADDR4) attrs) of
       -- TODO toIpv4 ip
-      Just ip -> toIpv4 ip
+      Just ip -> fromJust $ decodeUtf8 ip
       -- assume v6, throws otherwise
       -- Nothing -> fromJust (Map.lookup (fromEnum MPTCP_ATTR_SADDR6) attrs)
-      Nothing -> "ipv6 src"
+      -- TODO user 'error' instead
+      Nothing -> error "ipv6 src"
     _dstPort = getPort $ fromJust (Map.lookup (fromEnum MPTCP_ATTR_DPORT) attrs)
     _dstIp = case (Map.lookup (fromEnum MPTCP_ATTR_DADDR4) attrs) of
-      Just ip -> toIpv4 ip
+      Just ip -> fromJust $ decodeUtf8 ip
       -- assume v6, throws otherwise
       -- Nothing -> fromJust (Map.lookup (fromEnum MPTCP_ATTR_SADDR6) attrs)
-      Nothing -> "ipv6 dst"
+      Nothing -> error "ipv6 dst"
   in
     TcpConnection _srcIp _dstIp _srcPort _dstPort
 
@@ -209,7 +253,7 @@ makeAttribute i val
     -- TODO fix $ Just fromByteString val  )
     | i == fromEnum MPTCP_ATTR_FAMILY = Just (SubflowFamily $ eAF_INET)
     -- this is a bytestring
-    | i == fromEnum MPTCP_ATTR_DADDR4 = Just (MptcpAddr $ val )
+    | i == fromEnum MPTCP_ATTR_DADDR4 = MptcpAddr <$> decodeUtf8 val
     -- | i == fromEnum MPTCP_ATTR_LOC_ID = Just (RemoteLocatorId $ val )
     -- | i == fromEnum MPTCP_ATTR_LOC_ID = Just (MptcpAddr $ val )
     | i == fromEnum MPTCP_ATTR_IF_IDX =

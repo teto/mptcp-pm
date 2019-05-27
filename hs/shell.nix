@@ -52,7 +52,8 @@ let
   # pkgs = import layer3-nixpkgs {};
   pkgs = localPkgs;
 
-  localPkgs = import <nixpkgs> {  inherit config; };
+  # localPkgs = import <nixpkgs> {  inherit config; };
+  localPkgs = import <nixpkgs> {};
 
   # my_nvim = localPkgs.genNeovim  [ ] { withHaskell = true; };
 
@@ -65,7 +66,6 @@ in
     (import ./. { inherit compiler;})
   ]
   ++ [
-    
 
   ]
   ;
@@ -77,11 +77,11 @@ in
 
     haskellPackages.cabal-install
     # haskellPackages.bytestring-conversion
-    # haskellPackages.gutenhasktags
+    haskellPackages.gutenhasktags  # taken from my overlay
     # haskellPackages.haskdogs # seems to build on hasktags/ recursively import things
     haskellPackages.hasktags
-    haskellPackages.nvim-hs
-    # haskellPackages.nvim-hs-ghcid
+    # haskellPackages.nvim-hs
+    # haskellPackages.nvim-hs-ghcid # too old, won't support nvim-hs-contrib 2
 
     # for https://hackage.haskell.org/package/bytestring-conversion-0.2/candidate/docs/Data-ByteString-Conversion-From.html
   ];

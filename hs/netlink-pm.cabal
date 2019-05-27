@@ -26,11 +26,10 @@ Flag Dev {
 --  >= 1.5.0.0
 common shared-properties
     build-depends: base, optparse-applicative, bytestring-conversion,
-        containers, bytestring, fast-logger, process, cereal, ip
-        , netlink>= 1.1.1.0
+      containers, bytestring, fast-logger, process, cereal, ip, netlink>= 1.1.1.0
     default-language: Haskell2010
     -- -fno-warn-unused-imports
-    ghc-options: -Wall -fno-warn-unused-binds -fno-warn-unused-matches -threaded
+    ghc-options: -Wall -fno-warn-unused-binds -fno-warn-unused-matches
 
     if flag(Dev)
         build-depends: netlink>= 1.1.1.1
@@ -38,7 +37,7 @@ common shared-properties
     Build-tools:       hsc2hs, c2hs
     -- apparently this just helps getting a better error messages
     Includes:          tcp_states.h, linux/sock_diag.h, linux/inet_diag.h
-    Other-modules:     Generated, IDiag, Mptcp
+    Other-modules:     IDiag, Net.Mptcp, Net.IPAddress, Generated
     -- TODO try to pass it from CLI instead
     include-dirs: .
     autogen-modules: Generated
@@ -49,8 +48,9 @@ common shared-properties
 -- and delegate the behavior to a monitor
 executable daemon
     import: shared-properties
+    -- build-depends: MyCustomLibrary
     -- ghc-options: -i/home/teto/netlink-hs
-    ghc-options: -Wall -fno-warn-unused-binds -fno-warn-unused-matches
+    ghc-options: -Wall -fno-warn-unused-binds -fno-warn-unused-matches -threaded
     main-is: daemon.hs
     -- extra-packages: netlink
     -- extra-lib-dirs: /home/teto/netlink-hs
@@ -66,8 +66,14 @@ executable short
     import: shared-properties
     main-is: test.hs
 
--- library Generated
---     import: shared-properties
+--  MyCustomLibrary
+library
+    Build-tools:       hsc2hs, c2hs
+    ghc-options: -Wall -fno-warn-unused-binds -fno-warn-unused-matches
+    -- apparently this just helps getting a better error messages
+    Includes:          tcp_states.h, linux/sock_diag.h, linux/inet_diag.h
+    include-dirs: .
+    -- autogen-modules: Generated
 
 
 Test-Suite test
