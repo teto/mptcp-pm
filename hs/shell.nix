@@ -12,11 +12,16 @@ let
   config = {
     packageOverrides = pkgs: rec {
       haskellPackages = pkgs.haskellPackages.override {
-        overrides = haskellPackagesNew: hold: rec {
-          hspec = hold.hspec_2_7_1;
-          hspec-core = hold.hspec-core_2_7_1;
-          hspec-discover = hold.hspec-discover_2_7_1;
-          QuickCheck = hold.QuickCheck_2_13_1;
+        overrides = hnew: hold: {
+          # hspec = hold.hspec_2_7_1;
+          # hspec-core = hold.hspec-core_2_7_1;
+          # hspec-discover = hold.hspec-discover_2_7_1;
+          # QuickCheck = hold.QuickCheck_2_13_1;
+
+          # from nixpkgs-stackage overlay
+          ip = pkgs.haskell.lib.dontCheck hold.ip;
+          # ip = pkgs.haskell.packages.stackage.lts-1321.ip;
+          # ip = hold.ip_1_5_0;
           # QuickCheck = haskellPackagesOld.QuickCheck_2_13_1;
           # ip_1_5_0 = haskellPackagesOld.ip_1_5_0.override { };
         };
@@ -38,7 +43,7 @@ let
     sha256 = "0j0hrzr9b57ifwfhggpzm43zcf6wcsj8ffxv6rz7ni7ar1x99x2c";
     # inherit sha256;
   };
-  compilerName = "ghc844";
+  compilerName = "ghc864";
 
   compiler = pkgs.haskell.packages."${compilerName}";
 
@@ -47,7 +52,7 @@ let
   # pkgs = import layer3-nixpkgs {};
   pkgs = localPkgs;
 
-  localPkgs = import <nixpkgs> {};
+  localPkgs = import <nixpkgs> {  inherit config; };
 
   # my_nvim = localPkgs.genNeovim  [ ] { withHaskell = true; };
 
@@ -67,6 +72,7 @@ in
   withHoogle = true;
   nativeBuildInputs = [
     all-hies.versions."${compilerName}"
+
     # haskellPackages.ip_1_5_0 
 
     haskellPackages.cabal-install

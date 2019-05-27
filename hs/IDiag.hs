@@ -36,6 +36,8 @@ import qualified Data.Map as Map
 import Data.ByteString (ByteString, pack)
 -- import Data.ByteString.Char8 as C8 (pack)
 -- import Data.IP
+import Net.IP
+import Net.IPv4
 
 -- iproute uses this seq number #define MAGIC_SEQ 123456
 magicSeq :: Word32
@@ -45,7 +47,7 @@ magicSeq = 123456
 -- toIpv4 val = Data.List.intercalate "." ( map show (unpack val))
 
 -- we can later map ip to a proper type
-data IPAddress = IPAddress ByteString deriving (Show, Eq)
+type IPAddress = IPv4
 
 -- showIPv4 :: IPv4 -> String
 -- showIPv4 (IPv4 ip) = concat . intersperse "." $ showOctets
@@ -54,7 +56,8 @@ data IPAddress = IPAddress ByteString deriving (Show, Eq)
 
 instance Convertable IPAddress where
   -- putWord32host $ take 4 (src cust)
-  getPut (IPAddress x) = putByteString x
+  -- encodeUtf8
+  getPut x =  putByteString . encodeUtf8 x
   -- MessageType / getSockDiagRequestHeader
   getGet _ = getIPAddress
 
@@ -67,7 +70,7 @@ getIPAddress = do
   -- 4 Word32
   -- IPAddress . pack <$> replicateM (4*8) getWord8
   address <- getByteString (4*8)
-  return$ IPAddress address
+  return$ IP address
 
 data InetDiagSockId  = InetDiagSockId  {
   sport :: Word16
@@ -260,8 +263,8 @@ putInetDiagSockid cust = do
 eIPPROTO_TCP :: Word8
 eIPPROTO_TCP = 6
 
-IPAddressFromString ::
-IPAddressFromString ip = 
+-- IPAddressFromString :: String -> IPv4
+-- IPAddressFromString = decodeString
 
 -- Sends a SockDiagRequest
 -- expects INetDiag
@@ -289,8 +292,8 @@ genQueryPacket = let
   -- ipSrc = [ fromOctetsLE [ 127, 0, 0, 1], 0, 0, 0]
 -- C8.pack [ 0 , 0, 0, 0]
 -- look at fmap
-  ipSrc = IPAddressFromString
-  ipDst = IPAddressFromString
+  ipSrc = localhost
+  ipDst = localhost
   -- ipDst = IPAddress <$> pack <$> replicateM (4*8) getWord8
   -- 1 => "lo". Check with ip link ?
   --  interfaceIdx
