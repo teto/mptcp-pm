@@ -4,9 +4,8 @@ version: 1.0.0
 license: GPL-3.0-only
 license-file: gpl-3.0.txt
 build-type: Simple
--- build-depends: base, netlink, optparse-applicative, binary, containers, bytestring, cereal, fast-logger
 Maintainer:  whoknows
-Homepage:   https://github.com/Ongy/netlink-hs
+Homepage:   https://github.com/teto/mptcpnetlink
 description:
   Supposed to be an MPTCP path manager
 
@@ -23,10 +22,11 @@ Flag Dev {
 
 -- , ip requires hspec_2_7
 -- iproute/network-info bad
---  >= 1.5.0.0
+-- bitset, fails
 common shared-properties
     build-depends: base, optparse-applicative, bytestring-conversion,
-      containers, bytestring, fast-logger, process, cereal, ip, netlink>= 1.1.1.0
+      containers, bytestring, fast-logger, process, cereal, ip,
+       netlink >= 1.1.1.1
     default-language: Haskell2010
     -- -fno-warn-unused-imports
     ghc-options: -Wall -fno-warn-unused-binds -fno-warn-unused-matches

@@ -3,7 +3,8 @@ import qualified Options.Applicative (value)
 import qualified System.Environment as Env
 import System.Log.FastLogger ()
 import Data.Word (Word8, Word16, Word32)
-import Mptcp
+import Net.Mptcp
+import System.Linux.Netlink hiding (makeSocket)
 
 
 -- instance Show TcpConnection where
@@ -45,6 +46,7 @@ opts = info (sample <**> helper)
 
 main :: IO ()
 main = do
+  -- let token = 
   case Env.getEnv "token" of
     Nothing -> error "Needs the token of the connection to monitor"
     Just token -> putStrLn "Monitoring token " ++ show token

@@ -50,6 +50,7 @@ import Generated
 import IDiag
 import Net.Mptcp hiding (inspectResult, )
 import Net.IPv4 hiding (print)
+import Net.IPAddress
 
 -- for replicateM
 -- import Control.Monad
@@ -128,10 +129,6 @@ dumpMptcpCommands :: MptcpGenlEvent -> String
 dumpMptcpCommands MPTCP_CMD_EXIST = dumpCommand MPTCP_CMD_EXIST
 dumpMptcpCommands x = dumpCommand x ++ "\n" ++ dumpMptcpCommands (succ x)
 
--- check ip link / localhost seems to be 1
--- global interface index
-interfaceIdx :: Word8
-interfaceIdx = 1
 
 -- todo use it as a filter
 data Sample = Sample
@@ -228,10 +225,9 @@ updateCwndCap = do
     mptcpSock <- readMVar globalMptcpSock
     putStrLn "Finished reading"
     -- sendmsg genQueryPacket fakeCon
-    let queryPkt = genQueryPacket
+    let queryPkt = genQueryPacket [TcpListen, TcpEstablished]
     let (MptcpSocket testSock familyId ) = mptcpSock
-    sendPacket sockMetrics (Packet NoData)
--- queryPkt
+    sendPacket sockMetrics queryPkt
     putStrLn "Sent the TCP SS request"
   -- -- exported from my own version !!
   -- recvMulti sockMetrics >>= inspectIdiagAnswers

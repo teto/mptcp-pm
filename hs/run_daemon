@@ -1,6 +1,6 @@
 #!/bin/sh
 function buildNrun() {
-	cabal build -v
+	cabal build -v daemon
 	if [ $? -eq 0 ]; then
 		sudo ./daemon daemon
 	fi
