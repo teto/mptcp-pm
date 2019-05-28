@@ -225,12 +225,13 @@ updateCwndCap = do
     mptcpSock <- readMVar globalMptcpSock
     putStrLn "Finished reading"
     -- sendmsg genQueryPacket fakeCon
-    let queryPkt = genQueryPacket [TcpListen, TcpEstablished]
+    let queryPkt = genQueryPacket Nothing [TcpListen, TcpEstablished] [InetDiagCong, InetDiagInfo, InetDiagMeminfo]
     let (MptcpSocket testSock familyId ) = mptcpSock
+    -- TODO analyze the results
     sendPacket sockMetrics queryPkt
     putStrLn "Sent the TCP SS request"
-  -- -- exported from my own version !!
-  -- recvMulti sockMetrics >>= inspectIdiagAnswers
+    -- exported from my own version !!
+    -- recvMulti sockMetrics >>= inspectIdiagAnswers
     -- for now let's discard the answer
     -- recvOne sockMetrics >>= inspectIdiagAnswers
 
@@ -241,7 +242,7 @@ updateCwndCap = do
 -- clude child configs in grub menu #45345
 -- send MPTCP_CMD_SND_CLAMP_WINDOW
 -- TODO we need the token to generate the command ?
-genCapCwnd :: MptcpToken 
+genCapCwnd :: MptcpToken
               -> Word16 -- ^family id
               -> MptcpPacket
 genCapCwnd token familyId =
@@ -257,25 +258,34 @@ genCapCwnd token familyId =
             ]
     -- putStrLn "while waiting for a real implementation"
 
-startMonitorConnection :: MVar MptcpConnection -> IO ()
-startMonitorConnection conn = do
+
+-- Use a Mvar here to
+startMonitorConnection :: MptcpSocket -> MVar MptcpConnection -> IO ()
+startMonitorConnection mptcpSock mConn = do
     -- ++ show token
-    putStrLn "Start monitoring token "
+    let (MptcpSocket sock familyId) = mptcpSock
+    putStrLn "Start monitoring connection..."
     -- as long as conn is not empty we keep going ?
     -- for this connection
+    -- query metrics for the whole MPTCP connection
+    con <- readMVar mConn
     updateCwndCap
+    let token = connectionToken con
+    let attrs = [ (MptcpAttrToken token ), (LocalLocatorId 0)]
+    let resetPkt = resetConnectionPkt mptcpSock attrs
+    -- queryOne
+    putStrLn $ "Sending RESET for token " ++ show token
+    query sock resetPkt >>= inspectAnswers
     sleepMs 5000
     putStrLn "Finished monitoring token "
     -- call ourself again
-    startMonitorConnection conn
+    startMonitorConnection mptcpSock mConn
 
 
 runMptcpNumerics :: IO String
 runMptcpNumerics  =
   -- TODO run readProcessWithExitCode instead
   readProcess "seq" ["1", "10"] ""
-
-
 
 -- type Attributes = Map Int ByteString
 -- the library contains showAttrs / showNLAttrs
@@ -289,26 +299,6 @@ showAttributes attrs =
     -- putStrLn $ intercalate "," $ mapped
     mapped
 
-
--- sport/backup/intf are optional
--- family AF_INET/loc id/remid are not
-createNewSubflow :: MptcpSocket -> MptcpToken -> Attributes -> (GenlPacket NoData)
-createNewSubflow (MptcpSocket sock fid) token attrs = let
-
-    attributes = [
-        (MptcpAttrToken token),
-        (LocalLocatorId 0) , (RemoteLocatorId 0)
-        , SubflowFamily eAF_INET ]
-    cmd = MPTCP_CMD_SUB_CREATE
-    pkt = genMptcpRequest fid cmd False attributes
-  in
-    pkt
-
-  -- putStrLn "createNewSubflow TODO"
-  -- if (!info->attrs[MPTCP_ATTR_TOKEN] || !info->attrs[MPTCP_ATTR_FAMILY] ||
-  --     !info->attrs[MPTCP_ATTR_LOC_ID] || !info->attrs[MPTCP_ATTR_REM_ID])
-
-
 putW32 :: Word32 -> ByteString
 putW32 x = runPut (putWord32host x)
 
@@ -320,42 +310,6 @@ newtype GenlHeaderMptcp = GenlHeaderMptcp GenlHeader
 instance Show GenlHeaderMptcp where
   show (GenlHeaderMptcp (GenlHeader cmd ver)) =
     "Header: Cmd = " ++ show cmd ++ ", Version: " ++ show ver ++ "\n"
-
-
--- checkIfSocketExists :: MptcpSocket -> MptcpToken  -> IO [GenlPacket NoData]
--- checkIfSocketExists (MptcpSocket sock fid) token = let
---     attributes = Map.insert (fromEnum MPTCP_ATTR_TOKEN) (convertToken token) Map.empty
---     pkt = genMptcpRequest fid cmd False attributes
---     cmd = MPTCP_CMD_EXIST
---   in
---     putStrLn ("Checking token exists\n" ++ showAttributes attributes ++ showPacket pkt)
---       -- >> putStrLn $
---       >> query sock pkt
-
--- TODO here I could helpers from the netlink library
-convertLocId :: Word8 -> ByteString
-convertLocId val =
-  runPut $ putWord8 val
-
-
-convertToken :: Word32 -> ByteString
-convertToken val =
-  runPut $ putWord32le val
-
--- need to prepare a request
--- type GenlPacket a = Packet (GenlData a)
--- resetTheConnection :: MptcpSocket -> Attributes -> IO [GenlPacket NoData]
--- resetTheConnection (MptcpSocket sock fid) receivedAttributes = let
---     m0 = Map.empty
---     m1 = Map.insert intCmd (convertToken token) m0
---     token = readToken $ Map.lookup (fromEnum MPTCP_ATTR_TOKEN) receivedAttributes
---     -- family eAF_INET 
---     attributes = m1
---     intCmd = fromEnum cmd
---     cmd = MPTCP_CMD_REMOVE
---     pkt = genMptcpRequest fid cmd False attributes
---   in
---     query sock pkt
 
 inspectAnswers :: [GenlPacket NoData] -> IO ()
 inspectAnswers packets = do
@@ -396,7 +350,7 @@ onNewConnection sock attributes = do
     case answer of
       "c" -> do
         putStrLn "Creating new subflow !!"
-        let pkt = createNewSubflow sock token attributes
+        -- let pkt = createNewSubflow sock token attributes
         return ()
       "d" -> putStrLn "Not implemented"
         -- removeSubflow sock token locId >>= inspectAnswers >> putStrLn "Finished announcing"
@@ -414,8 +368,7 @@ onNewConnection sock attributes = do
 dispatchPacket :: MyState -> MptcpPacket -> IO MyState
 dispatchPacket oldState (Packet hdr (GenlData genlHeader NoData) attributes) = let
     cmd = genlCmd genlHeader
-    (MyState sock conns) = oldState
-    -- (MyState sock ) = oldState
+    (MyState mptcpSock conns) = oldState
 
     -- i suppose token is always available right ?
     token = readToken $ Map.lookup (fromEnum MPTCP_ATTR_TOKEN) attributes
@@ -426,17 +379,10 @@ dispatchPacket oldState (Packet hdr (GenlData genlHeader NoData) attributes) = l
         let subflow = subflowFromAttributes attributes
         -- newConn <- newEmptyMVar
         let newMptcpConn = MptcpConnection token [ subflow ]
-        newConn <- newMVar newMptcpConn 
+        newConn <- newMVar newMptcpConn
         putStrLn $ "Connection created !!\n" ++ showAttributes attributes
-        -- onNewConnection sock attributes
-        -- we will need to monitor this action
-        -- _ <- forkOS (putStrLn "Yay! i'm in thread!")
-        -- newMptcpConn 
-        --    putStrLn "Waiting..."
-        -- putMVar result
-        -- value <- takeMVar result
-        -- putStrLn ("The answer is: " ++ show value)
-        handle <- forkOS (startMonitorConnection newConn)
+        -- onNewConnection mptcpSock attributes
+        handle <- forkOS (startMonitorConnection mptcpSock newConn)
         -- r <- createProces $ startMonitor token
         -- putStrLn $ "Connection created !!\n" ++ show subflow
         let newState = oldState { connections = Map.insert token newConn (connections oldState) }
@@ -446,6 +392,7 @@ dispatchPacket oldState (Packet hdr (GenlData genlHeader NoData) attributes) = l
 
       MPTCP_EVENT_ESTABLISHED -> do
         putStrLn "Connection established !"
+        -- TODO llok
         return oldState
 
       MPTCP_EVENT_CLOSED -> do
@@ -466,9 +413,14 @@ dispatchPacket oldState (Packet hdr (GenlData genlHeader NoData) attributes) = l
                 -- let newCon = con { subflows = subflows con ++ [subflow] }
                 let newState = oldState 
                 -- let newState = oldState { connections = Map.insert token newCon (connections oldState) }
+                -- TODO we should insert the 
+                -- newConn <-
                 return newState
       -- TODO remove
-      MPTCP_EVENT_SUB_CLOSED -> putStrLn "Subflow closed" >> return oldState
+      MPTCP_EVENT_SUB_CLOSED -> case mptcpConn of
+        Nothing -> return oldState
+        Just thread -> putStrLn "Subflow closed" >> return oldState
+
       MPTCP_CMD_EXIST -> putStrLn "this token exists" >> return oldState
       _ -> putStrLn "undefined event !!" >> return oldState
 

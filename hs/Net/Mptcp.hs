@@ -12,6 +12,7 @@ where
 import Generated
 import IDiag ()
 import Net.IPAddress
+import Control.Exception (assert)
 
 import Data.Word (Word8, Word16, Word32)
 import qualified Data.Map as Map
@@ -98,13 +99,16 @@ genMptcpRequest fid cmd dump attrs =
     geheader = GenlHeader word8Cmd mptcpGenlVer
     flags = if dump then fNLM_F_REQUEST .|. fNLM_F_MATCH .|. fNLM_F_ROOT else fNLM_F_REQUEST
     word8Cmd = fromIntegral (fromEnum cmd) :: Word8
+
+    -- TODO run an assert on the list filter
   in
+    -- TODO check that MptcpToken is in the list
     Packet myHeader (GenlData geheader NoData) (mptcpListToAttributes attrs)
 
 readToken :: Maybe ByteString -> MptcpToken
 readToken maybeVal = case maybeVal of
   Nothing -> error "Missing token"
-  Just val -> case ( runGet getWord32le val) of
+  Just val -> case ( runGet getWord32host val) of
     Left err -> error "could not decode"
     Right mptcpToken -> mptcpToken
 
@@ -154,6 +158,8 @@ data MptcpAttribute =
     RemoteLocatorId Word8 |
     LocalLocatorId Word8 |
     MptcpAddr IPAddress |
+    MptcpSrcPort Word16 |
+    MptcpDstPort Word16 |
     MptcpIntf Word8
 
 type MptcpToken = Word32
@@ -185,13 +191,16 @@ toIpv4 val = Data.List.intercalate "." ( map show (unpack val))
 attrToPair :: MptcpAttribute -> (Int, ByteString)
 attrToPair (MptcpAttrToken token) = (fromEnum MPTCP_ATTR_TOKEN, runPut $ putWord32host token)
 attrToPair (RemoteLocatorId loc) = (fromEnum MPTCP_ATTR_REM_ID, runPut $ putWord8 loc)
-attrToPair (LocalLocatorId loc) = (fromEnum MPTCP_ATTR_REM_ID, runPut $ putWord8 loc)
+attrToPair (LocalLocatorId loc) = (fromEnum MPTCP_ATTR_LOC_ID, runPut $ putWord8 loc)
 attrToPair (SubflowFamily fam) = let
         fam8 = (fromIntegral $ fromEnum fam) :: Word8
     in (fromEnum MPTCP_ATTR_FAMILY, runPut $ putWord8 fam8)
 
 attrToPair ( MptcpIntf idx) = (fromEnum MPTCP_ATTR_IF_IDX, runPut $ putWord8 idx)
 attrToPair ( MptcpAddr addr) = (fromEnum MPTCP_ATTR_SADDR4, encodeUtf8 addr)
+attrToPair ( MptcpSrcPort port) = (fromEnum MPTCP_ATTR_SPORT, runPut $ putWord16host port)
+attrToPair ( MptcpDstPort port) = (fromEnum MPTCP_ATTR_DPORT, runPut $ putWord16host port)
+
 -- attrToPair _ = error "unsupported"
 
 mptcpListToAttributes :: [MptcpAttribute] -> Attributes
@@ -291,3 +300,45 @@ dumpAttribute attr value = let
       -- _ -> "unhandled case"
   in
     attrStr
+
+
+checkIfSocketExistsPkt :: Word16 -> [MptcpAttribute]  -> MptcpPacket
+checkIfSocketExistsPkt fid attributes =
+    genMptcpRequest fid MPTCP_CMD_EXIST True attributes
+
+-- https://stackoverflow.com/questions/47861648/a-general-way-of-comparing-constructors-of-two-terms-in-haskell?noredirect=1&lq=1
+-- attrToPair ( MptcpSrcPort port) = (fromEnum MPTCP_ATTR_SPORT, runPut $ putWord8 loc)
+isAttribute :: MptcpAttribute -- ^ to compare with
+               -> MptcpAttribute -- ^to compare to
+               -> Bool
+isAttribute ref toCompare = fst (attrToPair toCompare) == fst (attrToPair ref)
+
+-- need to prepare a request
+-- type GenlPacket a = Packet (GenlData a)
+-- REQUIRES: LOC_ID / TOKEN
+resetConnectionPkt :: MptcpSocket -> [MptcpAttribute] -> MptcpPacket
+resetConnectionPkt (MptcpSocket sock fid) attrs = let
+    cmd = MPTCP_CMD_REMOVE
+    tokenAttrs = filter (isAttribute (MptcpAttrToken 0)) attrs
+  in
+    assert ((length tokenAttrs) > 0) $ genMptcpRequest fid MPTCP_CMD_REMOVE False attrs
+
+-- TODO here I could helpers from the netlink library
+convertLocId :: Word8 -> ByteString
+convertLocId val =
+  runPut $ putWord8 val
+
+
+-- sport/backup/intf are optional
+-- family AF_INET/loc id/remid are not
+newSubflowPkt :: MptcpSocket -> [MptcpAttribute] -> MptcpPacket
+newSubflowPkt (MptcpSocket sock fid) attrs = let
+    cmd = MPTCP_CMD_SUB_CREATE
+    pkt = genMptcpRequest fid MPTCP_CMD_SUB_CREATE False attrs
+  in
+    pkt
+
+  -- putStrLn "createNewSubflow TODO"
+  -- if (!info->attrs[MPTCP_ATTR_TOKEN] || !info->attrs[MPTCP_ATTR_FAMILY] ||
+  --     !info->attrs[MPTCP_ATTR_LOC_ID] || !info->attrs[MPTCP_ATTR_REM_ID])
+

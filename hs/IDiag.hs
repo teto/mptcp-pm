@@ -14,7 +14,7 @@ module IDiag
 where
 
 -- import Generated
-import Data.Word (Word8, Word16, Word32)
+import Data.Word (Word8, Word16, Word32, Word64)
 
 import Prelude hiding (length, concat)
 import Prelude hiding (length, concat)
@@ -24,7 +24,7 @@ import Data.Serialize.Put
 
 
 -- for replicateM
-import Control.Monad
+-- import Control.Monad
 
 import System.Linux.Netlink
 import System.Linux.Netlink.Constants
@@ -62,7 +62,7 @@ data InetDiagSockId  = InetDiagSockId  {
 
   , intf :: Word32
   -- * 2
-  , cookie :: [Word32]
+  , sockCookie :: Word64
 
 } deriving (Eq, Show)
 
@@ -87,6 +87,10 @@ instance Enum2Bits IDiagExt where
 enumsToWord :: Enum2Bits a => [a] -> Word32
 enumsToWord [] = 0
 enumsToWord (x:xs) = (shiftL x) .|. (enumsToWord xs)
+
+-- TODO use bitset package ? but broken on nixos
+wordToEnums :: Enum2Bits a =>  Word32 -> [a]
+wordToEnums  _ = []
 
 -- This generates a response of inet_diag_msg
 -- rename to answer ?
@@ -158,7 +162,8 @@ getSockDiagRequestHeader = do
     states <- getWord32host
     _sockid <- getInetDiagSockid
     -- TODO reestablish states
-    return $ SockDiagRequest addressFamily protocol (toEnum (fromIntegral extended) :: IDiagExt) [] _sockid
+    return $ SockDiagRequest addressFamily protocol 
+      (wordToEnums extended :: [IDiagExt]) (wordToEnums states :: [TcpState])  _sockid
 
 -- |'Put' function for 'GenlHeader'
 putSockDiagRequestHeader :: SockDiagRequest -> Put
@@ -167,8 +172,9 @@ putSockDiagRequestHeader request = do
   putWord8 $ sdiag_family request
   putWord8 $ sdiag_protocol request
   -- extended todo use Enum2Bits
-  putWord8 $ fromIntegral $ fromEnum $ idiag_ext request
-  putWord8 0
+  --putWord32host $ enumsToWord states
+  putWord8 ( fromIntegral (enumsToWord $ idiag_ext request) :: Word8)
+  putWord8 0  -- padding ?
   -- TODO check endianness
   putStates $ idiag_states request
   putInetDiagSockid $ diag_sockid request
@@ -214,7 +220,7 @@ getInetDiagSockid  = do
     _src <- getIPAddress
     _dst <- getIPAddress
     _intf <- getWord32host
-    _cookie <- replicateM 2 getWord32host
+    _cookie <- getWord64host
     return $ InetDiagSockId _sport _dport _src _dst _intf _cookie
 
 putInetDiagSockid :: InetDiagSockId -> Put
@@ -222,32 +228,53 @@ putInetDiagSockid cust = do
   -- we might need to clean up this a bit
   putWord16be $ sport cust
   putWord16be $ sport cust
-  -- TODO fix
-  --
   getPut (src cust)
   getPut (dst cust)
-
-  -- replicateM 4 (putWord32be $ dst cust) -- dest
   putWord32host $ intf cust
+  putWord64host $ sockCookie cust
 
-  -- cookie ?
-  mapM_ putWord32host $ take 2 (cookie cust)
-  -- replicateM $ putWord32host (cookie cust) 4
+-- include/uapi/linux/inet_diag.h
+-- struct tcpvegas_info {
+-- 	__u32	tcpv_enabled;
+-- 	__u32	tcpv_rttcnt;
+-- 	__u32	tcpv_rtt;
+-- 	__u32	tcpv_minrtt;
+-- };
+data DiagTcpInfo = TcpVegasInfo {
+  -- TODO hide ?
+  tcpInfoVegasEnabled :: Word32
+  , tcpInfoRttCount :: Word32
+  , tcpInfoRtt :: Word32
+  , tcpInfoMinrtt :: Word32
+}
+
+instance Convertable DiagTcpInfo where
+  getPut  = putDiagTcpInfo
+  getGet _  = getDiagTcpInfo
 
 
+putDiagTcpInfo :: DiagTcpInfo -> Put
+putDiagTcpInfo info = error "should not be needed"
+
+
+getDiagTcpInfo :: Get DiagTcpInfo
+getDiagTcpInfo =
+  TcpVegasInfo <$> getWord32host <*> getWord32host <*> getWord32host <*> getWord32host
 
 -- TODO generate via FFI ?
 eIPPROTO_TCP :: Word8
 eIPPROTO_TCP = 6
 
--- IPAddressFromString :: String -> IPv4
--- IPAddressFromString = decodeString
-
--- fromOctets :: [Word8] -> Word32
--- fromOctets = foldl' accum 0
---   where
---     accum a o = (a `shiftL` 8) .|. fromIntegral o
-
+-- __u32	idiag_rmem;
+-- __u32	idiag_wmem;
+-- __u32	idiag_fmem;
+-- __u32	idiag_tmem;
+data Meminfo = Meminfo {
+  idiag_rmem :: Word32
+, idiag_wmem :: Word32
+, idiag_fmem :: Word32
+, idiag_tmem :: Word32
+}
 -- Sends a SockDiagRequest
 -- expects INetDiag
 -- TODO should take an Mptcp connection into account
@@ -261,28 +288,21 @@ eIPPROTO_TCP = 6
 -- InetDiagInfo
 -- TODO we need to request more !
 -- requestedInfo = InetDiagNone
-genQueryPacket :: [TcpState] -> [IDiagExt] -> Packet SockDiagRequest
-genQueryPacket tcpStatesFilter requestedInfo = let
+genQueryPacket :: (Maybe Word64) -> [TcpState] -> [IDiagExt] -> Packet SockDiagRequest
+genQueryPacket cookie tcpStatesFilter requestedInfo = let
   -- Mesge type / flags /seqNum /pid
   flags = (fNLM_F_REQUEST .|. fNLM_F_MATCH .|. fNLM_F_ROOT)
 
   -- might be a trick with seqnum
   hdr = Header msgTypeSockDiag flags magicSeq 0
-  -- IPPROTO_TCP = 6,
-  -- -1 => ignore cookie content
-  -- _cookie = [ maxBound :: Word32, maxBound :: Word32]
-  -- plutot un tuple ou un word64 si ca existe ?
-  _cookie = [ 0 :: Word32, 0 :: Word32]
+  _cookie = 0 :: Word64
 
   -- global for now
   iperfSrcPort = 0
   iperfDstPort = 0
   -- iperfSrcPort = iperfHardcodedSrcPort
   -- iperfDstPort = 5201
-  -- 4 Word32
-  -- ipSrc = [ fromOctetsLE [ 127, 0, 0, 1], 0, 0, 0]
--- C8.pack [ 0 , 0, 0, 0]
--- look at fmap
+  -- look at fmap
   ipSrc = localhost
   ipDst = localhost
   -- ipDst = IPAddress <$> pack <$> replicateM (4*8) getWord8
@@ -296,4 +316,5 @@ genQueryPacket tcpStatesFilter requestedInfo = let
   in
     Packet hdr custom Map.empty
 
--- queryPacketFromCookie = 
+queryPacketFromCookie :: Word64 -> Packet SockDiagRequest
+queryPacketFromCookie cookie =  genQueryPacket (Just cookie) [] []
