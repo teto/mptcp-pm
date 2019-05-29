@@ -20,13 +20,16 @@ Flag Dev {
 }
 
 
+-- TODO write a rule specific to generated files
 -- , ip requires hspec_2_7
 -- iproute/network-info bad
 -- bitset, fails
+-- aeson to (de)serialize to json
+-- brittany for formatting (does not work)
 common shared-properties
     build-depends: base, optparse-applicative, bytestring-conversion,
-      containers, bytestring, fast-logger, process, cereal, ip,
-       netlink >= 1.1.1.1
+      containers, bytestring, fast-logger, process, cereal, ip, aeson,
+       netlink >= 1.1.1.1, data-default
     default-language: Haskell2010
     -- -fno-warn-unused-imports
     ghc-options: -Wall -fno-warn-unused-binds -fno-warn-unused-matches

@@ -34,6 +34,8 @@ import Data.List (intercalate)
 -- import Debug.Trace
 import Control.Concurrent (MVar)
 import Net.IPv4
+-- in package Unique-0.4.7.6
+-- import Data.List.Unique
 
 -- how can I retreive the word16 without pattern matching ?
 data MptcpSocket = MptcpSocket NetlinkSocket Word16
@@ -42,20 +44,25 @@ instance Show MptcpSocket where
 
 -- isIPv4address
 -- |Data to hold subflows information
+-- use http://hackage.haskell.org/package/data-default-0.5.3/docs/Data-Default.html
+-- data default to provide default values
 data TcpConnection = TcpConnection {
   -- TODO use libraries to deal with that ? filter from the command line for instance ?
   srcIp :: IPAddress -- ^Source ip
   , dstIp :: IPAddress
   , srcPort :: Word16
   , dstPort :: Word16
-  -- , localId :: Word8
-  -- , remoteId :: Word8
+  , priority :: Maybe Word8
+  , localId :: Word8
+  , remoteId :: Word8
   -- add loc id
   -- add TcpMetrics member
 
 -- TODO derive Eq as well
 } deriving Show
 
+-- data TcpSubflow = TcpSubflow {
+-- }
 
 data MyState = MyState {
   socket :: MptcpSocket -- ^Socket
@@ -69,9 +76,34 @@ type MptcpPacket = GenlPacket NoData
 
 -- |Data to hold MPTCP level information
 data MptcpConnection = MptcpConnection {
-  connectionToken :: MptcpToken,
-  subflows :: [TcpConnection]
+  connectionToken :: MptcpToken
+  , subflows :: [TcpConnection]
+  , localIds :: [Word8]  -- ^ Announced addresses
+  , remoteIds :: [Word8]  -- ^ Announced addresses
 } deriving Show
+
+
+
+-- TODO add to localIds
+mptcpConnAddSubflow :: MptcpConnection -> TcpConnection -> MptcpConnection
+mptcpConnAddSubflow mptcpConn subflow =
+  mptcpConn {
+    subflows = subflow : subflows mptcpConn
+    , localIds = localId subflow : localIds mptcpConn
+    , remoteIds = remoteId subflow : remoteIds mptcpConn
+  }
+
+mptcpConnAddLocalId :: MptcpConnection
+                       -> Word8 -- ^ Local id to add
+                       -> MptcpConnection
+mptcpConnAddLocalId con localId = undefined
+
+-- mptcpConnAddAnnouncement
+
+-- TODO remove subflow
+mptcpConnRemoveSubflow :: MptcpConnection -> TcpConnection -> MptcpConnection
+mptcpConnRemoveSubflow mptcpConn subflow = undefined
+-- mptcpConn
 
 getPort :: ByteString -> Word16
 getPort val =
@@ -100,10 +132,11 @@ genMptcpRequest fid cmd dump attrs =
     flags = if dump then fNLM_F_REQUEST .|. fNLM_F_MATCH .|. fNLM_F_ROOT else fNLM_F_REQUEST
     word8Cmd = fromIntegral (fromEnum cmd) :: Word8
 
+    pkt = Packet myHeader (GenlData geheader NoData) (mptcpListToAttributes attrs)
     -- TODO run an assert on the list filter
+    hasTokenAttr = Prelude.any (isAttribute (MptcpAttrToken 0)) attrs
   in
-    -- TODO check that MptcpToken is in the list
-    Packet myHeader (GenlData geheader NoData) (mptcpListToAttributes attrs)
+    assert hasTokenAttr pkt
 
 readToken :: Maybe ByteString -> MptcpToken
 readToken maybeVal = case maybeVal of
@@ -160,32 +193,16 @@ data MptcpAttribute =
     MptcpAddr IPAddress |
     MptcpSrcPort Word16 |
     MptcpDstPort Word16 |
-    MptcpIntf Word8
+    MptcpClampCwnd Word32 |
+    SubflowBackup Word8 |
+    SubflowInterface Word8
 
 type MptcpToken = Word32
 type LocId    = Word8
--- type MptcpFamily    = Word16
 
 -- todo remove when possible
 toIpv4 :: ByteString -> String
 toIpv4 val = Data.List.intercalate "." ( map show (unpack val))
-
--- taken from System/Linux/Netlink/GeNetlink/Control.hs
--- ctrlAttributesFromAttributes :: Map Int ByteString -> [CtrlAttribute]
--- ctrlAttributesFromAttributes = map getAttribute . toList
--- |Convert the typesafe 'CtrPacket' into a 'CTRLPacket' so it can be sent
--- ctrlPackettoGenl :: CtrlPacket -> CTRLPacket
--- ctrlPackettoGenl (CtrlPacket h g attrs)= Packet h (GenlData g NoData) a
---   where a = fromList $map ctrlAttributesToAttribute attrs
-
--- mptcpAttributeToTuple :: MptcpAttribute -> (Int, ByteString)
--- mptcpAttributeToTuple (MptcpAttrToken token) = (fromEnum MPTCP_ATTR_TOKEN, runPut $ putWord32host token)
--- mptcpAttributeToTuple (MptcpIntf ifx) = (fromEnum MPTCP_ATTR_IF_IDX, runPut $ putWord8 ifx)
--- mptcpAttributeToTuple (MptcpAddr addr) = (fromEnum MPTCP_ATTR_SADDR4, encodeUtf8 addr)
--- -- (fromEnum family) :: Word8)
--- mptcpAttributeToTuple (SubflowFamily _) = (fromEnum MPTCP_ATTR_FAMILY, runPut $ putWord8 eAF_INET)
--- mptcpAttributeToTuple (RemoteLocatorId loc) = (fromEnum MPTCP_ATTR_FAMILY, runPut $ putWord8 loc)
--- mptcpAttributeToTuple (LocalLocatorId loc) = (fromEnum MPTCP_ATTR_FAMILY, runPut $ putWord8 loc)
 
 -- inspired by netlink cATA :: CtrlAttribute -> (Int, ByteString)
 attrToPair :: MptcpAttribute -> (Int, ByteString)
@@ -193,15 +210,16 @@ attrToPair (MptcpAttrToken token) = (fromEnum MPTCP_ATTR_TOKEN, runPut $ putWord
 attrToPair (RemoteLocatorId loc) = (fromEnum MPTCP_ATTR_REM_ID, runPut $ putWord8 loc)
 attrToPair (LocalLocatorId loc) = (fromEnum MPTCP_ATTR_LOC_ID, runPut $ putWord8 loc)
 attrToPair (SubflowFamily fam) = let
-        fam8 = (fromIntegral $ fromEnum fam) :: Word8
-    in (fromEnum MPTCP_ATTR_FAMILY, runPut $ putWord8 fam8)
+        fam8 = (fromIntegral $ fromEnum fam) :: Word16
+    in (fromEnum MPTCP_ATTR_FAMILY, runPut $ putWord16host fam8)
 
-attrToPair ( MptcpIntf idx) = (fromEnum MPTCP_ATTR_IF_IDX, runPut $ putWord8 idx)
+attrToPair ( SubflowInterface idx) = (fromEnum MPTCP_ATTR_IF_IDX, runPut $ putWord8 idx)
 attrToPair ( MptcpAddr addr) = (fromEnum MPTCP_ATTR_SADDR4, encodeUtf8 addr)
 attrToPair ( MptcpSrcPort port) = (fromEnum MPTCP_ATTR_SPORT, runPut $ putWord16host port)
 attrToPair ( MptcpDstPort port) = (fromEnum MPTCP_ATTR_DPORT, runPut $ putWord16host port)
+attrToPair ( MptcpClampCwnd limit) = (fromEnum MPTCP_ATTR_CWND, runPut $ putWord32host limit)
+attrToPair ( SubflowBackup prio) = (fromEnum MPTCP_ATTR_CWND, runPut $ putWord8 prio)
 
--- attrToPair _ = error "unsupported"
 
 mptcpListToAttributes :: [MptcpAttribute] -> Attributes
 mptcpListToAttributes attrs = Map.fromList $map attrToPair attrs
@@ -211,6 +229,7 @@ mptcpListToAttributes attrs = Map.fromList $map attrToPair attrs
 -- mptcpAttributesToMap attrs =
 --   Map.fromList $map mptcpAttributeToTuple attrs
 
+-- TODO simplify
 subflowFromAttributes :: Attributes -> TcpConnection
 subflowFromAttributes attrs =
   let
@@ -231,7 +250,7 @@ subflowFromAttributes attrs =
       -- Nothing -> fromJust (Map.lookup (fromEnum MPTCP_ATTR_SADDR6) attrs)
       Nothing -> error "ipv6 dst"
   in
-    TcpConnection _srcIp _dstIp _srcPort _dstPort
+    TcpConnection _srcIp _dstIp _srcPort _dstPort Nothing 0 0
 
 
 -- TODO prefix with 'e' for enum
@@ -267,18 +286,17 @@ makeAttribute i val
     -- | i == fromEnum MPTCP_ATTR_LOC_ID = Just (MptcpAddr $ val )
     | i == fromEnum MPTCP_ATTR_IF_IDX =
              case runGet getWord8 val of
-                Right x -> Just $ MptcpIntf x
+                Right x -> Just $ SubflowInterface x
                 _ -> Nothing
     | otherwise = error "Unsupported attribute"
-        -- Just (MptcpIntf $ fromMaybe $ e2M () )
+        -- Just (SubflowInterface $ fromMaybe $ e2M () )
 
     -- | i == fromEnum MPTCP_ATTR_REM_ID = Just (MptcpAddr $ getWord8 )
     -- | i == MPTCP_ATTR_FAMILY = Just (MptcpAttrToken $ runGet getWord32le val)
 
 dumpAttribute :: Int -> ByteString -> String
 dumpAttribute attr value = let
-  -- enumFromTo ?
-  -- traceId $ toEnum (fromIntegral attr)
+  -- TODO replace with makeAttribute followd by show ?
   -- traceShowId
   attrStr = case  ( toEnum (fromIntegral attr)) of
       MPTCP_ATTR_UNSPEC -> "UNSPECIFIED"
@@ -297,6 +315,7 @@ dumpAttribute attr value = let
       MPTCP_ATTR_FLAGS -> "Flags: " ++ show value
       MPTCP_ATTR_TIMEOUT -> "timeout: " ++ show value
       MPTCP_ATTR_IF_IDX -> "ifId: " ++ show value
+      MPTCP_ATTR_CWND -> "cwnd: " ++ show value
       -- _ -> "unhandled case"
   in
     attrStr
@@ -313,32 +332,32 @@ isAttribute :: MptcpAttribute -- ^ to compare with
                -> Bool
 isAttribute ref toCompare = fst (attrToPair toCompare) == fst (attrToPair ref)
 
+hasLocAddr :: [MptcpAttribute] -> Bool
+hasLocAddr attrs = Prelude.any (isAttribute (LocalLocatorId 0)) attrs
+
+hasFamily :: [MptcpAttribute] -> Bool
+hasFamily = Prelude.any (isAttribute (SubflowFamily eAF_INET))
+
 -- need to prepare a request
 -- type GenlPacket a = Packet (GenlData a)
 -- REQUIRES: LOC_ID / TOKEN
 resetConnectionPkt :: MptcpSocket -> [MptcpAttribute] -> MptcpPacket
 resetConnectionPkt (MptcpSocket sock fid) attrs = let
     cmd = MPTCP_CMD_REMOVE
-    tokenAttrs = filter (isAttribute (MptcpAttrToken 0)) attrs
   in
-    assert ((length tokenAttrs) > 0) $ genMptcpRequest fid MPTCP_CMD_REMOVE False attrs
-
--- TODO here I could helpers from the netlink library
-convertLocId :: Word8 -> ByteString
-convertLocId val =
-  runPut $ putWord8 val
+    assert (hasLocAddr attrs) $ genMptcpRequest fid MPTCP_CMD_REMOVE False attrs
 
 
 -- sport/backup/intf are optional
 -- family AF_INET/loc id/remid are not
+-- TODO pass new subflow ?
 newSubflowPkt :: MptcpSocket -> [MptcpAttribute] -> MptcpPacket
 newSubflowPkt (MptcpSocket sock fid) attrs = let
     cmd = MPTCP_CMD_SUB_CREATE
     pkt = genMptcpRequest fid MPTCP_CMD_SUB_CREATE False attrs
   in
-    pkt
+    assert (hasFamily attrs) pkt
 
-  -- putStrLn "createNewSubflow TODO"
-  -- if (!info->attrs[MPTCP_ATTR_TOKEN] || !info->attrs[MPTCP_ATTR_FAMILY] ||
-  --     !info->attrs[MPTCP_ATTR_LOC_ID] || !info->attrs[MPTCP_ATTR_REM_ID])
+-- announceLocalIdPkt ::
+-- announceLocalIdPkt = 
 

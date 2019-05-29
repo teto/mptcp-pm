@@ -82,6 +82,7 @@ import Debug.Trace
 -- import Control.Exception
 
 import Control.Concurrent
+import Control.Exception (assert)
 -- import Control.Concurrent.Chan
 -- import Data.IORef
 -- import Control.Concurrent.Async
@@ -89,9 +90,7 @@ import System.IO.Unsafe
 
 -- STM = State Thread Monad ST monad
 -- import Data.IORef
-
 -- MVar can be empty contrary to IORef !
--- 
 -- globalMptcpSock :: IORef MptcpSocket
 
 {-# NOINLINE globalMptcpSock #-}
@@ -242,19 +241,25 @@ updateCwndCap = do
 -- clude child configs in grub menu #45345
 -- send MPTCP_CMD_SND_CLAMP_WINDOW
 -- TODO we need the token to generate the command ?
+--token, family, loc_id, rem_id, [saddr4 | saddr6,
+-- daddr4 | daddr6, dport [, sport, backup, if_idx]]
+
 genCapCwnd :: MptcpToken
               -> Word16 -- ^family id
               -> MptcpPacket
 genCapCwnd token familyId =
-    genMptcpRequest familyId MPTCP_CMD_SND_CLAMP_WINDOW True attrs
+    assert (hasFamily attrs) pkt
     where
+        pkt = genMptcpRequest familyId MPTCP_CMD_SND_CLAMP_WINDOW True attrs
         -- attrs = Map.empty
         attrs = [
             MptcpAttrToken token
             , SubflowFamily eAF_INET
             , LocalLocatorId 0
+            -- TODO check emote locator ?
             , RemoteLocatorId 0
-            , MptcpIntf interfaceIdx
+            , SubflowInterface interfaceIdx
+            -- , SubflowInterface interfaceIdx
             ]
     -- putStrLn "while waiting for a real implementation"
 
@@ -271,11 +276,20 @@ startMonitorConnection mptcpSock mConn = do
     con <- readMVar mConn
     updateCwndCap
     let token = connectionToken con
-    let attrs = [ (MptcpAttrToken token ), (LocalLocatorId 0)]
-    let resetPkt = resetConnectionPkt mptcpSock attrs
+    let resetAttrs = [ (MptcpAttrToken token ), (LocalLocatorId 0)]
+    let newSubflowAttrs = [ (MptcpAttrToken token )
+            , (LocalLocatorId 0)
+            , (RemoteLocatorId 0)
+            , (SubflowFamily eAF_INET)
+            ]
+    let resetPkt = resetConnectionPkt mptcpSock resetAttrs
+    let newSfPkt = newSubflowPkt mptcpSock newSubflowAttrs
     -- queryOne
-    putStrLn $ "Sending RESET for token " ++ show token
-    query sock resetPkt >>= inspectAnswers
+    -- putStrLn $ "Sending RESET for token " ++ show token
+    -- query sock resetPkt >>= inspectAnswers
+    putStrLn $ "Creating new subflow ? for token " ++ show token
+    putStrLn $ "Sending " ++ show newSfPkt
+    query sock newSfPkt >>= inspectAnswers
     sleepMs 5000
     putStrLn "Finished monitoring token "
     -- call ourself again
@@ -372,13 +386,13 @@ dispatchPacket oldState (Packet hdr (GenlData genlHeader NoData) attributes) = l
 
     -- i suppose token is always available right ?
     token = readToken $ Map.lookup (fromEnum MPTCP_ATTR_TOKEN) attributes
-    mptcpConn = Map.lookup token (connections oldState)
+    maybeConn = Map.lookup token (connections oldState)
   in
     case toEnum (fromIntegral cmd) of
       MPTCP_EVENT_CREATED -> do
         let subflow = subflowFromAttributes attributes
         -- newConn <- newEmptyMVar
-        let newMptcpConn = MptcpConnection token [ subflow ]
+        let newMptcpConn = MptcpConnection token [ subflow ] [] []
         newConn <- newMVar newMptcpConn
         putStrLn $ "Connection created !!\n" ++ showAttributes attributes
         -- onNewConnection mptcpSock attributes
@@ -395,8 +409,12 @@ dispatchPacket oldState (Packet hdr (GenlData genlHeader NoData) attributes) = l
         -- TODO llok
         return oldState
 
+      MPTCP_EVENT_ANNOUNCED -> do
+        putStrLn "New address announced"
+        return oldState
+
       MPTCP_EVENT_CLOSED -> do
-        putStrLn "Connection closed, deleting token "
+        putStrLn $ "Connection closed, deleting token " ++ show token
         -- let newState = oldState { connections = Map.delete token (connections oldState) }
         -- TODO we should kill the thread with killThread or empty the mVar !!
         let newState = oldState
@@ -406,20 +424,30 @@ dispatchPacket oldState (Packet hdr (GenlData genlHeader NoData) attributes) = l
       MPTCP_EVENT_SUB_ESTABLISHED -> do
         let subflow = subflowFromAttributes attributes
         putStrLn "Subflow established"
-        case mptcpConn of
+        case maybeConn of
             Nothing -> putStrLn "No connection with this token" >> return oldState
-            Just thread -> do
+            Just mConn -> do
                 putStrLn "Found a match"
-                -- let newCon = con { subflows = subflows con ++ [subflow] }
-                let newState = oldState 
+                -- swapMVar / withMVar / modifyMVar
+                mptcpConn <- takeMVar mConn
+                -- TODO we should trigger an update in the CWND
+                let newCon = mptcpConnAddSubflow mptcpConn subflow
+                let newState = oldState
+                putMVar mConn newCon
                 -- let newState = oldState { connections = Map.insert token newCon (connections oldState) }
-                -- TODO we should insert the 
+                -- TODO we should insert the
                 -- newConn <-
                 return newState
+
+
       -- TODO remove
-      MPTCP_EVENT_SUB_CLOSED -> case mptcpConn of
+      MPTCP_EVENT_SUB_CLOSED -> case maybeConn of
         Nothing -> return oldState
-        Just thread -> putStrLn "Subflow closed" >> return oldState
+        Just thread -> do
+                putStrLn "Subflow closed"
+                putStrLn "TODO remove subflow"
+                -- >> mptcpConnRemoveSubflow
+                return oldState
 
       MPTCP_CMD_EXIST -> putStrLn "this token exists" >> return oldState
       _ -> putStrLn "undefined event !!" >> return oldState
