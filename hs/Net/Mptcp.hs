@@ -96,7 +96,7 @@ mptcpConnAddSubflow mptcpConn subflow =
 mptcpConnAddLocalId :: MptcpConnection
                        -> Word8 -- ^ Local id to add
                        -> MptcpConnection
-mptcpConnAddLocalId con localId = undefined
+mptcpConnAddLocalId con locId = undefined
 
 -- mptcpConnAddAnnouncement
 
@@ -232,6 +232,7 @@ mptcpListToAttributes attrs = Map.fromList $map attrToPair attrs
 -- TODO simplify
 subflowFromAttributes :: Attributes -> TcpConnection
 subflowFromAttributes attrs =
+  -- makeAttribute Int ByteString
   let
     -- expects a ByteString
     _srcPort = getPort $ fromJust (Map.lookup (fromEnum MPTCP_ATTR_SPORT) attrs)
@@ -255,10 +256,10 @@ subflowFromAttributes attrs =
 
 -- TODO prefix with 'e' for enum
 -- Map.lookup (fromEnum attr) m
-getAttribute :: MptcpAttr -> Attributes -> Maybe MptcpAttribute
-getAttribute attr m
-    | attr == MPTCP_ATTR_TOKEN = Nothing
-    | otherwise = Nothing
+-- getAttribute :: MptcpAttr -> Attributes -> Maybe MptcpAttribute
+-- getAttribute attr m
+--     | attr == MPTCP_ATTR_TOKEN = Nothing
+--     | otherwise = Nothing
 
 -- getAttribute :: (Int, ByteString) -> CtrlAttribute
 -- getAttribute (i, x) = fromMaybe (CTRL_ATTR_UNKNOWN i x) $makeAttribute i x
@@ -274,15 +275,27 @@ e2M :: Either a b -> Maybe b
 e2M (Right x) = Just x
 e2M _ = Nothing
 
--- TODO use e2m
-makeAttribute :: Int -> ByteString -> Maybe MptcpAttribute
+makeAttributeFromMaybe :: Int -> Attributes -> Maybe MptcpAttribute
+makeAttributeFromMaybe attrType attrs =
+  let res = Map.lookup (fromEnum attrType) attrs in
+  case res of
+    Nothing -> Nothing
+    Just bytestring -> makeAttribute attrType bytestring
+
+-- | Builds an MptcpAttribute from
+makeAttribute :: Int -- ^ MPTCP_ATTR_TOKEN value
+                  -> ByteString
+                  -> Maybe MptcpAttribute
 makeAttribute i val
     | i == fromEnum MPTCP_ATTR_TOKEN = Just (MptcpAttrToken $ readToken $ Just val)
     -- TODO fix $ Just fromByteString val  )
     | i == fromEnum MPTCP_ATTR_FAMILY = Just (SubflowFamily $ eAF_INET)
     -- this is a bytestring
+    -- TODO Not good
     | i == fromEnum MPTCP_ATTR_DADDR4 = MptcpAddr <$> decodeUtf8 val
-    -- | i == fromEnum MPTCP_ATTR_LOC_ID = Just (RemoteLocatorId $ val )
+    -- | i == fromEnum MPTCP_ATTR_DADDR6 = MptcpAddr <$> decodeUtf8 val
+    | i == fromEnum MPTCP_ATTR_LOC_ID = Just (LocalLocatorId $ readLocId $ Just val )
+    | i == fromEnum MPTCP_ATTR_REM_ID = Just (RemoteLocatorId $ readLocId $ Just val )
     -- | i == fromEnum MPTCP_ATTR_LOC_ID = Just (MptcpAddr $ val )
     | i == fromEnum MPTCP_ATTR_IF_IDX =
              case runGet getWord8 val of
@@ -293,6 +306,7 @@ makeAttribute i val
 
     -- | i == fromEnum MPTCP_ATTR_REM_ID = Just (MptcpAddr $ getWord8 )
     -- | i == MPTCP_ATTR_FAMILY = Just (MptcpAttrToken $ runGet getWord32le val)
+
 
 dumpAttribute :: Int -> ByteString -> String
 dumpAttribute attr value = let
