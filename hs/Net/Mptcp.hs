@@ -6,6 +6,7 @@ Stability   : testing
 Portability : Linux
 
 -}
+{-# LANGUAGE DeriveGeneric #-}
 module Net.Mptcp
 where
 
@@ -21,7 +22,7 @@ import System.Linux.Netlink hiding (makeSocket)
 import System.Linux.Netlink.GeNetlink
 import System.Linux.Netlink.Constants
 -- import System.Linux.Netlink.GeNetlink.Control
-import Data.ByteString (ByteString, unpack)
+import Data.ByteString (ByteString)
 import Data.Maybe (fromJust)
 import Data.ByteString.Conversion (fromByteString)
 
@@ -30,12 +31,14 @@ import Data.Serialize.Put
 
 import Data.Bits ((.|.))
 
-import Data.List (intercalate)
+import Data.List ()
 -- import Debug.Trace
 import Control.Concurrent (MVar)
-import Net.IPv4
+import Net.IP
 -- in package Unique-0.4.7.6
 -- import Data.List.Unique
+import Data.Aeson
+import GHC.Generics
 
 -- how can I retreive the word16 without pattern matching ?
 data MptcpSocket = MptcpSocket NetlinkSocket Word16
@@ -48,21 +51,25 @@ instance Show MptcpSocket where
 -- data default to provide default values
 data TcpConnection = TcpConnection {
   -- TODO use libraries to deal with that ? filter from the command line for instance ?
-  srcIp :: IPAddress -- ^Source ip
-  , dstIp :: IPAddress
+  srcIp :: IP -- ^Source ip
+  , dstIp :: IP -- ^Destination ip
   , srcPort :: Word16
   , dstPort :: Word16
   , priority :: Maybe Word8
   , localId :: Word8
   , remoteId :: Word8
+  , inetFamily :: Word16
   -- add loc id
   -- add TcpMetrics member
 
 -- TODO derive Eq as well
-} deriving Show
+} deriving (Show, Generic)
 
 -- data TcpSubflow = TcpSubflow {
 -- }
+
+instance FromJSON TcpConnection
+instance ToJSON TcpConnection
 
 data MyState = MyState {
   socket :: MptcpSocket -- ^Socket
@@ -190,7 +197,8 @@ data MptcpAttribute =
     -- remote/local ?
     RemoteLocatorId Word8 |
     LocalLocatorId Word8 |
-    MptcpAddr IPAddress |
+    SubflowSourceAddress IP |
+    SubflowDestAddress IP |
     MptcpSrcPort Word16 |
     MptcpDstPort Word16 |
     MptcpClampCwnd Word32 |
@@ -199,10 +207,6 @@ data MptcpAttribute =
 
 type MptcpToken = Word32
 type LocId    = Word8
-
--- todo remove when possible
-toIpv4 :: ByteString -> String
-toIpv4 val = Data.List.intercalate "." ( map show (unpack val))
 
 -- inspired by netlink cATA :: CtrlAttribute -> (Int, ByteString)
 attrToPair :: MptcpAttribute -> (Int, ByteString)
@@ -214,11 +218,12 @@ attrToPair (SubflowFamily fam) = let
     in (fromEnum MPTCP_ATTR_FAMILY, runPut $ putWord16host fam8)
 
 attrToPair ( SubflowInterface idx) = (fromEnum MPTCP_ATTR_IF_IDX, runPut $ putWord8 idx)
-attrToPair ( MptcpAddr addr) = (fromEnum MPTCP_ATTR_SADDR4, encodeUtf8 addr)
+attrToPair ( SubflowSourceAddress addr) = (fromEnum MPTCP_ATTR_SADDR4, runPut $ putIPAddress addr)
+attrToPair ( SubflowDestAddress addr) = (fromEnum MPTCP_ATTR_DADDR4, runPut $ putIPAddress addr)
 attrToPair ( MptcpSrcPort port) = (fromEnum MPTCP_ATTR_SPORT, runPut $ putWord16host port)
 attrToPair ( MptcpDstPort port) = (fromEnum MPTCP_ATTR_DPORT, runPut $ putWord16host port)
 attrToPair ( MptcpClampCwnd limit) = (fromEnum MPTCP_ATTR_CWND, runPut $ putWord32host limit)
-attrToPair ( SubflowBackup prio) = (fromEnum MPTCP_ATTR_CWND, runPut $ putWord8 prio)
+attrToPair ( SubflowBackup prio) = (fromEnum MPTCP_ATTR_BACKUP, runPut $ putWord8 prio)
 
 
 mptcpListToAttributes :: [MptcpAttribute] -> Attributes
@@ -235,24 +240,28 @@ subflowFromAttributes attrs =
   -- makeAttribute Int ByteString
   let
     -- expects a ByteString
-    _srcPort = getPort $ fromJust (Map.lookup (fromEnum MPTCP_ATTR_SPORT) attrs)
+    (MptcpSrcPort _srcPort) = fromJust $ makeAttributeFromMaybe MPTCP_ATTR_SPORT attrs
+    -- _srcPort = getPort $ fromJust (Map.lookup (fromEnum MPTCP_ATTR_SPORT) attrs)
     -- toIpv4 $ fromJust
     _srcIp =  case (Map.lookup (fromEnum MPTCP_ATTR_SADDR4) attrs) of
       -- TODO toIpv4 ip
-      Just ip -> fromJust $ decodeUtf8 ip
+      Just ip -> fromJust $ getIPAddressFromByteString ip
       -- assume v6, throws otherwise
       -- Nothing -> fromJust (Map.lookup (fromEnum MPTCP_ATTR_SADDR6) attrs)
       -- TODO user 'error' instead
       Nothing -> error "ipv6 src"
     _dstPort = getPort $ fromJust (Map.lookup (fromEnum MPTCP_ATTR_DPORT) attrs)
     _dstIp = case (Map.lookup (fromEnum MPTCP_ATTR_DADDR4) attrs) of
-      Just ip -> fromJust $ decodeUtf8 ip
+      Just ip -> fromJust $ getIPAddressFromByteString ip
       -- assume v6, throws otherwise
       -- Nothing -> fromJust (Map.lookup (fromEnum MPTCP_ATTR_SADDR6) attrs)
       Nothing -> error "ipv6 dst"
-  in
-    TcpConnection _srcIp _dstIp _srcPort _dstPort Nothing 0 0
 
+    sfLocalId = getPort $ fromJust (Map.lookup (fromEnum MPTCP_ATTR_FAMILY) attrs)
+  in
+    TcpConnection _srcIp _dstIp _srcPort _dstPort Nothing 0 0 eAF_INET
+
+-- makeSubflowFromAttributes ::
 
 -- TODO prefix with 'e' for enum
 -- Map.lookup (fromEnum attr) m
@@ -275,12 +284,17 @@ e2M :: Either a b -> Maybe b
 e2M (Right x) = Just x
 e2M _ = Nothing
 
-makeAttributeFromMaybe :: Int -> Attributes -> Maybe MptcpAttribute
+-- makeAttributeFromMap ::
+
+-- makeAttributeFromList ::
+
+-- TODO rename fromMap
+makeAttributeFromMaybe :: MptcpAttr -> Attributes -> Maybe MptcpAttribute
 makeAttributeFromMaybe attrType attrs =
   let res = Map.lookup (fromEnum attrType) attrs in
   case res of
     Nothing -> Nothing
-    Just bytestring -> makeAttribute attrType bytestring
+    Just bytestring -> makeAttribute (fromEnum attrType) bytestring
 
 -- | Builds an MptcpAttribute from
 makeAttribute :: Int -- ^ MPTCP_ATTR_TOKEN value
@@ -291,21 +305,19 @@ makeAttribute i val
     -- TODO fix $ Just fromByteString val  )
     | i == fromEnum MPTCP_ATTR_FAMILY = Just (SubflowFamily $ eAF_INET)
     -- this is a bytestring
-    -- TODO Not good
-    | i == fromEnum MPTCP_ATTR_DADDR4 = MptcpAddr <$> decodeUtf8 val
-    -- | i == fromEnum MPTCP_ATTR_DADDR6 = MptcpAddr <$> decodeUtf8 val
+    -- TODO Not good, use getIPv4 IPv4
+    | i == fromEnum MPTCP_ATTR_SADDR4 = SubflowSourceAddress <$> getIPAddressFromByteString val
+    | i == fromEnum MPTCP_ATTR_DADDR4 = SubflowDestAddress <$> getIPAddressFromByteString val
+    | i == fromEnum MPTCP_ATTR_DADDR6 = undefined
     | i == fromEnum MPTCP_ATTR_LOC_ID = Just (LocalLocatorId $ readLocId $ Just val )
     | i == fromEnum MPTCP_ATTR_REM_ID = Just (RemoteLocatorId $ readLocId $ Just val )
-    -- | i == fromEnum MPTCP_ATTR_LOC_ID = Just (MptcpAddr $ val )
+    -- | i == fromEnum MPTCP_ATTR_LOC_ID = Just (SubflowSourceAddress $ val )
     | i == fromEnum MPTCP_ATTR_IF_IDX =
              case runGet getWord8 val of
                 Right x -> Just $ SubflowInterface x
                 _ -> Nothing
     | otherwise = error "Unsupported attribute"
         -- Just (SubflowInterface $ fromMaybe $ e2M () )
-
-    -- | i == fromEnum MPTCP_ATTR_REM_ID = Just (MptcpAddr $ getWord8 )
-    -- | i == MPTCP_ATTR_FAMILY = Just (MptcpAttrToken $ runGet getWord32le val)
 
 
 dumpAttribute :: Int -> ByteString -> String
@@ -318,9 +330,9 @@ dumpAttribute attr value = let
       MPTCP_ATTR_FAMILY -> "family: " ++ show value
       MPTCP_ATTR_LOC_ID -> "Locator id: " ++ show (readLocId $ Just value)
       MPTCP_ATTR_REM_ID -> "Remote id: " ++ show value
-      MPTCP_ATTR_SADDR4 -> "ipv4.src: " ++ toIpv4 value
+      MPTCP_ATTR_SADDR4 -> "ipv4.src: " ++ show value
       MPTCP_ATTR_SADDR6 -> "ipv6.src: " ++ show value
-      MPTCP_ATTR_DADDR4 -> "ipv4.dest: " ++ toIpv4 value
+      MPTCP_ATTR_DADDR4 -> "ipv4.dest: " ++ show value
       MPTCP_ATTR_DADDR6 -> "ipv6.dest: " ++ show value
       MPTCP_ATTR_SPORT -> "sport: " ++ show (getPort value)
       MPTCP_ATTR_DPORT -> "dport: " ++ show (getPort value)

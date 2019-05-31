@@ -35,11 +35,11 @@ import Generated
 import qualified Data.Bits as B
 import Data.Bits ((.|.))
 import qualified Data.Map as Map
-import Data.ByteString (ByteString, pack)
+import Data.ByteString ()
 -- import Data.ByteString.Char8 as C8 (pack)
 -- import Data.IP
--- import Net.IP
 import Net.IPAddress
+import Net.IP
 import Net.IPv4
 
 -- iproute uses this seq number #define MAGIC_SEQ 123456
@@ -57,8 +57,8 @@ data InetDiagSockId  = InetDiagSockId  {
   -- Just be careful that this is a fixed size regardless of family
   -- __be32  idiag_src[4];
   -- __be32  idiag_dst[4];
-  , src :: IPAddress
-  , dst :: IPAddress
+  , src :: IP
+  , dst :: IP
 
   , intf :: Word32
   -- * 2
@@ -303,8 +303,9 @@ genQueryPacket cookie tcpStatesFilter requestedInfo = let
   -- iperfSrcPort = iperfHardcodedSrcPort
   -- iperfDstPort = 5201
   -- look at fmap
-  ipSrc = localhost
-  ipDst = localhost
+  -- TODO replace ?
+  ipSrc = fromIPv4 localhost
+  ipDst = fromIPv4 localhost
   -- ipDst = IPAddress <$> pack <$> replicateM (4*8) getWord8
   -- 1 => "lo". Check with ip link ?
   -- ifIndex = IDiag.fromOctets [ 0, 0, 0, interfaceIdx]

@@ -34,6 +34,8 @@ http://kristrev.github.io/2013/07/26/passive-monitoring-of-sockets-on-linux
 iproute2/misc/ss.c to see how `ss` utility interacts with the kernel
 -- https://downloads.haskell.org/~ghc/latest/docs/html/libraries/process-1.6.5.0/System-Process.html
 
+Aeson tutorials:
+-- https://haskell.fpcomplete.com/library/aeson
 - https://lotz84.github.io/haskellbyexample/ex/timers
 -}
 
@@ -49,6 +51,7 @@ import qualified Options.Applicative (value)
 import Generated
 import IDiag
 import Net.Mptcp hiding (inspectResult, )
+import Net.IP
 import Net.IPv4 hiding (print)
 import Net.IPAddress
 
@@ -216,7 +219,7 @@ sleepMs n = threadDelay (n * 1000)
 updateCwndCap :: IO ()
 updateCwndCap = do
     -- TODO fix con
-    let fakeCon = TcpConnection localhost localhost 0 0
+    let fakeCon = TcpConnection (fromIPv4 localhost) (fromIPv4 localhost) 0 0
     putStrLn "Reading metrics sock Mvar..."
     sockMetrics <- readMVar globalMetricsSock
 
@@ -296,6 +299,10 @@ startMonitorConnection mptcpSock mConn = do
     startMonitorConnection mptcpSock mConn
 
 
+-- invoke
+-- 1. save the connection to a JSON file and pass it to mptcpnumerics
+-- 2.
+-- 3.
 runMptcpNumerics :: IO String
 runMptcpNumerics  =
   -- TODO run readProcessWithExitCode instead
@@ -590,14 +597,14 @@ main = do
   -- putMVar
   putMVar globalMetricsSock sockMetrics
 
-  putStr "socket created. MPTCP Family id " >> print fid
+  putStr "socket created. MPTCP Family id " >> Prelude.print fid
   -- putStr "socket created. tcp_metrics Family id " >> print fidMetrics
   -- That's what I should use in fact !! (Word16, [CtrlAttrMcastGroup])
   -- (mid, mcastGroup ) <- getFamilyWithMulticasts sock mptcpGenlEvGrpName
   -- Each netlink family has a set of 32 multicast groups
   -- mcastMetricGroups <- getMulticastGroups sockMetrics fidMetrics
   mcastMptcpGroups <- getMulticastGroups sock fid
-  mapM_ print mcastMptcpGroups
+  mapM_ Prelude.print mcastMptcpGroups
 
   -- mapM_ (listenToMetricEvents sockMetrics) mcastMetricGroups
   mapM_ (listenToEvents (MptcpSocket sock fid)) mcastMptcpGroups
