@@ -58,10 +58,10 @@ data TcpConnection = TcpConnection {
   , srcPort :: Word16  -- ^ Source port
   , dstPort :: Word16  -- ^Destination port
   , priority :: Maybe Word8 -- ^subflow priority
-  , localId :: Word8
+  , localId :: Word8  -- ^ Convert to AddressFamily
   , remoteId :: Word8
   , inetFamily :: Word16
-  -- add loc id
+  , subflowInterface :: Word32 -- ^Interface of
   -- add TcpMetrics member
 
 -- TODO derive Eq as well
@@ -207,7 +207,7 @@ data MptcpAttribute =
     SubflowDestAddress IP |
     SubflowSrcPort Word16 |
     SubflowDstPort Word16 |
-    MptcpClampCwnd Word32 |
+    SubflowMaxCwnd Word32 |
     SubflowBackup Word8 |
     SubflowInterface Word32
 
@@ -226,7 +226,7 @@ attrToPair (SubflowFamily fam) = let
 attrToPair ( SubflowInterface idx) = (fromEnum MPTCP_ATTR_IF_IDX, runPut $ putWord32host idx)
 attrToPair ( SubflowSrcPort port) = (fromEnum MPTCP_ATTR_SPORT, runPut $ putWord16be port)
 attrToPair ( SubflowDstPort port) = (fromEnum MPTCP_ATTR_DPORT, runPut $ putWord16be port)
-attrToPair ( MptcpClampCwnd limit) = (fromEnum MPTCP_ATTR_CWND, runPut $ putWord32be limit)
+attrToPair ( SubflowMaxCwnd limit) = (fromEnum MPTCP_ATTR_CWND, runPut $ putWord32be limit)
 attrToPair ( SubflowBackup prio) = (fromEnum MPTCP_ATTR_BACKUP, runPut $ putWord8 prio)
 -- TODO should depend on the ip putWord32be w32
 attrToPair ( SubflowSourceAddress addr) =
@@ -271,10 +271,11 @@ subflowFromAttributes attrs =
         Nothing -> error "could not get the dest IP"
     (LocalLocatorId lid) = fromJust $ makeAttributeFromMaybe MPTCP_ATTR_LOC_ID attrs
     (RemoteLocatorId rid) = fromJust $ makeAttributeFromMaybe MPTCP_ATTR_REM_ID attrs
+    (SubflowInterface intfId) = fromJust $ makeAttributeFromMaybe MPTCP_ATTR_IF_IDX attrs
     sfFamily = getPort $ fromJust (Map.lookup (fromEnum MPTCP_ATTR_FAMILY) attrs)
     prio = Nothing   -- (SubflowPriority N)
   in
-    TcpConnection _srcIp _dstIp sport dport prio lid rid eAF_INET
+    TcpConnection _srcIp _dstIp sport dport prio lid rid eAF_INET intfId
 
 -- makeSubflowFromAttributes ::
 
@@ -393,6 +394,37 @@ resetConnectionPkt (MptcpSocket sock fid) attrs = let
   in
     assert (hasLocAddr attrs) $ genMptcpRequest fid MPTCP_CMD_REMOVE False attrs
 
+
+subflowAttrs :: TcpConnection -> [MptcpAttribute]
+subflowAttrs con = [
+            LocalLocatorId $ localId con
+            , RemoteLocatorId $ remoteId con
+            -- TODO adapt
+            , SubflowFamily $ eAF_INET  -- inetFamily con
+            , SubflowDestAddress $ dstIp con
+            , SubflowDstPort $ dstPort con
+            , SubflowInterface localhostIntfIdx
+            -- https://github.com/multipath-tcp/mptcp/issues/338
+            , SubflowSourceAddress $ srcIp con
+            ]
+
+
+-- TODO pass a TcpConnection instead ?
+capCwndPkt :: MptcpSocket -> [MptcpAttribute] -> MptcpPacket
+capCwndPkt (MptcpSocket sock fid) attrs =
+    assert (hasFamily attrs) pkt
+    where
+        pkt = genMptcpRequest fid MPTCP_CMD_SND_CLAMP_WINDOW True attrs
+        -- attrs = [
+        --     MptcpAttrToken token
+        --     , SubflowFamily eAF_INET
+        --     , LocalLocatorId 0
+        --     -- TODO check emote locator ?
+        --     , RemoteLocatorId 0
+        --     , SubflowInterface localhostIntfIdx
+        --     -- , SubflowInterface localhostIntfIdx
+        --     ]
+    -- putStrLn "while waiting for a real implementation"
 
 -- sport/backup/intf are optional
 -- family /loc id/remid/daddr/dport

@@ -229,9 +229,9 @@ updateCwndCap = do
     -- sendmsg genQueryPacket fakeCon
     let queryPkt = genQueryPacket Nothing [TcpListen, TcpEstablished] [InetDiagCong, InetDiagInfo, InetDiagMeminfo]
     let (MptcpSocket testSock familyId ) = mptcpSock
-    -- TODO analyze the results
     sendPacket sockMetrics queryPkt
     putStrLn "Sent the TCP SS request"
+
     -- exported from my own version !!
     -- recvMulti sockMetrics >>= inspectIdiagAnswers
     -- for now let's discard the answer
@@ -266,7 +266,6 @@ genCapCwnd token familyId =
             ]
     -- putStrLn "while waiting for a real implementation"
 
-
 -- Use a Mvar here to
 startMonitorConnection :: MptcpSocket -> MVar MptcpConnection -> IO ()
 startMonitorConnection mptcpSock mConn = do
@@ -277,32 +276,35 @@ startMonitorConnection mptcpSock mConn = do
     -- for this connection
     -- query metrics for the whole MPTCP connection
     con <- readMVar mConn
-    updateCwndCap
     let token = connectionToken con
     let resetAttrs = [ (MptcpAttrToken token ), (LocalLocatorId 0)]
     let masterSf = head $ subflows con
     let newSubflowAttrs = [
-            (MptcpAttrToken token )
-            , (LocalLocatorId 0)
-            -- TODO
-            -- , (RemoteLocatorId $ head $ remoteIds con)
-            , RemoteLocatorId $ 0
-            , SubflowFamily eAF_INET
-            , SubflowDestAddress $ dstIp masterSf
-            , SubflowDstPort $ dstPort masterSf
-            , SubflowInterface localhostIntfIdx
-            -- https://github.com/multipath-tcp/mptcp/issues/338
-            , SubflowSourceAddress $ srcIp masterSf
-            ]
+            MptcpAttrToken token
+            ] ++ (subflowAttrs $ masterSf { srcPort = 0 })
+    let capSubflowAttrs = [
+            MptcpAttrToken token
+            , SubflowMaxCwnd 10
+            ] ++ (subflowAttrs masterSf)
     let resetPkt = resetConnectionPkt mptcpSock resetAttrs
     let newSfPkt = newSubflowPkt mptcpSock newSubflowAttrs
+    let capWinPkt = capCwndPkt mptcpSock capSubflowAttrs
+
+    -- updateCwndCap
     -- queryOne
     -- putStrLn $ "Sending RESET for token " ++ show token
     -- query sock resetPkt >>= inspectAnswers
+
     putStrLn $ "Master sf " ++ show masterSf
-    putStrLn $ "Trying to create new subflow... with token " ++ show token
-    putStrLn $ "Sending " ++ show newSfPkt
-    query sock newSfPkt >>= inspectAnswers
+    putStrLn $ "Trying to cap subflow cwd... with token " ++ show token
+    putStrLn $ "Sending " ++ show capWinPkt
+    query sock capWinPkt >>= inspectAnswers
+
+    -- putStrLn $ "Master sf " ++ show masterSf
+    -- putStrLn $ "Trying to create new subflow... with token " ++ show token
+    -- putStrLn $ "Sending " ++ show newSfPkt
+    -- query sock newSfPkt >>= inspectAnswers
+
     sleepMs 5000
     putStrLn "Finished monitoring token "
     -- call ourself again
