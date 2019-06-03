@@ -313,7 +313,7 @@ genQueryPacket cookie tcpStatesFilter requestedInfo = let
   ipDst = runPut $ putIPv4Address localhost
   -- ipDst = fromIPv4 localhost
   -- 1 => "lo". Check with ip link ?
-  ifIndex = fromIntegral interfaceIdx :: Word32
+  ifIndex = fromIntegral localhostIntfIdx :: Word32
   diag_req = InetDiagSockId iperfSrcPort iperfDstPort ipSrc ipDst ifIndex _cookie
 
   custom = SockDiagRequest eAF_INET eIPPROTO_TCP requestedInfo tcpStatesFilter diag_req

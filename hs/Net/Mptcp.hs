@@ -12,7 +12,6 @@ where
 
 import Generated
 import IDiag ()
-import Net.IPAddress
 import Control.Exception (assert)
 
 import Data.Word (Word8, Word16, Word32)
@@ -35,6 +34,9 @@ import Data.List ()
 import Debug.Trace
 import Control.Concurrent (MVar)
 import Net.IP
+import Net.IPAddress
+import Net.IPv4
+import Net.IPv6
 -- in package Unique-0.4.7.6
 -- import Data.List.Unique
 import Data.Aeson
@@ -189,6 +191,10 @@ data MptcpAttributes = MptcpAttributes {
     , staSelf       :: Attributes
 } deriving (Show, Eq, Read)
 
+-- Wouldn't it be easier to work with ?
+-- data MptcpEvent = NewConnection {
+-- }
+
 
 data MptcpAttribute =
     MptcpAttrToken MptcpToken |
@@ -203,7 +209,7 @@ data MptcpAttribute =
     SubflowDstPort Word16 |
     MptcpClampCwnd Word32 |
     SubflowBackup Word8 |
-    SubflowInterface Word8
+    SubflowInterface Word32
 
 type MptcpToken = Word32
 type LocId    = Word8
@@ -217,14 +223,25 @@ attrToPair (SubflowFamily fam) = let
         fam8 = (fromIntegral $ fromEnum fam) :: Word16
     in (fromEnum MPTCP_ATTR_FAMILY, runPut $ putWord16host fam8)
 
-attrToPair ( SubflowInterface idx) = (fromEnum MPTCP_ATTR_IF_IDX, runPut $ putWord8 idx)
-attrToPair ( SubflowSourceAddress addr) = (fromEnum MPTCP_ATTR_SADDR4, runPut $ putIPAddress addr)
-attrToPair ( SubflowDestAddress addr) = (fromEnum MPTCP_ATTR_DADDR4, runPut $ putIPAddress addr)
-attrToPair ( SubflowSrcPort port) = (fromEnum MPTCP_ATTR_SPORT, runPut $ putWord16host port)
-attrToPair ( SubflowDstPort port) = (fromEnum MPTCP_ATTR_DPORT, runPut $ putWord16host port)
-attrToPair ( MptcpClampCwnd limit) = (fromEnum MPTCP_ATTR_CWND, runPut $ putWord32host limit)
+attrToPair ( SubflowInterface idx) = (fromEnum MPTCP_ATTR_IF_IDX, runPut $ putWord32host idx)
+attrToPair ( SubflowSrcPort port) = (fromEnum MPTCP_ATTR_SPORT, runPut $ putWord16be port)
+attrToPair ( SubflowDstPort port) = (fromEnum MPTCP_ATTR_DPORT, runPut $ putWord16be port)
+attrToPair ( MptcpClampCwnd limit) = (fromEnum MPTCP_ATTR_CWND, runPut $ putWord32be limit)
 attrToPair ( SubflowBackup prio) = (fromEnum MPTCP_ATTR_BACKUP, runPut $ putWord8 prio)
+-- TODO should depend on the ip putWord32be w32
+attrToPair ( SubflowSourceAddress addr) =
+  case_ (genV4SubflowAddress MPTCP_ATTR_SADDR4) (genV6SubflowAddress MPTCP_ATTR_SADDR6) addr
+attrToPair ( SubflowDestAddress addr) =
+  case_ (genV4SubflowAddress MPTCP_ATTR_DADDR4) (genV6SubflowAddress MPTCP_ATTR_DADDR6) addr
 
+genV4SubflowAddress :: MptcpAttr -> IPv4 -> (Int, ByteString)
+genV4SubflowAddress attr ip = (fromEnum attr, runPut $ putWord32be w32)
+  where
+    w32 = getIPv4 ip
+
+genV6SubflowAddress :: MptcpAttr -> IPv6 -> (Int, ByteString)
+genV6SubflowAddress addr = undefined
+-- (fromEnum MPTCP_ATTR_SADDR6, runPut $ putIPAddress addr)
 
 mptcpListToAttributes :: [MptcpAttribute] -> Attributes
 mptcpListToAttributes attrs = Map.fromList $map attrToPair attrs
@@ -312,7 +329,7 @@ makeAttribute i val =
     MPTCP_ATTR_REM_ID -> Just (RemoteLocatorId $ readLocId $ Just val )
     -- | i == fromEnum MPTCP_ATTR_LOC_ID = Just (SubflowSourceAddress $ val )
     MPTCP_ATTR_IF_IDX ->
-             case runGet getWord8 val of
+             case runGet getWord32be val of
                 Right x -> Just $ SubflowInterface x
                 _ -> Nothing
     MPTCP_ATTR_BACKUP -> trace "makeAttribute BACKUP" Nothing

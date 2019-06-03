@@ -26,6 +26,7 @@ Flag Dev {
 -- bitset, fails
 -- aeson to (de)serialize to json
 -- brittany for formatting (does not work)
+-- use containers for Data.Set ?
 common shared-properties
     build-depends: base, optparse-applicative, bytestring-conversion,
       containers, bytestring, fast-logger, process, cereal, ip, aeson,

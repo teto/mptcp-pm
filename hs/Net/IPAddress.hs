@@ -15,7 +15,7 @@ import System.Linux.Netlink
 import Data.Serialize.Get
 import Data.Serialize.Put
 import Data.Maybe (fromJust)
-import Data.Word (Word8)
+import Data.Word (Word8, Word32)
 import Data.ByteString (ByteString)
 
 -- for replicateM
@@ -24,8 +24,8 @@ import Control.Monad
 
 -- check ip link / localhost seems to be 1
 -- global interface index
-interfaceIdx :: Word8
-interfaceIdx = 1
+localhostIntfIdx :: Word32
+localhostIntfIdx = 1
 
 
 -- then I could do encode myIP
@@ -43,17 +43,13 @@ getIPv4FromByteString val =
 
 getIPv6FromByteString :: ByteString -> Either String IPv6
 getIPv6FromByteString bs =
--- fromWord32s
--- getWord64host
   -- returns a list to me
   -- <$> replicateM 16 (getWord8) in
+  -- TODO check ?
   let
     val = Net.IPv6.fromWord32s <$> getWord32be <*> getWord32be <*> getWord32be <*> getWord32be
   in
     runGet val bs
-  -- case runGet val bs of
-  --   Left err -> error err
-  --   Right ip -> ip
 
 -- TODO pass the type ?
 -- getIPAddressFromByteString :: ByteString -> Maybe IP
@@ -79,6 +75,7 @@ putIPAddress addr =
   case_ putIPv4Address (\x -> undefined) addr
 
 
+-- |IDIag version since it will add some padding
 putIPv4Address :: IPv4 -> Put
 putIPv4Address addr =
     let
@@ -91,6 +88,6 @@ putIPv4Address addr =
       -- putWord8 ip2
       -- putWord8 ip3
       -- putWord8 ip4
-      replicateM_ 3 (putWord32host 0)
+      replicateM_ 3 (putWord32be 0)
 
 

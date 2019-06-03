@@ -261,8 +261,8 @@ genCapCwnd token familyId =
             , LocalLocatorId 0
             -- TODO check emote locator ?
             , RemoteLocatorId 0
-            , SubflowInterface interfaceIdx
-            -- , SubflowInterface interfaceIdx
+            , SubflowInterface localhostIntfIdx
+            -- , SubflowInterface localhostIntfIdx
             ]
     -- putStrLn "while waiting for a real implementation"
 
@@ -285,12 +285,14 @@ startMonitorConnection mptcpSock mConn = do
             (MptcpAttrToken token )
             , (LocalLocatorId 0)
             -- TODO
-            , (RemoteLocatorId $ head $ remoteIds con)
-            , (SubflowFamily eAF_INET)
+            -- , (RemoteLocatorId $ head $ remoteIds con)
+            , RemoteLocatorId $ 0
+            , SubflowFamily eAF_INET
             , SubflowDestAddress $ dstIp masterSf
             , SubflowDstPort $ dstPort masterSf
-            -- , (SubflowInterface 0)
-            -- , (SubflowSourceAddress )
+            , SubflowInterface localhostIntfIdx
+            -- https://github.com/multipath-tcp/mptcp/issues/338
+            , SubflowSourceAddress $ srcIp masterSf
             ]
     let resetPkt = resetConnectionPkt mptcpSock resetAttrs
     let newSfPkt = newSubflowPkt mptcpSock newSubflowAttrs
@@ -402,6 +404,9 @@ dispatchPacket oldState (Packet hdr (GenlData genlHeader NoData) attributes) = l
     -- i suppose token is always available right ?
     token = readToken $ Map.lookup (fromEnum MPTCP_ATTR_TOKEN) attributes
     maybeConn = Map.lookup token (connections oldState)
+    -- case maybeConn of
+    --     Nothing -> unknownConnectionEvent
+    --     Just mConn -> putStrLn "No connection with this token" >> return oldState
   in
     case toEnum (fromIntegral cmd) of
       -- TODO wait for established instead ?
@@ -427,6 +432,18 @@ dispatchPacket oldState (Packet hdr (GenlData genlHeader NoData) attributes) = l
 
       MPTCP_EVENT_ANNOUNCED -> do
         putStrLn "New address announced"
+        -- case maybeConn of
+        --     Nothing -> putStrLn "No connection with this token" >> return oldState
+        --     Just mConn -> _
+                -- case mmakeAttributeFromMaybe MPTCP_ATTR_REM_ID attrs of 
+                --     Nothing -> return oldState
+                --     Just localId ->
+                --     putStrLn "Found a match"
+                --     -- swapMVar / withMVar / modifyMVar
+                --     mptcpConn <- takeMVar mConn
+                --     -- TODO we should trigger an update in the CWND
+                --     let newCon = mptcpConnAddLocalId mptcpConn 
+                --     let newState = oldState
         return oldState
 
       MPTCP_EVENT_CLOSED -> do

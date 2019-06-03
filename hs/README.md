@@ -60,3 +60,6 @@ ss package sends by default
 
 - conversion of IDiagExt is bad everywhere ? req.r.idiag_ext |= (1<<(INET_DIAG_INFO-1));
 - we need to request more states
+
+# TODO 
+- to get kernel ifindex: cat /sys/class/net/lo/ifindex
