@@ -81,7 +81,7 @@ in
     # haskellPackages.haskdogs # seems to build on hasktags/ recursively import things
     haskellPackages.hasktags
     # haskellPackages.nvim-hs
-    # haskellPackages.nvim-hs-ghcid # too old, won't support nvim-hs-contrib 2
+    haskellPackages.nvim-hs-ghcid # too old, won't support nvim-hs-contrib 2
 
     # for https://hackage.haskell.org/package/bytestring-conversion-0.2/candidate/docs/Data-ByteString-Conversion-From.html
   ];

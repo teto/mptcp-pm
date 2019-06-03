@@ -32,7 +32,7 @@ import Data.Serialize.Put
 import Data.Bits ((.|.))
 
 import Data.List ()
--- import Debug.Trace
+import Debug.Trace
 import Control.Concurrent (MVar)
 import Net.IP
 -- in package Unique-0.4.7.6
@@ -53,9 +53,9 @@ data TcpConnection = TcpConnection {
   -- TODO use libraries to deal with that ? filter from the command line for instance ?
   srcIp :: IP -- ^Source ip
   , dstIp :: IP -- ^Destination ip
-  , srcPort :: Word16
-  , dstPort :: Word16
-  , priority :: Maybe Word8
+  , srcPort :: Word16  -- ^ Source port
+  , dstPort :: Word16  -- ^Destination port
+  , priority :: Maybe Word8 -- ^subflow priority
   , localId :: Word8
   , remoteId :: Word8
   , inetFamily :: Word16
@@ -199,8 +199,8 @@ data MptcpAttribute =
     LocalLocatorId Word8 |
     SubflowSourceAddress IP |
     SubflowDestAddress IP |
-    MptcpSrcPort Word16 |
-    MptcpDstPort Word16 |
+    SubflowSrcPort Word16 |
+    SubflowDstPort Word16 |
     MptcpClampCwnd Word32 |
     SubflowBackup Word8 |
     SubflowInterface Word8
@@ -220,8 +220,8 @@ attrToPair (SubflowFamily fam) = let
 attrToPair ( SubflowInterface idx) = (fromEnum MPTCP_ATTR_IF_IDX, runPut $ putWord8 idx)
 attrToPair ( SubflowSourceAddress addr) = (fromEnum MPTCP_ATTR_SADDR4, runPut $ putIPAddress addr)
 attrToPair ( SubflowDestAddress addr) = (fromEnum MPTCP_ATTR_DADDR4, runPut $ putIPAddress addr)
-attrToPair ( MptcpSrcPort port) = (fromEnum MPTCP_ATTR_SPORT, runPut $ putWord16host port)
-attrToPair ( MptcpDstPort port) = (fromEnum MPTCP_ATTR_DPORT, runPut $ putWord16host port)
+attrToPair ( SubflowSrcPort port) = (fromEnum MPTCP_ATTR_SPORT, runPut $ putWord16host port)
+attrToPair ( SubflowDstPort port) = (fromEnum MPTCP_ATTR_DPORT, runPut $ putWord16host port)
 attrToPair ( MptcpClampCwnd limit) = (fromEnum MPTCP_ATTR_CWND, runPut $ putWord32host limit)
 attrToPair ( SubflowBackup prio) = (fromEnum MPTCP_ATTR_BACKUP, runPut $ putWord8 prio)
 
@@ -240,26 +240,24 @@ subflowFromAttributes attrs =
   -- makeAttribute Int ByteString
   let
     -- expects a ByteString
-    (MptcpSrcPort _srcPort) = fromJust $ makeAttributeFromMaybe MPTCP_ATTR_SPORT attrs
-    -- _srcPort = getPort $ fromJust (Map.lookup (fromEnum MPTCP_ATTR_SPORT) attrs)
-    -- toIpv4 $ fromJust
-    _srcIp =  case (Map.lookup (fromEnum MPTCP_ATTR_SADDR4) attrs) of
-      -- TODO toIpv4 ip
-      Just ip -> fromJust $ getIPAddressFromByteString ip
-      -- assume v6, throws otherwise
-      -- Nothing -> fromJust (Map.lookup (fromEnum MPTCP_ATTR_SADDR6) attrs)
-      -- TODO user 'error' instead
-      Nothing -> error "ipv6 src"
-    _dstPort = getPort $ fromJust (Map.lookup (fromEnum MPTCP_ATTR_DPORT) attrs)
-    _dstIp = case (Map.lookup (fromEnum MPTCP_ATTR_DADDR4) attrs) of
-      Just ip -> fromJust $ getIPAddressFromByteString ip
-      -- assume v6, throws otherwise
-      -- Nothing -> fromJust (Map.lookup (fromEnum MPTCP_ATTR_SADDR6) attrs)
-      Nothing -> error "ipv6 dst"
-
-    sfLocalId = getPort $ fromJust (Map.lookup (fromEnum MPTCP_ATTR_FAMILY) attrs)
+    (SubflowSrcPort sport) = fromJust $ makeAttributeFromMaybe MPTCP_ATTR_SPORT attrs
+    (SubflowDstPort dport) = fromJust $ makeAttributeFromMaybe MPTCP_ATTR_DPORT attrs
+    SubflowSourceAddress _srcIp = case makeAttributeFromMaybe MPTCP_ATTR_SADDR4 attrs of
+      Just ip -> ip
+      Nothing -> case makeAttributeFromMaybe MPTCP_ATTR_SADDR6 attrs of
+        Just ip -> ip
+        Nothing -> error "could not get the src IP"
+    SubflowDestAddress _dstIp = case makeAttributeFromMaybe MPTCP_ATTR_DADDR4 attrs of
+      Just ip -> ip
+      Nothing -> case makeAttributeFromMaybe MPTCP_ATTR_DADDR6 attrs of
+        Just ip -> ip
+        Nothing -> error "could not get the dest IP"
+    (LocalLocatorId lid) = fromJust $ makeAttributeFromMaybe MPTCP_ATTR_LOC_ID attrs
+    (RemoteLocatorId rid) = fromJust $ makeAttributeFromMaybe MPTCP_ATTR_REM_ID attrs
+    sfFamily = getPort $ fromJust (Map.lookup (fromEnum MPTCP_ATTR_FAMILY) attrs)
+    prio = Nothing   -- (SubflowPriority N)
   in
-    TcpConnection _srcIp _dstIp _srcPort _dstPort Nothing 0 0 eAF_INET
+    TcpConnection _srcIp _dstIp sport dport prio lid rid eAF_INET
 
 -- makeSubflowFromAttributes ::
 
@@ -300,24 +298,29 @@ makeAttributeFromMaybe attrType attrs =
 makeAttribute :: Int -- ^ MPTCP_ATTR_TOKEN value
                   -> ByteString
                   -> Maybe MptcpAttribute
-makeAttribute i val
-    | i == fromEnum MPTCP_ATTR_TOKEN = Just (MptcpAttrToken $ readToken $ Just val)
-    -- TODO fix $ Just fromByteString val  )
-    | i == fromEnum MPTCP_ATTR_FAMILY = Just (SubflowFamily $ eAF_INET)
-    -- this is a bytestring
-    -- TODO Not good, use getIPv4 IPv4
-    | i == fromEnum MPTCP_ATTR_SADDR4 = SubflowSourceAddress <$> getIPAddressFromByteString val
-    | i == fromEnum MPTCP_ATTR_DADDR4 = SubflowDestAddress <$> getIPAddressFromByteString val
-    | i == fromEnum MPTCP_ATTR_DADDR6 = undefined
-    | i == fromEnum MPTCP_ATTR_LOC_ID = Just (LocalLocatorId $ readLocId $ Just val )
-    | i == fromEnum MPTCP_ATTR_REM_ID = Just (RemoteLocatorId $ readLocId $ Just val )
+makeAttribute i val =
+  case toEnum i of
+    MPTCP_ATTR_TOKEN -> Just (MptcpAttrToken $ readToken $ Just val)
+    MPTCP_ATTR_FAMILY -> Just (SubflowFamily $ eAF_INET)
+    MPTCP_ATTR_SADDR4 -> SubflowSourceAddress <$> fromIPv4 <$> e2M ( getIPv4FromByteString val)
+    MPTCP_ATTR_DADDR4 -> SubflowDestAddress <$> fromIPv4 <$> e2M (getIPv4FromByteString val)
+    MPTCP_ATTR_SADDR6 -> SubflowSourceAddress <$> fromIPv6 <$> e2M (getIPv6FromByteString val)
+    MPTCP_ATTR_DADDR6 -> SubflowDestAddress <$> fromIPv6 <$> e2M (getIPv6FromByteString val)
+    MPTCP_ATTR_SPORT -> SubflowSrcPort <$> port where port = e2M $ runGet getWord16host val
+    MPTCP_ATTR_DPORT -> SubflowDstPort <$> port where port = e2M $ runGet getWord16host val
+    MPTCP_ATTR_LOC_ID -> Just (LocalLocatorId $ readLocId $ Just val )
+    MPTCP_ATTR_REM_ID -> Just (RemoteLocatorId $ readLocId $ Just val )
     -- | i == fromEnum MPTCP_ATTR_LOC_ID = Just (SubflowSourceAddress $ val )
-    | i == fromEnum MPTCP_ATTR_IF_IDX =
+    MPTCP_ATTR_IF_IDX ->
              case runGet getWord8 val of
                 Right x -> Just $ SubflowInterface x
                 _ -> Nothing
-    | otherwise = error "Unsupported attribute"
-        -- Just (SubflowInterface $ fromMaybe $ e2M () )
+    MPTCP_ATTR_BACKUP -> trace "makeAttribute BACKUP" Nothing
+    MPTCP_ATTR_ERROR -> trace "makeAttribute ERROR" Nothing
+    MPTCP_ATTR_TIMEOUT -> undefined
+    MPTCP_ATTR_CWND -> undefined
+    MPTCP_ATTR_FLAGS -> trace "makeAttribute ATTR_FLAGS" Nothing
+    MPTCP_ATTR_UNSPEC -> undefined
 
 
 dumpAttribute :: Int -> ByteString -> String
@@ -352,7 +355,7 @@ checkIfSocketExistsPkt fid attributes =
     genMptcpRequest fid MPTCP_CMD_EXIST True attributes
 
 -- https://stackoverflow.com/questions/47861648/a-general-way-of-comparing-constructors-of-two-terms-in-haskell?noredirect=1&lq=1
--- attrToPair ( MptcpSrcPort port) = (fromEnum MPTCP_ATTR_SPORT, runPut $ putWord8 loc)
+-- attrToPair ( SubflowSrcPort port) = (fromEnum MPTCP_ATTR_SPORT, runPut $ putWord8 loc)
 isAttribute :: MptcpAttribute -- ^ to compare with
                -> MptcpAttribute -- ^to compare to
                -> Bool
@@ -375,7 +378,7 @@ resetConnectionPkt (MptcpSocket sock fid) attrs = let
 
 
 -- sport/backup/intf are optional
--- family AF_INET/loc id/remid are not
+-- family /loc id/remid/daddr/dport
 -- TODO pass new subflow ?
 newSubflowPkt :: MptcpSocket -> [MptcpAttribute] -> MptcpPacket
 newSubflowPkt (MptcpSocket sock fid) attrs = let

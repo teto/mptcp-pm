@@ -280,17 +280,25 @@ startMonitorConnection mptcpSock mConn = do
     updateCwndCap
     let token = connectionToken con
     let resetAttrs = [ (MptcpAttrToken token ), (LocalLocatorId 0)]
-    let newSubflowAttrs = [ (MptcpAttrToken token )
+    let masterSf = head $ subflows con
+    let newSubflowAttrs = [
+            (MptcpAttrToken token )
             , (LocalLocatorId 0)
-            , (RemoteLocatorId 0)
+            -- TODO
+            , (RemoteLocatorId $ head $ remoteIds con)
             , (SubflowFamily eAF_INET)
+            , SubflowDestAddress $ dstIp masterSf
+            , SubflowDstPort $ dstPort masterSf
+            -- , (SubflowInterface 0)
+            -- , (SubflowSourceAddress )
             ]
     let resetPkt = resetConnectionPkt mptcpSock resetAttrs
     let newSfPkt = newSubflowPkt mptcpSock newSubflowAttrs
     -- queryOne
     -- putStrLn $ "Sending RESET for token " ++ show token
     -- query sock resetPkt >>= inspectAnswers
-    putStrLn $ "Creating new subflow ? for token " ++ show token
+    putStrLn $ "Master sf " ++ show masterSf
+    putStrLn $ "Trying to create new subflow... with token " ++ show token
     putStrLn $ "Sending " ++ show newSfPkt
     query sock newSfPkt >>= inspectAnswers
     sleepMs 5000
@@ -396,6 +404,7 @@ dispatchPacket oldState (Packet hdr (GenlData genlHeader NoData) attributes) = l
     maybeConn = Map.lookup token (connections oldState)
   in
     case toEnum (fromIntegral cmd) of
+      -- TODO wait for established instead ?
       MPTCP_EVENT_CREATED -> do
         let subflow = subflowFromAttributes attributes
         -- newConn <- newEmptyMVar

@@ -19,9 +19,9 @@ import Data.Word (Word8, Word16, Word32, Word64)
 import Prelude hiding (length, concat)
 import Prelude hiding (length, concat)
 
+import Data.Serialize
 import Data.Serialize.Get
 import Data.Serialize.Put
-
 
 -- for replicateM
 -- import Control.Monad
@@ -41,6 +41,7 @@ import Data.ByteString ()
 import Net.IPAddress
 import Net.IP
 import Net.IPv4
+import Data.ByteString (ByteString)
 
 -- iproute uses this seq number #define MAGIC_SEQ 123456
 magicSeq :: Word32
@@ -51,18 +52,19 @@ magicSeq = 123456
 
 
 data InetDiagSockId  = InetDiagSockId  {
-  sport :: Word16
-  , dport :: Word16
+  idiag_sport :: Word16
+  , idiag_dport :: Word16
 
   -- Just be careful that this is a fixed size regardless of family
   -- __be32  idiag_src[4];
   -- __be32  idiag_dst[4];
-  , src :: IP
-  , dst :: IP
+  -- we don't know yet the address family
+  , idiag_src :: ByteString
+  , idiag_dst :: ByteString
 
-  , intf :: Word32
+  , idiag_intf :: Word32
   -- * 2
-  , sockCookie :: Word64
+  , idiag_cookie :: Word64
 
 } deriving (Eq, Show)
 
@@ -214,24 +216,26 @@ putInetDiagMsg msg = do
 getInetDiagSockid :: Get InetDiagSockId
 getInetDiagSockid  = do
 -- getWord32host
-    _sport <- getWord16host
-    _dport <- getWord16host
+    sport <- getWord16host
+    dport <- getWord16host
     -- iterate/ grow
-    _src <- getIPAddress
-    _dst <- getIPAddress
+    _src <- getByteString (4*4)
+    _dst <- getByteString (4*4)
     _intf <- getWord32host
-    _cookie <- getWord64host
-    return $ InetDiagSockId _sport _dport _src _dst _intf _cookie
+    cookie <- getWord64host
+    return $ InetDiagSockId sport dport _src _dst _intf cookie
 
 putInetDiagSockid :: InetDiagSockId -> Put
 putInetDiagSockid cust = do
   -- we might need to clean up this a bit
-  putWord16be $ sport cust
-  putWord16be $ sport cust
-  getPut (src cust)
-  getPut (dst cust)
-  putWord32host $ intf cust
-  putWord64host $ sockCookie cust
+  putWord16be $ idiag_sport cust
+  putWord16be $ idiag_dport cust
+  putByteString (idiag_src cust)
+  putByteString (idiag_dst cust)
+  -- putIPAddress (src cust)
+  -- putIPAddress (dst cust)
+  putWord32host $ idiag_intf cust
+  putWord64host $ idiag_cookie cust
 
 -- include/uapi/linux/inet_diag.h
 -- struct tcpvegas_info {
@@ -287,6 +291,7 @@ data Meminfo = Meminfo {
 
 -- InetDiagInfo
 -- TODO we need to request more !
+-- TODO if we have a cookie ignore the rest ?!
 -- requestedInfo = InetDiagNone
 genQueryPacket :: (Maybe Word64) -> [TcpState] -> [IDiagExt] -> Packet SockDiagRequest
 genQueryPacket cookie tcpStatesFilter requestedInfo = let
@@ -295,22 +300,20 @@ genQueryPacket cookie tcpStatesFilter requestedInfo = let
 
   -- might be a trick with seqnum
   hdr = Header msgTypeSockDiag flags magicSeq 0
-  _cookie = 0 :: Word64
-
   -- global for now
   iperfSrcPort = 0
   iperfDstPort = 0
   -- iperfSrcPort = iperfHardcodedSrcPort
   -- iperfDstPort = 5201
-  -- look at fmap
-  -- TODO replace ?
-  ipSrc = fromIPv4 localhost
-  ipDst = fromIPv4 localhost
-  -- ipDst = IPAddress <$> pack <$> replicateM (4*8) getWord8
+  _cookie = 0 :: Word64
+
+  -- TODO 
+  -- ipSrc = Data.Serialize.encode $ fromIPv4 localhost
+  ipSrc = runPut $ putIPv4Address localhost
+  ipDst = runPut $ putIPv4Address localhost
+  -- ipDst = fromIPv4 localhost
   -- 1 => "lo". Check with ip link ?
-  -- ifIndex = IDiag.fromOctets [ 0, 0, 0, interfaceIdx]
   ifIndex = fromIntegral interfaceIdx :: Word32
-  -- diag_req = InetDiagSockId iperfSrcPort iperfDstPort ipSrc ipDst ifIndex _cookie
   diag_req = InetDiagSockId iperfSrcPort iperfDstPort ipSrc ipDst ifIndex _cookie
 
   custom = SockDiagRequest eAF_INET eIPPROTO_TCP requestedInfo tcpStatesFilter diag_req
