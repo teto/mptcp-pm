@@ -285,6 +285,7 @@ startMonitorConnection mptcpSock mConn = do
     let capSubflowAttrs = [
             MptcpAttrToken token
             , SubflowMaxCwnd 10
+            , SubflowSourcePort $ srcPort masterSf
             ] ++ (subflowAttrs masterSf)
     let resetPkt = resetConnectionPkt mptcpSock resetAttrs
     let newSfPkt = newSubflowPkt mptcpSock newSubflowAttrs

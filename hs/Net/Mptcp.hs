@@ -128,7 +128,7 @@ getPort val =
 -}
 genMptcpRequest :: Word16 -- ^ the family id
                 -> MptcpGenlEvent -- ^The MPTCP command
-                -> Bool           -- ^Dump answer
+                -> Bool           -- ^Dump answer (returns EOPNOTSUPP if not possible)
                 -- -> Attributes
                 -> [MptcpAttribute]
                 -> MptcpPacket
@@ -205,8 +205,8 @@ data MptcpAttribute =
     LocalLocatorId Word8 |
     SubflowSourceAddress IP |
     SubflowDestAddress IP |
-    SubflowSrcPort Word16 |
-    SubflowDstPort Word16 |
+    SubflowSourcePort Word16 |
+    SubflowDestPort Word16 |
     SubflowMaxCwnd Word32 |
     SubflowBackup Word8 |
     SubflowInterface Word32
@@ -224,8 +224,8 @@ attrToPair (SubflowFamily fam) = let
     in (fromEnum MPTCP_ATTR_FAMILY, runPut $ putWord16host fam8)
 
 attrToPair ( SubflowInterface idx) = (fromEnum MPTCP_ATTR_IF_IDX, runPut $ putWord32host idx)
-attrToPair ( SubflowSrcPort port) = (fromEnum MPTCP_ATTR_SPORT, runPut $ putWord16be port)
-attrToPair ( SubflowDstPort port) = (fromEnum MPTCP_ATTR_DPORT, runPut $ putWord16be port)
+attrToPair ( SubflowSourcePort port) = (fromEnum MPTCP_ATTR_SPORT, runPut $ putWord16be port)
+attrToPair ( SubflowDestPort port) = (fromEnum MPTCP_ATTR_DPORT, runPut $ putWord16be port)
 attrToPair ( SubflowMaxCwnd limit) = (fromEnum MPTCP_ATTR_CWND, runPut $ putWord32be limit)
 attrToPair ( SubflowBackup prio) = (fromEnum MPTCP_ATTR_BACKUP, runPut $ putWord8 prio)
 -- TODO should depend on the ip putWord32be w32
@@ -257,8 +257,8 @@ subflowFromAttributes attrs =
   -- makeAttribute Int ByteString
   let
     -- expects a ByteString
-    (SubflowSrcPort sport) = fromJust $ makeAttributeFromMaybe MPTCP_ATTR_SPORT attrs
-    (SubflowDstPort dport) = fromJust $ makeAttributeFromMaybe MPTCP_ATTR_DPORT attrs
+    (SubflowSourcePort sport) = fromJust $ makeAttributeFromMaybe MPTCP_ATTR_SPORT attrs
+    (SubflowDestPort dport) = fromJust $ makeAttributeFromMaybe MPTCP_ATTR_DPORT attrs
     SubflowSourceAddress _srcIp = case makeAttributeFromMaybe MPTCP_ATTR_SADDR4 attrs of
       Just ip -> ip
       Nothing -> case makeAttributeFromMaybe MPTCP_ATTR_SADDR6 attrs of
@@ -324,8 +324,8 @@ makeAttribute i val =
     MPTCP_ATTR_DADDR4 -> SubflowDestAddress <$> fromIPv4 <$> e2M (getIPv4FromByteString val)
     MPTCP_ATTR_SADDR6 -> SubflowSourceAddress <$> fromIPv6 <$> e2M (getIPv6FromByteString val)
     MPTCP_ATTR_DADDR6 -> SubflowDestAddress <$> fromIPv6 <$> e2M (getIPv6FromByteString val)
-    MPTCP_ATTR_SPORT -> SubflowSrcPort <$> port where port = e2M $ runGet getWord16host val
-    MPTCP_ATTR_DPORT -> SubflowDstPort <$> port where port = e2M $ runGet getWord16host val
+    MPTCP_ATTR_SPORT -> SubflowSourcePort <$> port where port = e2M $ runGet getWord16host val
+    MPTCP_ATTR_DPORT -> SubflowDestPort <$> port where port = e2M $ runGet getWord16host val
     MPTCP_ATTR_LOC_ID -> Just (LocalLocatorId $ readLocId $ Just val )
     MPTCP_ATTR_REM_ID -> Just (RemoteLocatorId $ readLocId $ Just val )
     -- | i == fromEnum MPTCP_ATTR_LOC_ID = Just (SubflowSourceAddress $ val )
@@ -373,7 +373,7 @@ checkIfSocketExistsPkt fid attributes =
     genMptcpRequest fid MPTCP_CMD_EXIST True attributes
 
 -- https://stackoverflow.com/questions/47861648/a-general-way-of-comparing-constructors-of-two-terms-in-haskell?noredirect=1&lq=1
--- attrToPair ( SubflowSrcPort port) = (fromEnum MPTCP_ATTR_SPORT, runPut $ putWord8 loc)
+-- attrToPair ( SubflowSourcePort port) = (fromEnum MPTCP_ATTR_SPORT, runPut $ putWord8 loc)
 isAttribute :: MptcpAttribute -- ^ to compare with
                -> MptcpAttribute -- ^to compare to
                -> Bool
@@ -402,7 +402,7 @@ subflowAttrs con = [
             -- TODO adapt
             , SubflowFamily $ eAF_INET  -- inetFamily con
             , SubflowDestAddress $ dstIp con
-            , SubflowDstPort $ dstPort con
+            , SubflowDestPort $ dstPort con
             , SubflowInterface localhostIntfIdx
             -- https://github.com/multipath-tcp/mptcp/issues/338
             , SubflowSourceAddress $ srcIp con
@@ -414,7 +414,7 @@ capCwndPkt :: MptcpSocket -> [MptcpAttribute] -> MptcpPacket
 capCwndPkt (MptcpSocket sock fid) attrs =
     assert (hasFamily attrs) pkt
     where
-        pkt = genMptcpRequest fid MPTCP_CMD_SND_CLAMP_WINDOW True attrs
+        pkt = genMptcpRequest fid MPTCP_CMD_SND_CLAMP_WINDOW False attrs
         -- attrs = [
         --     MptcpAttrToken token
         --     , SubflowFamily eAF_INET
