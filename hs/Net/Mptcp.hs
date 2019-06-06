@@ -224,9 +224,9 @@ attrToPair (SubflowFamily fam) = let
     in (fromEnum MPTCP_ATTR_FAMILY, runPut $ putWord16host fam8)
 
 attrToPair ( SubflowInterface idx) = (fromEnum MPTCP_ATTR_IF_IDX, runPut $ putWord32host idx)
-attrToPair ( SubflowSourcePort port) = (fromEnum MPTCP_ATTR_SPORT, runPut $ putWord16be port)
-attrToPair ( SubflowDestPort port) = (fromEnum MPTCP_ATTR_DPORT, runPut $ putWord16be port)
-attrToPair ( SubflowMaxCwnd limit) = (fromEnum MPTCP_ATTR_CWND, runPut $ putWord32be limit)
+attrToPair ( SubflowSourcePort port) = (fromEnum MPTCP_ATTR_SPORT, runPut $ putWord16host port)
+attrToPair ( SubflowDestPort port) = (fromEnum MPTCP_ATTR_DPORT, runPut $ putWord16host port)
+attrToPair ( SubflowMaxCwnd limit) = (fromEnum MPTCP_ATTR_CWND, runPut $ putWord32host limit)
 attrToPair ( SubflowBackup prio) = (fromEnum MPTCP_ATTR_BACKUP, runPut $ putWord8 prio)
 -- TODO should depend on the ip putWord32be w32
 attrToPair ( SubflowSourceAddress addr) =
