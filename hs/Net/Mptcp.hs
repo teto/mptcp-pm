@@ -32,7 +32,7 @@ import Data.Bits ((.|.))
 
 import Data.List ()
 import Debug.Trace
-import Control.Concurrent (MVar)
+import Control.Concurrent ()
 import Net.IP
 import Net.IPAddress
 import Net.IPv4
@@ -61,11 +61,25 @@ data TcpConnection = TcpConnection {
   , localId :: Word8  -- ^ Convert to AddressFamily
   , remoteId :: Word8
   , inetFamily :: Word16
-  , subflowInterface :: Word32 -- ^Interface of
+  , subflowInterface :: Maybe Word32 -- ^Interface of Maybe ?
   -- add TcpMetrics member
 
 -- TODO derive Eq as well
 } deriving (Show, Generic)
+
+
+reverse :: TcpConnection -> TcpConnection
+reverse con = TcpConnection {
+  srcIp = dstIp con
+  , dstIp = srcIp con
+  , srcPort = dstPort con
+  , dstPort = srcPort con
+  , priority = Nothing
+  , localId = remoteId con
+  , remoteId = localId con
+  , subflowInterface = Nothing
+  , inetFamily = inetFamily con
+}
 
 -- data TcpSubflow = TcpSubflow {
 -- }
@@ -73,12 +87,6 @@ data TcpConnection = TcpConnection {
 instance FromJSON TcpConnection
 instance ToJSON TcpConnection
 
-data MyState = MyState {
-  socket :: MptcpSocket -- ^Socket
-  -- ThreadId/MVar
-  , connections :: Map.Map MptcpToken (MVar MptcpConnection)
-}
--- deriving Show
 
 type MptcpPacket = GenlPacket NoData
 
@@ -164,11 +172,11 @@ readLocId maybeVal = case maybeVal of
     Just locId -> locId
   -- runGet getWord8 val
 
-inspectResult :: MyState -> Either String MptcpPacket -> IO()
-inspectResult myState result =  case result of
-    Left ex -> putStrLn $ "An error in parsing happened" ++ show ex
-    -- Right myPack -> dispatchPacket myState myPack >> putStrLn "Valid packet"
-    Right myPack ->  putStrLn "inspect result Valid packet"
+-- inspectResult :: MyState -> Either String MptcpPacket -> IO()
+-- inspectResult myState result =  case result of
+--     Left ex -> putStrLn $ "An error in parsing happened" ++ show ex
+--     -- Right myPack -> dispatchPacket myState myPack >> putStrLn "Valid packet"
+--     Right myPack ->  putStrLn "inspect result Valid packet"
 
 
 -- doDumpLoop :: MyState -> IO MyState
@@ -234,6 +242,7 @@ attrToPair ( SubflowSourceAddress addr) =
 attrToPair ( SubflowDestAddress addr) =
   case_ (genV4SubflowAddress MPTCP_ATTR_DADDR4) (genV6SubflowAddress MPTCP_ATTR_DADDR6) addr
 
+
 genV4SubflowAddress :: MptcpAttr -> IPv4 -> (Int, ByteString)
 genV4SubflowAddress attr ip = (fromEnum attr, runPut $ putWord32be w32)
   where
@@ -275,7 +284,7 @@ subflowFromAttributes attrs =
     sfFamily = getPort $ fromJust (Map.lookup (fromEnum MPTCP_ATTR_FAMILY) attrs)
     prio = Nothing   -- (SubflowPriority N)
   in
-    TcpConnection _srcIp _dstIp sport dport prio lid rid eAF_INET intfId
+    TcpConnection _srcIp _dstIp sport dport prio lid rid eAF_INET (Just intfId)
 
 -- makeSubflowFromAttributes ::
 

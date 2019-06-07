@@ -37,6 +37,11 @@ iproute2/misc/ss.c to see how `ss` utility interacts with the kernel
 Aeson tutorials:
 -- https://haskell.fpcomplete.com/library/aeson
 - https://lotz84.github.io/haskellbyexample/ex/timers
+
+- https://lotz84.github.io/haskellbyexample/ex/maps
+
+Useful functions in Map
+- member / elemes / keys / assocs / keysSet / toList
 -}
 
 -- !/usr/bin/env nix-shell
@@ -50,7 +55,7 @@ import qualified Options.Applicative (value)
 -- For TcpState, FFI generated
 import Generated
 import IDiag
-import Net.Mptcp hiding (inspectResult, )
+import Net.Mptcp
 import Net.IP
 import Net.IPv4 hiding (print)
 import Net.IPAddress
@@ -58,7 +63,7 @@ import Net.IPAddress
 -- for replicateM
 -- import Control.Monad
 import Data.Maybe ()
-import Data.Foldable (foldl')
+import Data.Foldable ()
 import Foreign.C.Types (CInt)
 import Foreign.C.Error
 import System.Linux.Netlink hiding (makeSocket)
@@ -69,9 +74,9 @@ import System.Log.FastLogger
 import System.Linux.Netlink.GeNetlink.Control
 
 import System.Process
-import Data.Word (Word8, Word16, Word32)
-import qualified Data.Bits as Bits -- (shiftL, )
-import Data.Bits ((.|.))
+import Data.Word (Word16, Word32)
+-- import qualified Data.Bits as Bits -- (shiftL, )
+-- import Data.Bits ((.|.))
 -- import Data.Serialize.Get
 import Data.Serialize.Put
 -- import Data.Either (fromRight)
@@ -108,6 +113,20 @@ globalMetricsSock = unsafePerformIO newEmptyMVar
 iperfHardcodedSrcPort :: Word16
 iperfHardcodedSrcPort = 5500
 
+data MyState = MyState {
+  socket :: MptcpSocket -- ^Socket
+  -- ThreadId/MVar
+  , connections :: Map.Map MptcpToken (ThreadId, MVar MptcpConnection)
+}
+-- deriving Show
+
+-- filterConnection :: [TcpConnection]
+-- filterConnection = [
+--     TcpConnection {
+--         srcIp = fromIPv4 localhost
+--         , dstIp = fromIPv4 $ localhost
+--     }
+--     ]
 
 -- inspired by CtrlPacket
   -- token :: MptcpToken
@@ -284,7 +303,7 @@ startMonitorConnection mptcpSock mConn = do
             ] ++ (subflowAttrs $ masterSf { srcPort = 0 })
     let capSubflowAttrs = [
             MptcpAttrToken token
-            , SubflowMaxCwnd 10
+            , SubflowMaxCwnd 3
             , SubflowSourcePort $ srcPort masterSf
             ] ++ (subflowAttrs masterSf)
     let resetPkt = resetConnectionPkt mptcpSock resetAttrs
@@ -399,42 +418,35 @@ onNewConnection sock attributes = do
     return ()
 
 
-dispatchPacket :: MyState -> MptcpPacket -> IO MyState
-dispatchPacket oldState (Packet hdr (GenlData genlHeader NoData) attributes) = let
-    cmd = genlCmd genlHeader
-    (MyState mptcpSock conns) = oldState
+-- |Class to implement different path managers
+-- class PathManager a where
+--     onNewSubflow :: TcpConnection -> [MptcpPacket]
 
-    -- i suppose token is always available right ?
-    token = readToken $ Map.lookup (fromEnum MPTCP_ATTR_TOKEN) attributes
-    maybeConn = Map.lookup token (connections oldState)
-    -- case maybeConn of
-    --     Nothing -> unknownConnectionEvent
-    --     Just mConn -> putStrLn "No connection with this token" >> return oldState
-  in
-    case toEnum (fromIntegral cmd) of
+
+-- unknownConnectionEvent :: M
+-- unknownConnectionMonitor :: MptcpToken -> MptcpPacket
+-- pass [MptcpAttribute] instead ?
+-- 
+dispatchPacketForKnownConnection :: MptcpConnection
+                                    -> MptcpGenlEvent
+                                    -> Attributes
+                                    -> MptcpConnection
+                                    -- -> IO MyState
+dispatchPacketForKnownConnection con event attributes = let
+        token = connectionToken con
+    in
+    case event of
       -- TODO wait for established instead ?
-      MPTCP_EVENT_CREATED -> do
-        let subflow = subflowFromAttributes attributes
-        -- newConn <- newEmptyMVar
-        let newMptcpConn = MptcpConnection token [ subflow ] [] []
-        newConn <- newMVar newMptcpConn
-        putStrLn $ "Connection created !!\n" ++ showAttributes attributes
-        -- onNewConnection mptcpSock attributes
-        handle <- forkOS (startMonitorConnection mptcpSock newConn)
-        -- r <- createProces $ startMonitor token
-        -- putStrLn $ "Connection created !!\n" ++ show subflow
-        let newState = oldState { connections = Map.insert token newConn (connections oldState) }
-        -- let newState = oldState
-        -- putStrLn $ "New state after creation: " ++ show newState
-        return newState
+      -- MPTCP_EVENT_CREATED -> do
 
-      MPTCP_EVENT_ESTABLISHED -> do
-        putStrLn "Connection established !"
+      MPTCP_EVENT_ESTABLISHED -> con
+        -- do
+        -- putStrLn "Connection established !"
         -- TODO llok
-        return oldState
+        -- return oldState
 
-      MPTCP_EVENT_ANNOUNCED -> do
-        putStrLn "New address announced"
+      MPTCP_EVENT_ANNOUNCED -> con
+        -- putStrLn "New address announced"
         -- case maybeConn of
         --     Nothing -> putStrLn "No connection with this token" >> return oldState
         --     Just mConn -> _
@@ -447,52 +459,95 @@ dispatchPacket oldState (Packet hdr (GenlData genlHeader NoData) attributes) = l
                 --     -- TODO we should trigger an update in the CWND
                 --     let newCon = mptcpConnAddLocalId mptcpConn 
                 --     let newState = oldState
-        return oldState
+        -- return oldState
 
       MPTCP_EVENT_CLOSED -> do
-        putStrLn $ "Connection closed, deleting token " ++ show token
+        -- putStrLn $ "Connection closed, deleting token " ++ show token
         -- let newState = oldState { connections = Map.delete token (connections oldState) }
         -- TODO we should kill the thread with killThread or empty the mVar !!
-        let newState = oldState
-        putStrLn $ "New state"
-        return newState
+        -- let newState = oldState
+        -- putStrLn $ "New state"
+        -- return newState
+        con
 
-      MPTCP_EVENT_SUB_ESTABLISHED -> do
-        let subflow = subflowFromAttributes attributes
-        putStrLn "Subflow established"
-        case maybeConn of
-            Nothing -> putStrLn "No connection with this token" >> return oldState
-            Just mConn -> do
-                putStrLn "Found a match"
-                -- swapMVar / withMVar / modifyMVar
-                mptcpConn <- takeMVar mConn
-                -- TODO we should trigger an update in the CWND
-                let newCon = mptcpConnAddSubflow mptcpConn subflow
-                let newState = oldState
-                putMVar mConn newCon
-                -- let newState = oldState { connections = Map.insert token newCon (connections oldState) }
-                -- TODO we should insert the
-                -- newConn <-
-                return newState
-
+      MPTCP_EVENT_SUB_ESTABLISHED ->  let
+            subflow = subflowFromAttributes attributes
+            newCon = mptcpConnAddSubflow con subflow
+            in
+                newCon
+        -- let newState = oldState
+        -- putMVar con newCon
+        -- let newState = oldState { connections = Map.insert token newCon (connections oldState) }
+        -- TODO we should insert the
+        -- newConn <-
+        -- return newState
 
       -- TODO remove
-      MPTCP_EVENT_SUB_CLOSED -> case maybeConn of
-        Nothing -> return oldState
-        Just thread -> do
-                putStrLn "Subflow closed"
-                putStrLn "TODO remove subflow"
-                -- >> mptcpConnRemoveSubflow
-                return oldState
+      MPTCP_EVENT_SUB_CLOSED -> con
+            -- putStrLn "Subflow closed"
+            -- putStrLn "TODO remove subflow"
+            -- >> mptcpConnRemoveSubflow
+            -- return oldState
 
-      MPTCP_CMD_EXIST -> putStrLn "this token exists" >> return oldState
-      _ -> putStrLn "undefined event !!" >> return oldState
+      MPTCP_CMD_EXIST -> con
+      _ -> error $ "should not happen " ++ show event
+      -- >> return oldState
+
+-- TODO pass a PathManager
+-- |^
+--
+dispatchPacket :: MyState -> MptcpPacket -> IO MyState
+dispatchPacket oldState (Packet hdr (GenlData genlHeader NoData) attributes) = let
+        cmd = toEnum $ fromIntegral $ genlCmd genlHeader
+        (MyState mptcpSock conns) = oldState
+
+        -- i suppose token is always available right ?
+        token = readToken $ Map.lookup (fromEnum MPTCP_ATTR_TOKEN) attributes
+        maybeMatch = Map.lookup token (connections oldState)
+    in
+        case maybeMatch of
+            Nothing -> case cmd of
+                MPTCP_EVENT_CREATED -> let
+                    subflow = subflowFromAttributes attributes
+                    -- newConn <- newEmptyMVar
+                    newMptcpConn = MptcpConnection token [ subflow ] [] []
+                    in do
+                        newConn <- newMVar newMptcpConn
+                        putStrLn $ "Connection created !!\n" ++ showAttributes attributes
+                        -- onNewConnection mptcpSock attributes
+                        handle <- forkOS (startMonitorConnection mptcpSock newConn)
+                        -- r <- createProces $ startMonitor token
+                        -- putStrLn $ "Connection created !!\n" ++ show subflow
+                        let newState = oldState { connections = Map.insert token (handle, newConn) (connections oldState) }
+                        return newState
+                _ -> return oldState
+
+            Just (threadId, mvarConn) -> case cmd of
+                MPTCP_EVENT_CLOSED -> do
+                    putStrLn $ "Killing thread " ++ show threadId
+                    killThread threadId
+                    -- TODO remove 
+                    return $ oldState { connections = Map.delete token (connections oldState) }
+                    -- let newState = oldState
+
+            -- TODO update connection
+                -- TODO filter first
+                _ -> do
+                    mptcpConn <- takeMVar mvarConn
+                    let newConn = dispatchPacketForKnownConnection mptcpConn cmd attributes
+                    putMVar mvarConn newConn
+                    -- TODO update state
+                    let newState = oldState { 
+                        connections = Map.insert token (threadId, mvarConn) (connections oldState) 
+                    }
+                    return newState
 
 
 dispatchPacket s (DoneMsg err) =
   putStrLn "Done msg" >> return s
 
 
+-- EOK shouldn't be an ErrorMsg when it receives EOK ?
 dispatchPacket s (ErrorMsg hdr errCode errPacket) = do
   putStrLn $ "Error msg of type " ++ showErrCode errCode ++ " Packet content:\n" ++ show errPacket
   return s
@@ -568,14 +623,14 @@ createLogger = newStdoutLoggerSet defaultBufSize
 -- for big endian
 -- https://mail.haskell.org/pipermail/beginners/2010-October/005571.html
 -- foldl' :: (b -> a -> b) -> b -> Maybe a -> b
-fromOctetsBE :: [Word8] -> Word32
-fromOctetsBE = foldl' accum 0
-  where
-    accum a o = (a `Bits.shiftL` 8) .|. fromIntegral o
-    -- maybe I could use putIArrayOf instead
+-- fromOctetsBE :: [Word8] -> Word32
+-- fromOctetsBE = foldl' accum 0
+--   where
+--     accum a o = (a `Bits.shiftL` 8) .|. fromIntegral o
+--     -- maybe I could use putIArrayOf instead
 
-fromOctetsLE :: [Word8] -> Word32
-fromOctetsLE = fromOctetsBE . reverse
+-- fromOctetsLE :: [Word8] -> Word32
+-- fromOctetsLE = fromOctetsBE . reverse
 
 inspectIDiagAnswer :: Packet InetDiagMsg -> IO ()
 inspectIDiagAnswer (Packet hdr cus attrs) =
