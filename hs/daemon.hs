@@ -109,9 +109,11 @@ globalMptcpSock = unsafePerformIO newEmptyMVar
 globalMetricsSock :: MVar NetlinkSocket
 globalMetricsSock = unsafePerformIO newEmptyMVar
 
+iperfClientPort :: Word16
+iperfClientPort = 5500
 
-iperfHardcodedSrcPort :: Word16
-iperfHardcodedSrcPort = 5500
+iperfServerPort :: Word16
+iperfServerPort = 5500
 
 data MyState = MyState {
   socket :: MptcpSocket -- ^Socket
@@ -120,13 +122,21 @@ data MyState = MyState {
 }
 -- deriving Show
 
--- filterConnection :: [TcpConnection]
--- filterConnection = [
---     TcpConnection {
---         srcIp = fromIPv4 localhost
---         , dstIp = fromIPv4 $ localhost
---     }
---     ]
+filteredConnections :: [TcpConnection]
+filteredConnections = [
+    TcpConnection {
+        srcIp = fromIPv4 localhost
+        , dstIp = fromIPv4 localhost
+        , srcPort = iperfClientPort
+        , dstPort = iperfServerPort
+        -- placeholder values
+        , priority = Nothing
+        , subflowInterface = Nothing
+        , localId = 0
+        , remoteId = 0
+        , inetFamily = eAF_INET
+    }
+    ]
 
 -- inspired by CtrlPacket
   -- token :: MptcpToken
@@ -507,19 +517,24 @@ dispatchPacket oldState (Packet hdr (GenlData genlHeader NoData) attributes) = l
     in
         case maybeMatch of
             Nothing -> case cmd of
-                MPTCP_EVENT_CREATED -> let
-                    subflow = subflowFromAttributes attributes
-                    -- newConn <- newEmptyMVar
-                    newMptcpConn = MptcpConnection token [ subflow ] [] []
-                    in do
-                        newConn <- newMVar newMptcpConn
-                        putStrLn $ "Connection created !!\n" ++ showAttributes attributes
-                        -- onNewConnection mptcpSock attributes
-                        handle <- forkOS (startMonitorConnection mptcpSock newConn)
-                        -- r <- createProces $ startMonitor token
-                        -- putStrLn $ "Connection created !!\n" ++ show subflow
-                        let newState = oldState { connections = Map.insert token (handle, newConn) (connections oldState) }
-                        return newState
+                MPTCP_EVENT_CREATED ->
+                    let subflow = subflowFromAttributes attributes
+                    in
+                    if subflow `notElem` filteredConnections
+                        then do
+                            putStrLn $ "filtered out connection" ++ show subflow 
+                            return oldState
+                        else (do
+                                let newMptcpConn = MptcpConnection token [ subflow ] [] []
+                                newConn <- newMVar newMptcpConn
+                                putStrLn $ "Connection created !!\n" ++ showAttributes attributes
+                                -- onNewConnection mptcpSock attributes
+                                handle <- forkOS (startMonitorConnection mptcpSock newConn)
+                                -- r <- createProces $ startMonitor token
+                                -- putStrLn $ "Connection created !!\n" ++ show subflow
+                                let newState = oldState { connections = Map.insert token (handle, newConn) (connections oldState) }
+                                return newState)
+
                 _ -> return oldState
 
             Just (threadId, mvarConn) -> case cmd of

@@ -41,6 +41,7 @@ import Net.IPv6
 -- import Data.List.Unique
 import Data.Aeson
 import GHC.Generics
+-- import Data.Default
 
 -- how can I retreive the word16 without pattern matching ?
 data MptcpSocket = MptcpSocket NetlinkSocket Word16
@@ -64,9 +65,28 @@ data TcpConnection = TcpConnection {
   , subflowInterface :: Maybe Word32 -- ^Interface of Maybe ?
   -- add TcpMetrics member
 
--- TODO derive Eq as well
 } deriving (Show, Generic)
 
+
+-- ignore the rest
+instance Eq TcpConnection where
+  x == y = srcIp x == srcIp y && dstIp x == dstIp y
+            && srcPort x == srcPort y && dstPort x == dstPort y
+  -- /= = not ==
+
+-- prevents hie from working correctly ?!
+-- instance Default TcpConnection where
+--   def = TcpConnection {
+--         srcIp = fromIPv4 Net.IPv4.localhost
+--         , dstIp = fromIPv4 Net.IPv4.localhost
+--         , srcPort = 0
+--         , dstPort = 0
+--         , priority = Nothing
+--         , localId = 0
+--         , remoteId = 0
+--         , inetFamily  = eAF_INET
+--         , subflowInterface = Nothing
+--       }
 
 reverse :: TcpConnection -> TcpConnection
 reverse con = TcpConnection {

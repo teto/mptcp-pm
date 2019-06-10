@@ -2,7 +2,8 @@
 function buildNrun() {
 	cabal build -v daemon
 	if [ $? -eq 0 ]; then
-		sudo ./daemon daemon
+    # with our changes sudo should not be necessaery anymore
+		./daemon daemon
 	fi
 }
 

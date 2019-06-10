@@ -90,7 +90,7 @@ Test-Suite test
   -- import: shared-properties
   Build-tools:       hsc2hs, c2hs
   Includes:          tcp_states.h, linux/sock_diag.h, linux/inet_diag.h
-  Other-modules:     Generated, IDiag
+  Other-modules:     Generated, IDiag, Net.Mptcp
   include-dirs:      .
   build-depends:      base >=4.6
                      , HUnit
