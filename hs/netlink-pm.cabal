@@ -92,6 +92,7 @@ Test-Suite test
   Build-tools:       hsc2hs, c2hs
   Includes:          tcp_states.h, linux/sock_diag.h, linux/inet_diag.h
   Other-modules:     Generated, IDiag, Net.Mptcp, Net.IPAddress
+  autogen-modules: Generated
   include-dirs:      .
   build-depends:      base >=4.6
                      , HUnit
