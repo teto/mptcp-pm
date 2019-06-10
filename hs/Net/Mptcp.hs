@@ -23,7 +23,6 @@ import System.Linux.Netlink.Constants
 -- import System.Linux.Netlink.GeNetlink.Control
 import Data.ByteString (ByteString)
 import Data.Maybe (fromJust)
-import Data.ByteString.Conversion (fromByteString)
 
 import Data.Serialize.Get
 import Data.Serialize.Put
@@ -144,10 +143,9 @@ mptcpConnRemoveSubflow mptcpConn subflow = undefined
 
 getPort :: ByteString -> Word16
 getPort val =
-  -- runGet getWord16le (BSL.fromStrict val)
-  case fromByteString val of
-    Nothing -> 0
-    Just port -> port
+  case (runGet getWord16host val) of
+    Left _ -> 0
+    Right port -> port
 
 -- TODO merge default attributes
 -- todo pass a list of (Int, Bytestring) and build the map with fromList ?
@@ -186,10 +184,10 @@ readToken maybeVal = case maybeVal of
 readLocId :: Maybe ByteString -> LocId
 readLocId maybeVal = case maybeVal of
   Nothing -> error "Missing locator id"
-  Just val -> case fromByteString val of
+  Just val -> case runGet getWord8 val of
     -- TODO generate an error here !
-    Nothing -> 0
-    Just locId -> locId
+    Left _ -> 0
+    Right locId -> locId
   -- runGet getWord8 val
 
 -- inspectResult :: MyState -> Either String MptcpPacket -> IO()
@@ -238,6 +236,7 @@ data MptcpAttribute =
     SubflowMaxCwnd Word32 |
     SubflowBackup Word8 |
     SubflowInterface Word32
+    deriving (Show, Eq)
 
 type MptcpToken = Word32
 type LocId    = Word8
@@ -371,30 +370,32 @@ makeAttribute i val =
 
 
 dumpAttribute :: Int -> ByteString -> String
-dumpAttribute attr value = let
+dumpAttribute attrId value =
   -- TODO replace with makeAttribute followd by show ?
   -- traceShowId
-  attrStr = case  ( toEnum (fromIntegral attr)) of
-      MPTCP_ATTR_UNSPEC -> "UNSPECIFIED"
-      MPTCP_ATTR_TOKEN -> "token: " ++ show (readToken $ Just value)
-      MPTCP_ATTR_FAMILY -> "family: " ++ show value
-      MPTCP_ATTR_LOC_ID -> "Locator id: " ++ show (readLocId $ Just value)
-      MPTCP_ATTR_REM_ID -> "Remote id: " ++ show value
-      MPTCP_ATTR_SADDR4 -> "ipv4.src: " ++ show value
-      MPTCP_ATTR_SADDR6 -> "ipv6.src: " ++ show value
-      MPTCP_ATTR_DADDR4 -> "ipv4.dest: " ++ show value
-      MPTCP_ATTR_DADDR6 -> "ipv6.dest: " ++ show value
-      MPTCP_ATTR_SPORT -> "sport: " ++ show (getPort value)
-      MPTCP_ATTR_DPORT -> "dport: " ++ show (getPort value)
-      MPTCP_ATTR_BACKUP -> "backup" ++ show value
-      MPTCP_ATTR_ERROR -> "Error: " ++ show value
-      MPTCP_ATTR_FLAGS -> "Flags: " ++ show value
-      MPTCP_ATTR_TIMEOUT -> "timeout: " ++ show value
-      MPTCP_ATTR_IF_IDX -> "ifId: " ++ show value
-      MPTCP_ATTR_CWND -> "cwnd: " ++ show value
-      -- _ -> "unhandled case"
-  in
-    attrStr
+  show $ makeAttribute attrId value
+
+  -- attrStr = case  ( toEnum (fromIntegral attr)) of
+  --     MPTCP_ATTR_UNSPEC -> "UNSPECIFIED"
+  --     MPTCP_ATTR_TOKEN -> "token: " ++ show (readToken $ Just value)
+  --     MPTCP_ATTR_FAMILY -> "family: " ++ show value
+  --     MPTCP_ATTR_LOC_ID -> "Locator id: " ++ show (readLocId $ Just value)
+  --     MPTCP_ATTR_REM_ID -> "Remote id: " ++ show value
+  --     MPTCP_ATTR_SADDR4 -> "ipv4.src: " ++ show value
+  --     MPTCP_ATTR_SADDR6 -> "ipv6.src: " ++ show value
+  --     MPTCP_ATTR_DADDR4 -> "ipv4.dest: " ++ show value
+  --     MPTCP_ATTR_DADDR6 -> "ipv6.dest: " ++ show value
+  --     MPTCP_ATTR_SPORT -> "sport: " ++ show (getPort value)
+  --     MPTCP_ATTR_DPORT -> "dport: " ++ show (getPort value)
+  --     MPTCP_ATTR_BACKUP -> "backup" ++ show value
+  --     MPTCP_ATTR_ERROR -> "Error: " ++ show value
+  --     MPTCP_ATTR_FLAGS -> "Flags: " ++ show value
+  --     MPTCP_ATTR_TIMEOUT -> "timeout: " ++ show value
+  --     MPTCP_ATTR_IF_IDX -> "ifId: " ++ show value
+  --     MPTCP_ATTR_CWND -> "cwnd: " ++ show value
+  --     -- _ -> "unhandled case"
+  -- in
+    -- attrStr
 
 
 checkIfSocketExistsPkt :: Word16 -> [MptcpAttribute]  -> MptcpPacket

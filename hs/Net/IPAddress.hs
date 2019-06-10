@@ -11,11 +11,9 @@ where
 import Net.IP
 import Net.IPv4
 import Net.IPv6
-import System.Linux.Netlink
 import Data.Serialize.Get
 import Data.Serialize.Put
-import Data.Maybe (fromJust)
-import Data.Word (Word8, Word32)
+import Data.Word (Word32)
 import Data.ByteString (ByteString)
 
 -- for replicateM

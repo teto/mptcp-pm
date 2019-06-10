@@ -20,8 +20,8 @@ import Prelude hiding (length, concat)
 import Prelude hiding (length, concat)
 
 import Data.Serialize
-import Data.Serialize.Get
-import Data.Serialize.Put
+import Data.Serialize.Get ()
+import Data.Serialize.Put ()
 
 -- for replicateM
 -- import Control.Monad
@@ -39,7 +39,7 @@ import Data.ByteString ()
 -- import Data.ByteString.Char8 as C8 (pack)
 -- import Data.IP
 import Net.IPAddress
-import Net.IP
+import Net.IP ()
 import Net.IPv4
 import Data.ByteString (ByteString)
 

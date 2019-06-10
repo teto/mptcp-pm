@@ -27,8 +27,9 @@ Flag Dev {
 -- aeson to (de)serialize to json
 -- brittany for formatting (does not work)
 -- use containers for Data.Set ?
+-- bytestring-conversion,
 common shared-properties
-    build-depends: base, optparse-applicative, bytestring-conversion,
+    build-depends: base, optparse-applicative, 
       containers, bytestring, fast-logger, process, cereal, ip, aeson,
        netlink >= 1.1.1.1, data-default
     default-language: Haskell2010
@@ -90,11 +91,15 @@ Test-Suite test
   -- import: shared-properties
   Build-tools:       hsc2hs, c2hs
   Includes:          tcp_states.h, linux/sock_diag.h, linux/inet_diag.h
-  Other-modules:     Generated, IDiag, Net.Mptcp
+  Other-modules:     Generated, IDiag, Net.Mptcp, Net.IPAddress
   include-dirs:      .
   build-depends:      base >=4.6
                      , HUnit
                      , netlink
                      , cereal
+                     , ip
+                     , bytestring
+                     , containers
+                     , aeson
                      -- , test-framework
                      -- , test-framework-hunit

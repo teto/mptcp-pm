@@ -28,11 +28,11 @@ $ cabal configure --package-db /home/teto/netlink-hs/dist/package.conf.inplace -
 ```
 
 
-# Testing procedure:
+# Usage
 
 Enter the nix-shell shell-test.nix and start the daemon:
 
-$ cabal run test
+$ cabal run daemon
 
 or
 $ buildNRun
@@ -55,6 +55,7 @@ ss package sends by default
 - [ ] write wordToEnums function, especially to fix getSockDiagRequestHeader
 (with bitset package once it's fixed)
 
+# Testsuite
 
 # BUGS
 

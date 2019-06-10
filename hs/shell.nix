@@ -43,7 +43,7 @@ let
     sha256 = "0j0hrzr9b57ifwfhggpzm43zcf6wcsj8ffxv6rz7ni7ar1x99x2c";
     # inherit sha256;
   };
-  compilerName = "ghc864";
+  compilerName = "ghc865";
 
   compiler = pkgs.haskell.packages."${compilerName}";
 
