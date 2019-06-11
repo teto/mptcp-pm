@@ -67,6 +67,9 @@ data TcpConnection = TcpConnection {
 } deriving (Show, Generic)
 
 
+instance FromJSON TcpConnection
+instance ToJSON TcpConnection
+
 -- ignore the rest
 instance Eq TcpConnection where
   x == y = srcIp x == srcIp y && dstIp x == dstIp y
@@ -116,8 +119,11 @@ data MptcpConnection = MptcpConnection {
   , subflows :: [TcpConnection]
   , localIds :: [Word8]  -- ^ Announced addresses
   , remoteIds :: [Word8]  -- ^ Announced addresses
-} deriving Show
+} deriving (Show, Generic)
 
+
+instance FromJSON MptcpConnection
+instance ToJSON MptcpConnection
 
 
 -- TODO add to localIds
@@ -139,13 +145,14 @@ mptcpConnAddLocalId con locId = undefined
 -- TODO remove subflow
 mptcpConnRemoveSubflow :: MptcpConnection -> TcpConnection -> MptcpConnection
 mptcpConnRemoveSubflow mptcpConn subflow = undefined
--- mptcpConn
 
 getPort :: ByteString -> Word16
 getPort val =
   case (runGet getWord16host val) of
     Left _ -> 0
     Right port -> port
+
+
 
 -- TODO merge default attributes
 -- todo pass a list of (Int, Bytestring) and build the map with fromList ?
@@ -440,6 +447,15 @@ subflowAttrs con = [
 
 
 -- TODO pass a TcpConnection instead ?
+capCwndAttr :: MptcpToken -> TcpConnection -> MptcpPacket
+capCwndPkt token sf =
+  let capSubflowAttrs = [
+            MptcpAttrToken token
+            , SubflowMaxCwnd 3
+            -- This should not be necessary anymore ?
+            , SubflowSourcePort $ srcPort sf
+            ] ++ (subflowAttrs masterSf)
+
 capCwndPkt :: MptcpSocket -> [MptcpAttribute] -> MptcpPacket
 capCwndPkt (MptcpSocket sock fid) attrs =
     assert (hasFamily attrs) pkt

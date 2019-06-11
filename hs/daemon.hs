@@ -328,12 +328,20 @@ startMonitorConnection mptcpSock mConn = do
     putStrLn $ "Master sf " ++ show masterSf
     putStrLn $ "Trying to cap subflow cwd... with token " ++ show token
     putStrLn $ "Sending " ++ show capWinPkt
-    query sock capWinPkt >>= inspectAnswers
 
     -- putStrLn $ "Master sf " ++ show masterSf
     -- putStrLn $ "Trying to create new subflow... with token " ++ show token
     -- putStrLn $ "Sending " ++ show newSfPkt
     -- query sock newSfPkt >>= inspectAnswers
+
+    putStrLn "Running mptcpnumerics"
+    caps <- getCapsForConnection con
+
+    -- TODO
+    map 
+    -- query sock capWinPkt >>= inspectAnswers
+
+    -- then we should send a request for each cwnd
 
     sleepMs 5000
     putStrLn "Finished monitoring token "
@@ -341,14 +349,32 @@ startMonitorConnection mptcpSock mConn = do
     startMonitorConnection mptcpSock mConn
 
 
+-- | This should return a list of cwnd to respect a certain scenario
 -- invoke
 -- 1. save the connection to a JSON file and pass it to mptcpnumerics
 -- 2.
 -- 3.
-runMptcpNumerics :: IO String
-runMptcpNumerics  =
-  -- TODO run readProcessWithExitCode instead
-  readProcess "seq" ["1", "10"] ""
+-- Maybe ? 
+getCapsForConnection :: MptcpConnection -> IO [Int]
+getCapsForConnection con = do
+    -- need to start a process
+    -- should return a bytestring
+    let bs = encode con
+    writeUTF8File "file.txt" bs
+
+    -- eitherDecode
+    -- TODO run readProcessWithExitCode instead
+    -- FilePath -> [String] -> String -> IO (ExitCode, String, String)
+
+    -- TODO to keep it simple it should return a list of CWNDs to apply
+    -- readProcessWithExitCode  binary / args / stdin
+    exitCode, stdout, stderr <- readProcessWithExitCode "fake_solver" ["1", "10"] ""
+    case exitCode of 
+        -- successful
+        -- print result 
+        -- for now simple, we might read json afterwards
+        0 -> read stdout :: [Int]
+        _ -> return []
 
 -- type Attributes = Map Int ByteString
 -- the library contains showAttrs / showNLAttrs

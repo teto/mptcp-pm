@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# TODO need to return sthg readable by haskell
+echo "[3]"
+
