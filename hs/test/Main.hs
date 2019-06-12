@@ -44,6 +44,10 @@ iperfConnection = TcpConnection {
         , inetFamily = 2
     }
 
+modifiedConnection = iperfConnection {
+  subflowInterface = Just 0
+}
+
 filteredConnections :: [TcpConnection]
 filteredConnections = [
   iperfConnection
@@ -68,6 +72,8 @@ main = do
       -- , testComboReverse,
       TestLabel "subflow is correctly filtered" connectionFilter
       , TestCase $ assertBool "connection should be equal" (iperfConnection == iperfConnection)
+      , TestCase $ assertBool "connection should be equal despite different interfaces"
+          (iperfConnection == modifiedConnection)
       ]
   if (errors results + failures results == 0)
     then

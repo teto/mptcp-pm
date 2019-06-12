@@ -63,4 +63,5 @@ ss package sends by default
 - we need to request more states
 
 # TODO 
+- pass local/server IPs as commands to the PM ?
 - to get kernel ifindex: cat /sys/class/net/lo/ifindex

@@ -2,6 +2,21 @@
 # TODO need to return sthg readable by haskell
 # correct number of cwnds
 
-TODO 
-echo "[3]"
+# TODO echo 
+if [ $# -ne 2 ]; then
+  echo "Usage: <filename> <subflowCount>"
+  exit 1
+fi
 
+val="error"
+
+SUBFLOW_COUNT="$2"
+case $SUBFLOW_COUNT in
+  0) val="error"
+  1) val="[3]"
+  2) val="[3, 5]"
+  *) val="does not support $SUBFLOW_COUNT count"
+
+
+echo "$val"
+exit 0

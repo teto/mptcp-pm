@@ -40,6 +40,7 @@ Aeson tutorials:
 
 - https://lotz84.github.io/haskellbyexample/ex/maps
 
+
 Useful functions in Map
 - member / elemes / keys / assocs / keysSet / toList
 -}
@@ -130,20 +131,25 @@ data MyState = MyState {
 }
 -- deriving Show
 
-filteredConnections :: [TcpConnection]
-filteredConnections = [
-    TcpConnection {
-        srcIp = fromIPv4 localhost
-        , dstIp = fromIPv4 localhost
+
+
+-- , dstIp = fromIPv4 localhost
+authorizedCon1 :: TcpConnection
+authorizedCon1 = TcpConnection {
+        srcIp = fromIPv4 $ Net.IPv4.ipv4 192 168 0 128
+        , dstIp = fromIPv4 $ Net.IPv4.ipv4 202 214 86 51
         , srcPort = iperfClientPort
         , dstPort = iperfServerPort
-        -- placeholder values
         , priority = Nothing
         , subflowInterface = Nothing
         , localId = 0
         , remoteId = 0
         , inetFamily = eAF_INET
     }
+
+filteredConnections :: [TcpConnection]
+filteredConnections = [
+    authorizedCon1
     ]
 
 -- inspired by CtrlPacket
@@ -567,6 +573,7 @@ dispatchPacket oldState (Packet hdr (GenlData genlHeader NoData) attributes) = l
                     if subflow `notElem` filteredConnections
                         then do
                             putStrLn $ "filtered out connection" ++ show subflow 
+                            putStrLn $ "it was compared with " ++ show authorizedCon1 
                             return oldState
                         else (do
                                 let newMptcpConn = MptcpConnection token [ subflow ] [] []
