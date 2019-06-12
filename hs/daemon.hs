@@ -48,7 +48,7 @@ Useful functions in Map
 -- !nix-shell ../shell-haskell.nix -i ghc
 module Main where
 
-import Prelude hiding (length, concat)
+import Prelude hiding (concat)
 import Options.Applicative hiding (value, ErrorMsg)
 import qualified Options.Applicative (value)
 
@@ -74,6 +74,7 @@ import System.Log.FastLogger
 import System.Linux.Netlink.GeNetlink.Control
 
 import System.Process
+import System.Exit
 import Data.Word (Word16, Word32)
 -- import qualified Data.Bits as Bits -- (shiftL, )
 -- import Data.Bits ((.|.))
@@ -81,6 +82,8 @@ import Data.Word (Word16, Word32)
 import Data.Serialize.Put
 -- import Data.Either (fromRight)
 import Data.ByteString (ByteString)
+import Data.ByteString.Lazy (writeFile)
+-- import qualified Data.ByteString.Char8 as BSC
 import qualified Data.Map as Map
 
 -- https://hackage.haskell.org/package/bytestring-conversion-0.1/candidate/docs/Data-ByteString-Conversion.html#t:ToByteString
@@ -95,6 +98,11 @@ import Control.Exception (assert)
 -- import Data.IORef
 -- import Control.Concurrent.Async
 import System.IO.Unsafe
+import Data.Aeson
+
+-- for writeUTF8File
+-- import Distribution.Simple.Utils
+-- import Distribution.Utils.Generic
 
 -- STM = State Thread Monad ST monad
 -- import Data.IORef
@@ -318,16 +326,16 @@ startMonitorConnection mptcpSock mConn = do
             ] ++ (subflowAttrs masterSf)
     let resetPkt = resetConnectionPkt mptcpSock resetAttrs
     let newSfPkt = newSubflowPkt mptcpSock newSubflowAttrs
-    let capWinPkt = capCwndPkt mptcpSock capSubflowAttrs
+    -- let capCwndPkt = capCwndPkt mptcpSock capSubflowAttrs
 
     -- updateCwndCap
     -- queryOne
     -- putStrLn $ "Sending RESET for token " ++ show token
     -- query sock resetPkt >>= inspectAnswers
 
-    putStrLn $ "Master sf " ++ show masterSf
-    putStrLn $ "Trying to cap subflow cwd... with token " ++ show token
-    putStrLn $ "Sending " ++ show capWinPkt
+    -- putStrLn $ "Master sf " ++ show masterSf
+    -- putStrLn $ "Trying to cap subflow cwd... with token " ++ show token
+    -- putStrLn $ "Sending " ++ show capCwndPkt
 
     -- putStrLn $ "Master sf " ++ show masterSf
     -- putStrLn $ "Trying to create new subflow... with token " ++ show token
@@ -335,11 +343,17 @@ startMonitorConnection mptcpSock mConn = do
     -- query sock newSfPkt >>= inspectAnswers
 
     putStrLn "Running mptcpnumerics"
-    caps <- getCapsForConnection con
+    cwnds <- getCapsForConnection con
 
-    -- TODO
-    map 
-    -- query sock capWinPkt >>= inspectAnswers
+    putStrLn "Requesting to set cwnds..."
+    -- TODO capCwndAttrs capCwndPkt 
+    -- KISS for now (capCwndPkt mptcpSock )
+    -- zip caps (subflows con) 
+    let attrsList = map (\(cwnd, sf) -> capCwndAttrs token sf cwnd ) (zip cwnds (subflows con))
+    -- >> map (capCwndPkt mptcpSock ) >>= putStrLn "toto"
+    -- query sock capCwndPkt >>= inspectAnswers
+    let cwndPackets = map (capCwndPkt mptcpSock ) attrsList
+    -- map >>= inspectAnswers
 
     -- then we should send a request for each cwnd
 
@@ -355,12 +369,16 @@ startMonitorConnection mptcpSock mConn = do
 -- 2.
 -- 3.
 -- Maybe ? 
-getCapsForConnection :: MptcpConnection -> IO [Int]
+getCapsForConnection :: MptcpConnection -> IO [Word32]
 getCapsForConnection con = do
     -- need to start a process
     -- should return a bytestring
-    let bs = encode con
-    writeUTF8File "file.txt" bs
+    let bs = Data.Aeson.encode con
+    let subflowCount = length $ subflows con
+    let filename = "mptcp_" ++ (show $ subflowCount)  ++ "_" ++ (show $ connectionToken con) ++ ".json"
+    -- encode token in filename
+    -- fromMaybe $
+    Data.ByteString.Lazy.writeFile filename bs
 
     -- eitherDecode
     -- TODO run readProcessWithExitCode instead
@@ -368,13 +386,13 @@ getCapsForConnection con = do
 
     -- TODO to keep it simple it should return a list of CWNDs to apply
     -- readProcessWithExitCode  binary / args / stdin
-    exitCode, stdout, stderr <- readProcessWithExitCode "fake_solver" ["1", "10"] ""
-    case exitCode of 
+    (exitCode, stdout, stderr) <- readProcessWithExitCode "fake_solver" [filename, show subflowCount] ""
+    case exitCode of
         -- successful
         -- print result 
         -- for now simple, we might read json afterwards
-        0 -> read stdout :: [Int]
-        _ -> return []
+        ExitSuccess -> return (read stdout :: [Word32])
+        ExitFailure val -> return []
 
 -- type Attributes = Map Int ByteString
 -- the library contains showAttrs / showNLAttrs

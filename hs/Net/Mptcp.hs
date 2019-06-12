@@ -103,11 +103,6 @@ reverse con = TcpConnection {
   , inetFamily = inetFamily con
 }
 
--- data TcpSubflow = TcpSubflow {
--- }
-
-instance FromJSON TcpConnection
-instance ToJSON TcpConnection
 
 
 type MptcpPacket = GenlPacket NoData
@@ -363,7 +358,6 @@ makeAttribute i val =
     MPTCP_ATTR_DPORT -> SubflowDestPort <$> port where port = e2M $ runGet getWord16host val
     MPTCP_ATTR_LOC_ID -> Just (LocalLocatorId $ readLocId $ Just val )
     MPTCP_ATTR_REM_ID -> Just (RemoteLocatorId $ readLocId $ Just val )
-    -- | i == fromEnum MPTCP_ATTR_LOC_ID = Just (SubflowSourceAddress $ val )
     MPTCP_ATTR_IF_IDX ->
              case runGet getWord32be val of
                 Right x -> Just $ SubflowInterface x
@@ -381,29 +375,6 @@ dumpAttribute attrId value =
   -- TODO replace with makeAttribute followd by show ?
   -- traceShowId
   show $ makeAttribute attrId value
-
-  -- attrStr = case  ( toEnum (fromIntegral attr)) of
-  --     MPTCP_ATTR_UNSPEC -> "UNSPECIFIED"
-  --     MPTCP_ATTR_TOKEN -> "token: " ++ show (readToken $ Just value)
-  --     MPTCP_ATTR_FAMILY -> "family: " ++ show value
-  --     MPTCP_ATTR_LOC_ID -> "Locator id: " ++ show (readLocId $ Just value)
-  --     MPTCP_ATTR_REM_ID -> "Remote id: " ++ show value
-  --     MPTCP_ATTR_SADDR4 -> "ipv4.src: " ++ show value
-  --     MPTCP_ATTR_SADDR6 -> "ipv6.src: " ++ show value
-  --     MPTCP_ATTR_DADDR4 -> "ipv4.dest: " ++ show value
-  --     MPTCP_ATTR_DADDR6 -> "ipv6.dest: " ++ show value
-  --     MPTCP_ATTR_SPORT -> "sport: " ++ show (getPort value)
-  --     MPTCP_ATTR_DPORT -> "dport: " ++ show (getPort value)
-  --     MPTCP_ATTR_BACKUP -> "backup" ++ show value
-  --     MPTCP_ATTR_ERROR -> "Error: " ++ show value
-  --     MPTCP_ATTR_FLAGS -> "Flags: " ++ show value
-  --     MPTCP_ATTR_TIMEOUT -> "timeout: " ++ show value
-  --     MPTCP_ATTR_IF_IDX -> "ifId: " ++ show value
-  --     MPTCP_ATTR_CWND -> "cwnd: " ++ show value
-  --     -- _ -> "unhandled case"
-  -- in
-    -- attrStr
-
 
 checkIfSocketExistsPkt :: Word16 -> [MptcpAttribute]  -> MptcpPacket
 checkIfSocketExistsPkt fid attributes =
@@ -447,14 +418,16 @@ subflowAttrs con = [
 
 
 -- TODO pass a TcpConnection instead ?
-capCwndAttr :: MptcpToken -> TcpConnection -> MptcpPacket
-capCwndPkt token sf =
-  let capSubflowAttrs = [
+capCwndAttrs :: MptcpToken -> TcpConnection -> Word32 -> [MptcpAttribute]
+capCwndAttrs token sf cwnd = let
+  capSubflowAttrs = [
             MptcpAttrToken token
-            , SubflowMaxCwnd 3
+            , SubflowMaxCwnd cwnd
             -- This should not be necessary anymore ?
             , SubflowSourcePort $ srcPort sf
-            ] ++ (subflowAttrs masterSf)
+            ] ++ (subflowAttrs sf)
+  in
+    capSubflowAttrs
 
 capCwndPkt :: MptcpSocket -> [MptcpAttribute] -> MptcpPacket
 capCwndPkt (MptcpSocket sock fid) attrs =

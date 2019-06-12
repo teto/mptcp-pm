@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
 # TODO need to return sthg readable by haskell
+# correct number of cwnds
+
+TODO 
 echo "[3]"
 

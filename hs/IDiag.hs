@@ -63,7 +63,6 @@ data InetDiagSockId  = InetDiagSockId  {
   , idiag_dst :: ByteString
 
   , idiag_intf :: Word32
-  -- * 2
   , idiag_cookie :: Word64
 
 } deriving (Eq, Show)
