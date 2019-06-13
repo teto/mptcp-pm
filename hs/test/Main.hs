@@ -74,6 +74,10 @@ main = do
       , TestCase $ assertBool "connection should be equal" (iperfConnection == iperfConnection)
       , TestCase $ assertBool "connection should be equal despite different interfaces"
           (iperfConnection == modifiedConnection)
+      , TestCase $ assertBool "connection should be considered as in list"
+          (modifiedConnection `elem` filteredConnections)
+      , TestCase $ assertBool "connection should not be considered as in list"
+          (modifiedConnection `notElem` filteredConnections)
       ]
   if (errors results + failures results == 0)
     then

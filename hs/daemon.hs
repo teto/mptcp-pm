@@ -122,7 +122,7 @@ iperfClientPort :: Word16
 iperfClientPort = 5500
 
 iperfServerPort :: Word16
-iperfServerPort = 5500
+iperfServerPort = 5201
 
 data MyState = MyState {
   socket :: MptcpSocket -- ^Socket
@@ -371,7 +371,7 @@ startMonitorConnection mptcpSock mConn = do
     putStrLn "Running mptcpnumerics"
     cwnds <- getCapsForConnection con
 
-    putStrLn "Requesting to set cwnds..."
+    putStrLn $ "Requesting to set cwnds..." ++ show cwnds
     -- TODO capCwndAttrs capCwndPkt 
     -- KISS for now (capCwndPkt mptcpSock )
     -- zip caps (subflows con) 
@@ -412,13 +412,13 @@ getCapsForConnection con = do
 
     -- TODO to keep it simple it should return a list of CWNDs to apply
     -- readProcessWithExitCode  binary / args / stdin
-    (exitCode, stdout, stderr) <- readProcessWithExitCode "fake_solver" [filename, show subflowCount] ""
+    (exitCode, stdout, stderr) <- readProcessWithExitCode "./fake_solver" [filename, show subflowCount] ""
     case exitCode of
         -- successful
         -- print result 
         -- for now simple, we might read json afterwards
         ExitSuccess -> return (read stdout :: [Word32])
-        ExitFailure val -> return []
+        ExitFailure val -> error $ "stdout:" ++ stdout ++ " stderr: " ++ stderr
 
 -- type Attributes = Map Int ByteString
 -- the library contains showAttrs / showNLAttrs
