@@ -176,19 +176,39 @@ dumpMptcpCommands x = dumpCommand x ++ "\n" ++ dumpMptcpCommands (succ x)
 
 
 -- todo use it as a filter
-data Sample = Sample
-  { command    :: String
+data Sample = Sample {
+  command    :: String
+  , serverIP     :: IPv4
+  -- , clientIP      :: IPv4
   , quiet      :: Bool
-  , enthusiasm :: Int }
+  , enthusiasm :: Int
+  }
+
+
+-- TODO use 3rd party library levels
+-- data Verbosity = Normal | Debug
 
 
 
 -- TODO register subcommands instead
+-- see https://stackoverflow.com/questions/31318643/optparse-applicative-how-to-handle-no-arguments-situation-in-arrow-syntax
+--  ( command "add" (info addOptions ( progDesc "Add a file to the repository" ))
+ -- <> command "commit" (info commitOptions ( progDesc "Record changes to the repository" ))
+-- can use several constructors depending on the PM ?
+-- eitherReader
+-- ByteString
+-- <>  ( metavar "ServerIP"
+--readerError
 sample :: Parser Sample
 sample = Sample
       <$> argument str
           ( metavar "CMD"
          <> help "What to do" )
+      <*> argument (eitherReader $ \x -> case (Net.IPv4.decodeString x) of
+                                            Nothing -> Left "could not parse"
+                                            Just ip -> Right ip)
+        ( metavar "ServerIP"
+         <> help "ServerIP to let through" )
       <*> switch
           ( long "verbose"
          <> short 'v'

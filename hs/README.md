@@ -64,4 +64,5 @@ ss package sends by default
 
 # TODO 
 - pass local/server IPs as commands to the PM ?
+- generate completion scripts via --zsh-completion-script
 - to get kernel ifindex: cat /sys/class/net/lo/ifindex
