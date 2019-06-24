@@ -67,12 +67,15 @@ import Data.Maybe ()
 import Data.Foldable ()
 import Foreign.C.Types (CInt)
 import Foreign.C.Error
-import System.Linux.Netlink hiding (makeSocket)
-import System.Linux.Netlink.GeNetlink
-import System.Linux.Netlink.Constants
+-- import qualified System.Linux.Netlink as NL
+import System.Linux.Netlink as NL
+import System.Linux.Netlink.GeNetlink as GENL
+import System.Linux.Netlink.Constants as NLC
 -- import System.Linux.Netlink.Helpers
 import System.Log.FastLogger
 import System.Linux.Netlink.GeNetlink.Control
+import qualified System.Linux.Netlink.Simple as NLS
+import qualified System.Linux.Netlink.Route as NLR
 
 import System.Process
 import System.Exit
@@ -86,6 +89,8 @@ import Data.ByteString (ByteString)
 import Data.ByteString.Lazy (writeFile)
 -- import qualified Data.ByteString.Char8 as BSC
 import qualified Data.Map as Map
+
+import Data.Bits (Bits(..))
 
 -- https://hackage.haskell.org/package/bytestring-conversion-0.1/candidate/docs/Data-ByteString-Conversion.html#t:ToByteString
 -- contains ToByteString / FromByteString
@@ -236,7 +241,7 @@ opts = info (sample <**> helper)
 makeMptcpSocket :: IO MptcpSocket
 makeMptcpSocket = do
     -- for legacy reasons this opens a route socket
-  sock <- makeSocket
+  sock <- GENL.makeSocket
   res <- getFamilyIdS sock mptcpGenlName
   case res of
     Nothing -> error $ "Could not find family " ++ mptcpGenlName
@@ -469,6 +474,23 @@ inspectAnswer (Packet _ (GenlData hdr NoData) attributes) = let
 
 inspectAnswer pkt = putStrLn $ "Inspecting answer:\n" ++ showPacket pkt
 
+
+
+queryAddrs :: NLR.RoutePacket
+queryAddrs = NL.Packet
+    (NL.Header NLC.eRTM_GETADDR (NLC.fNLM_F_ROOT .|. NLC.fNLM_F_MATCH .|. NLC.fNLM_F_REQUEST) 0 0)
+    (NLR.NAddrMsg 0 0 0 0 0)
+    mempty
+
+
+handleMessage (NLR.NLinkMsg _ _ _ ) = putStrLn $ "Ignoring NLinkMsg"
+handleMessage (NLR.NNeighMsg _ _ _ _ _ ) = putStrLn $ "Ignoring NNeighMsg"
+handleMessage (NLR.NAddrMsg _ _ _ _ _ ) = putStrLn $ "Ignoring NNeighMsg"
+
+-- TODO handle remove/new event
+handleAddr :: Either String NLR.RoutePacket -> IO ()
+handleAddr (Left str) = putStrLn $ "Error decoding packet: " ++ str
+handleAddr (Right (Packet hdr pkt _)) = handleMessage pkt
 
 --
 onNewConnection :: MptcpSocket -> Attributes -> IO ()
@@ -766,6 +788,13 @@ main = do
   sockMetrics <- makeMetricsSocket
   -- putMVar
   putMVar globalMetricsSock sockMetrics
+
+
+  -- 
+  sock <- NLS.makeNLHandle (const $ pure ()) =<< NL.makeSocket
+  let cb = NLS.NLCallback (pure ()) (handleAddr . runGet getGenPacket)
+  NLS.nlPostMessage sock queryAddrs cb
+  NLS.nlWaitCurrent sock
 
   putStr "socket created. MPTCP Family id " >> Prelude.print fid
   -- putStr "socket created. tcp_metrics Family id " >> print fidMetrics
