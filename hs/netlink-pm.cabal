@@ -42,7 +42,7 @@ common shared-properties
     Build-tools:       hsc2hs, c2hs
     -- apparently this just helps getting a better error messages
     Includes:          tcp_states.h, linux/sock_diag.h, linux/inet_diag.h
-    Other-modules:     IDiag, Net.Mptcp, Net.IPAddress, Generated
+    Other-modules:     IDiag, Net.Tcp, Net.Mptcp, Net.IPAddress, Generated
     -- TODO try to pass it from CLI instead
     include-dirs: .
     autogen-modules: Generated

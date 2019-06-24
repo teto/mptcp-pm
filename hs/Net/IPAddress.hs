@@ -70,10 +70,20 @@ getIPv6FromByteString bs =
 -- one constructor is getIPv4 :: Word32
 putIPAddress :: IP -> Put
 putIPAddress addr =
-  case_ putIPv4Address (\x -> undefined) addr
+  case_ putIPv4Address putIPv6Address addr
 
+-- the doc should show the MSB
+putIPv6Address :: IPv6 -> Put
+putIPv6Address addr =
+  let
+    (w1, w2, w3, w4) = toWord32s addr
+  in do
+    putWord32be w1
+    putWord32be w2
+    putWord32be w3
+    putWord32be w4
 
--- |IDIag version since it will add some padding
+-- |IDIag version since it will add some padding to reach 128 bits
 putIPv4Address :: IPv4 -> Put
 putIPv4Address addr =
     let

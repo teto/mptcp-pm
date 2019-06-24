@@ -73,14 +73,11 @@ in
   nativeBuildInputs = [
     all-hies.versions."${compilerName}"
 
-    # haskellPackages.ip_1_5_0 
-
     haskellPackages.cabal-install
     # haskellPackages.bytestring-conversion
     haskellPackages.gutenhasktags  # taken from my overlay
     # haskellPackages.haskdogs # seems to build on hasktags/ recursively import things
     haskellPackages.hasktags
-    # haskellPackages.nvim-hs
     haskellPackages.nvim-hs-ghcid # too old, won't support nvim-hs-contrib 2
 
     # for https://hackage.haskell.org/package/bytestring-conversion-0.2/candidate/docs/Data-ByteString-Conversion-From.html

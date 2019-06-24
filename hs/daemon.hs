@@ -57,6 +57,7 @@ import qualified Options.Applicative (value)
 import Generated
 import IDiag
 import Net.Mptcp
+import Net.Tcp
 import Net.IP
 import Net.IPv4 hiding (print)
 import Net.IPAddress
@@ -82,7 +83,7 @@ import System.Exit
 import Data.Word (Word16, Word32)
 -- import qualified Data.Bits as Bits -- (shiftL, )
 -- import Data.Bits ((.|.))
--- import Data.Serialize.Get
+import Data.Serialize.Get (runGet)
 import Data.Serialize.Put
 -- import Data.Either (fromRight)
 import Data.ByteString (ByteString)
@@ -213,7 +214,7 @@ sample = Sample
                                             Nothing -> Left "could not parse"
                                             Just ip -> Right ip)
         ( metavar "ServerIP"
-         <> help "ServerIP to let through" )
+         <> help "ServerIP to let through (e.g.: 202.214.86.51 )" )
       <*> switch
           ( long "verbose"
          <> short 'v'
@@ -284,24 +285,21 @@ sleepMs n = threadDelay (n * 1000)
 
 
 -- here we may want to run mptcpnumerics to get some results
-updateCwndCap :: IO ()
-updateCwndCap = do
-    -- TODO fix con
-    let fakeCon = TcpConnection (fromIPv4 localhost) (fromIPv4 localhost) 0 0
+updateSubflowMetrics :: TcpConnection -> IO ()
+updateSubflowMetrics subflow = do
     putStrLn "Reading metrics sock Mvar..."
     sockMetrics <- readMVar globalMetricsSock
 
     putStrLn "Reading mptcp sock Mvar..."
     mptcpSock <- readMVar globalMptcpSock
     putStrLn "Finished reading"
-    -- sendmsg genQueryPacket fakeCon
-    let queryPkt = genQueryPacket Nothing [TcpListen, TcpEstablished] [InetDiagCong, InetDiagInfo, InetDiagMeminfo]
+    let queryPkt = genQueryPacket (Right subflow) [TcpListen, TcpEstablished] [InetDiagCong, InetDiagInfo, InetDiagMeminfo]
     let (MptcpSocket testSock familyId ) = mptcpSock
     sendPacket sockMetrics queryPkt
     putStrLn "Sent the TCP SS request"
 
     -- exported from my own version !!
-    -- recvMulti sockMetrics >>= inspectIdiagAnswers
+    recvMulti sockMetrics >>= inspectIdiagAnswers
     -- for now let's discard the answer
     -- recvOne sockMetrics >>= inspectIdiagAnswers
 
@@ -339,12 +337,15 @@ startMonitorConnection :: MptcpSocket -> MVar MptcpConnection -> IO ()
 startMonitorConnection mptcpSock mConn = do
     -- ++ show token
     let (MptcpSocket sock familyId) = mptcpSock
-    putStrLn "Start monitoring connection..."
+    putStr "Start monitoring connection..."
     -- as long as conn is not empty we keep going ?
     -- for this connection
     -- query metrics for the whole MPTCP connection
     con <- readMVar mConn
+    putStrLn $ show con ++ "..."
     let token = connectionToken con
+
+
     let resetAttrs = [ (MptcpAttrToken token ), (LocalLocatorId 0)]
     let masterSf = head $ subflows con
     let newSubflowAttrs = [
@@ -382,11 +383,13 @@ startMonitorConnection mptcpSock mConn = do
     -- zip caps (subflows con) 
     let attrsList = map (\(cwnd, sf) -> capCwndAttrs token sf cwnd ) (zip cwnds (subflows con))
     -- >> map (capCwndPkt mptcpSock ) >>= putStrLn "toto"
+
     -- query sock capCwndPkt >>= inspectAnswers
     let cwndPackets = map (capCwndPkt mptcpSock ) attrsList
     -- map >>= inspectAnswers
 
     -- then we should send a request for each cwnd
+    mapM_ updateSubflowMetrics (subflows con)
 
     sleepMs 5000
     putStrLn "Finished monitoring token "
@@ -402,8 +405,7 @@ startMonitorConnection mptcpSock mConn = do
 -- Maybe ? 
 getCapsForConnection :: MptcpConnection -> IO [Word32]
 getCapsForConnection con = do
-    -- need to start a process
-    -- should return a bytestring
+    -- returns a bytestring
     let bs = Data.Aeson.encode con
     let subflowCount = length $ subflows con
     let filename = "mptcp_" ++ (show $ subflowCount)  ++ "_" ++ (show $ connectionToken con) ++ ".json"
@@ -419,8 +421,6 @@ getCapsForConnection con = do
     -- readProcessWithExitCode  binary / args / stdin
     (exitCode, stdout, stderr) <- readProcessWithExitCode "./fake_solver" [filename, show subflowCount] ""
     case exitCode of
-        -- successful
-        -- print result 
         -- for now simple, we might read json afterwards
         ExitSuccess -> return (read stdout :: [Word32])
         ExitFailure val -> error $ "stdout:" ++ stdout ++ " stderr: " ++ stderr
@@ -483,14 +483,17 @@ queryAddrs = NL.Packet
     mempty
 
 
+handleMessage :: NLR.Message -> IO()
 handleMessage (NLR.NLinkMsg _ _ _ ) = putStrLn $ "Ignoring NLinkMsg"
 handleMessage (NLR.NNeighMsg _ _ _ _ _ ) = putStrLn $ "Ignoring NNeighMsg"
 handleMessage (NLR.NAddrMsg _ _ _ _ _ ) = putStrLn $ "Ignoring NNeighMsg"
 
 -- TODO handle remove/new event
 handleAddr :: Either String NLR.RoutePacket -> IO ()
-handleAddr (Left str) = putStrLn $ "Error decoding packet: " ++ str
+handleAddr (Left errStr) = putStrLn $ "Error decoding packet: " ++ errStr
 handleAddr (Right (Packet hdr pkt _)) = handleMessage pkt
+handleAddr (Right (DoneMsg hdr)) = putStrLn $ "Error decoding packet: " ++ show hdr
+handleAddr (Right (ErrorMsg hdr errorInt errorBstr )) = putStrLn $ "Error decoding packet: " ++ show hdr
 
 --
 onNewConnection :: MptcpSocket -> Attributes -> IO ()
@@ -791,10 +794,10 @@ main = do
 
 
   -- 
-  sock <- NLS.makeNLHandle (const $ pure ()) =<< NL.makeSocket
+  routingSock <- NLS.makeNLHandle (const $ pure ()) =<< NL.makeSocket
   let cb = NLS.NLCallback (pure ()) (handleAddr . runGet getGenPacket)
-  NLS.nlPostMessage sock queryAddrs cb
-  NLS.nlWaitCurrent sock
+  NLS.nlPostMessage routingSock queryAddrs cb
+  NLS.nlWaitCurrent routingSock
 
   putStr "socket created. MPTCP Family id " >> Prelude.print fid
   -- putStr "socket created. tcp_metrics Family id " >> print fidMetrics

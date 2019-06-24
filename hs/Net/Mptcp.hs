@@ -33,6 +33,7 @@ import Data.List ()
 import Debug.Trace
 import Control.Concurrent ()
 import Net.IP
+import Net.Tcp
 import Net.IPAddress
 import Net.IPv4
 import Net.IPv6
@@ -51,30 +52,6 @@ instance Show MptcpSocket where
 -- |Data to hold subflows information
 -- use http://hackage.haskell.org/package/data-default-0.5.3/docs/Data-Default.html
 -- data default to provide default values
-data TcpConnection = TcpConnection {
-  -- TODO use libraries to deal with that ? filter from the command line for instance ?
-  srcIp :: IP -- ^Source ip
-  , dstIp :: IP -- ^Destination ip
-  , srcPort :: Word16  -- ^ Source port
-  , dstPort :: Word16  -- ^Destination port
-  , priority :: Maybe Word8 -- ^subflow priority
-  , localId :: Word8  -- ^ Convert to AddressFamily
-  , remoteId :: Word8
-  , inetFamily :: Word16
-  , subflowInterface :: Maybe Word32 -- ^Interface of Maybe ?
-  -- add TcpMetrics member
-
-} deriving (Show, Generic)
-
-
-instance FromJSON TcpConnection
-instance ToJSON TcpConnection
-
--- ignore the rest
-instance Eq TcpConnection where
-  x == y = srcIp x == srcIp y && dstIp x == dstIp y
-            && srcPort x == srcPort y && dstPort x == dstPort y
-  -- /= = not ==
 
 -- prevents hie from working correctly ?!
 -- instance Default TcpConnection where
@@ -89,20 +66,6 @@ instance Eq TcpConnection where
 --         , inetFamily  = eAF_INET
 --         , subflowInterface = Nothing
 --       }
-
-reverse :: TcpConnection -> TcpConnection
-reverse con = TcpConnection {
-  srcIp = dstIp con
-  , dstIp = srcIp con
-  , srcPort = dstPort con
-  , dstPort = srcPort con
-  , priority = Nothing
-  , localId = remoteId con
-  , remoteId = localId con
-  , subflowInterface = Nothing
-  , inetFamily = inetFamily con
-}
-
 
 
 type MptcpPacket = GenlPacket NoData
@@ -135,7 +98,6 @@ mptcpConnAddLocalId :: MptcpConnection
                        -> MptcpConnection
 mptcpConnAddLocalId con locId = undefined
 
--- mptcpConnAddAnnouncement
 
 -- TODO remove subflow
 mptcpConnRemoveSubflow :: MptcpConnection -> TcpConnection -> MptcpConnection

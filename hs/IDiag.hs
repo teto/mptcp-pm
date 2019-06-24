@@ -19,6 +19,8 @@ import Data.Word (Word8, Word16, Word32, Word64)
 import Prelude hiding (length, concat)
 import Prelude hiding (length, concat)
 
+import Data.Maybe (fromJust)
+
 import Data.Serialize
 import Data.Serialize.Get ()
 import Data.Serialize.Put ()
@@ -40,8 +42,9 @@ import Data.ByteString ()
 -- import Data.IP
 import Net.IPAddress
 import Net.IP ()
-import Net.IPv4
-import Data.ByteString (ByteString)
+-- import Net.IPv4
+import Net.Tcp
+import Data.ByteString (ByteString, pack)
 
 -- iproute uses this seq number #define MAGIC_SEQ 123456
 magicSeq :: Word32
@@ -51,6 +54,9 @@ magicSeq = 123456
 -- toIpv4 val = Data.List.intercalate "." ( map show (unpack val))
 
 
+-- TODO provide constructor from Cookie
+-- and one fronConnection
+-- | InetDiagFromCookie Word64
 data InetDiagSockId  = InetDiagSockId  {
   idiag_sport :: Word16
   , idiag_dport :: Word16
@@ -66,6 +72,7 @@ data InetDiagSockId  = InetDiagSockId  {
   , idiag_cookie :: Word64
 
 } deriving (Eq, Show)
+
 
 
 -- TODO we need a way to rebuild from the integer to the enum
@@ -292,32 +299,40 @@ data Meminfo = Meminfo {
 -- TODO we need to request more !
 -- TODO if we have a cookie ignore the rest ?!
 -- requestedInfo = InetDiagNone
-genQueryPacket :: (Maybe Word64) -> [TcpState] -> [IDiagExt] -> Packet SockDiagRequest
-genQueryPacket cookie tcpStatesFilter requestedInfo = let
+
+-- | TODO use either ?
+genQueryPacket :: (Either Word64 TcpConnection) -> [TcpState] -> [IDiagExt] -> Packet SockDiagRequest
+genQueryPacket selector tcpStatesFilter requestedInfo = let
   -- Mesge type / flags /seqNum /pid
   flags = (fNLM_F_REQUEST .|. fNLM_F_MATCH .|. fNLM_F_ROOT)
 
+
   -- might be a trick with seqnum
   hdr = Header msgTypeSockDiag flags magicSeq 0
-  -- global for now
-  iperfSrcPort = 0
-  iperfDstPort = 0
-  -- iperfSrcPort = iperfHardcodedSrcPort
-  -- iperfDstPort = 5201
-  _cookie = 0 :: Word64
 
-  -- TODO 
-  -- ipSrc = Data.Serialize.encode $ fromIPv4 localhost
-  ipSrc = runPut $ putIPv4Address localhost
-  ipDst = runPut $ putIPv4Address localhost
-  -- ipDst = fromIPv4 localhost
+  diag_req = case selector of
+    -- TODO
+    Left cookie -> let
+        bstr = pack $ replicate 128 (0 :: Word8)
+      in
+        InetDiagSockId 0 0 bstr bstr 0 cookie
+
+    Right con -> let
+        ipSrc = runPut $ putIPAddress (srcIp con)
+        ipDst = runPut $ putIPAddress (dstIp con)
+        ifIndex = subflowInterface con
+        _cookie = 0 :: Word64
+      in
+        InetDiagSockId (srcPort con) (dstPort con) ipSrc ipDst (fromJust ifIndex) _cookie
+
   -- 1 => "lo". Check with ip link ?
-  ifIndex = fromIntegral localhostIntfIdx :: Word32
-  diag_req = InetDiagSockId iperfSrcPort iperfDstPort ipSrc ipDst ifIndex _cookie
+  -- TODO pick from connection
+  -- ifIndex = fromIntegral localhostIntfIdx :: Word32
 
   custom = SockDiagRequest eAF_INET eIPPROTO_TCP requestedInfo tcpStatesFilter diag_req
   in
     Packet hdr custom Map.empty
 
+-- | to search for a specific connection
 queryPacketFromCookie :: Word64 -> Packet SockDiagRequest
-queryPacketFromCookie cookie =  genQueryPacket (Just cookie) [] []
+queryPacketFromCookie cookie =  genQueryPacket (Left cookie) [] []
