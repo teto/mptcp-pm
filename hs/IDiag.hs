@@ -10,8 +10,11 @@ Portability : Linux
 
 -}
 {-# LANGUAGE FlexibleInstances #-}
-module IDiag
-where
+{-# LANGUAGE DeriveGeneric #-}
+module IDiag (
+  InetDiagMsg (..)
+  , genQueryPacket 
+) where
 
 -- import Generated
 import Data.Word (Word8, Word16, Word32, Word64)
@@ -45,6 +48,8 @@ import Net.IP ()
 -- import Net.IPv4
 import Net.Tcp
 import Data.ByteString (ByteString, pack)
+
+import GHC.Generics
 
 -- iproute uses this seq number #define MAGIC_SEQ 123456
 magicSeq :: Word32
@@ -250,7 +255,7 @@ putInetDiagSockid cust = do
 -- 	__u32	tcpv_rtt;
 -- 	__u32	tcpv_minrtt;
 -- };
-data DiagTcpInfo = TcpVegasInfo {
+data DiagVegasInfo = TcpVegasInfo {
   -- TODO hide ?
   tcpInfoVegasEnabled :: Word32
   , tcpInfoRttCount :: Word32
@@ -258,17 +263,17 @@ data DiagTcpInfo = TcpVegasInfo {
   , tcpInfoMinrtt :: Word32
 }
 
-instance Convertable DiagTcpInfo where
-  getPut  = putDiagTcpInfo
-  getGet _  = getDiagTcpInfo
+instance Convertable DiagVegasInfo where
+  getPut  = putDiagVegasInfo
+  getGet _  = getDiagVegasInfo
 
 
-putDiagTcpInfo :: DiagTcpInfo -> Put
-putDiagTcpInfo info = error "should not be needed"
+putDiagVegasInfo :: DiagVegasInfo -> Put
+putDiagVegasInfo info = error "should not be needed"
 
 
-getDiagTcpInfo :: Get DiagTcpInfo
-getDiagTcpInfo =
+getDiagVegasInfo :: Get DiagVegasInfo
+getDiagVegasInfo =
   TcpVegasInfo <$> getWord32host <*> getWord32host <*> getWord32host <*> getWord32host
 
 -- TODO generate via FFI ?
@@ -285,6 +290,53 @@ data Meminfo = Meminfo {
 , idiag_fmem :: Word32
 , idiag_tmem :: Word32
 }
+
+
+-- TODO generate with c2hsc ?
+data DiagTcpInfo = DiagTcpInfo {
+  tcpi_state :: Word8,
+  tcpi_ca_state :: Word8,
+  tcpi_retransmits :: Word8,
+  tcpi_probes :: Word8,
+  tcpi_backoff :: Word8,
+  tcpi_options :: Word8,
+  tcpi_wscales :: Word8,
+  -- tcpi_snd_wscale : 4, tcpi_rcv_wscale : 4 :: Word8,
+
+  tcpi_rto :: Word32,
+  tcpi_ato :: Word32,
+  tcpi_snd_mss :: Word32,
+  tcpi_rcv_mss :: Word32,
+
+  tcpi_unacked :: Word32,
+  tcpi_sacked :: Word32,
+  tcpi_lost :: Word32,
+  tcpi_retrans :: Word32,
+  tcpi_fackets :: Word32,
+
+  -- Time
+  tcpi_last_data_sent :: Word32,
+  -- Not remembered, sorr
+  tcpi_last_ack_sent :: Word32,
+  tcpi_last_data_recv :: Word32,
+  tcpi_last_ack_recv :: Word32,
+
+   -- Metric
+  tcpi_pmtu :: Word32,
+  tcpi_rcv_ssthresh :: Word32,
+  tcpi_rtt :: Word32,
+  tcpi_rttvar :: Word32,
+  tcpi_snd_ssthresh :: Word32,
+  tcpi_snd_cwnd :: Word32,
+  tcpi_advmss :: Word32,
+  tcpi_reordering :: Word32,
+  tcpi_rcv_rtt :: Word32,
+  tcpi_rcv_space :: Word32,
+  tcpi_total_retrans :: Word32
+
+} deriving (Show, Generic)
+
+
 -- Sends a SockDiagRequest
 -- expects INetDiag
 -- TODO should take an Mptcp connection into account

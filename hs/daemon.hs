@@ -293,8 +293,9 @@ updateSubflowMetrics subflow = do
     putStrLn "Reading mptcp sock Mvar..."
     mptcpSock <- readMVar globalMptcpSock
     putStrLn "Finished reading"
-    let queryPkt = genQueryPacket (Right subflow) [TcpListen, TcpEstablished] [InetDiagCong, InetDiagInfo, InetDiagMeminfo]
-    let (MptcpSocket testSock familyId ) = mptcpSock
+    let queryPkt = genQueryPacket (Right subflow) [TcpListen, TcpEstablished]
+         [InetDiagCong, InetDiagInfo, InetDiagMeminfo]
+    -- let (MptcpSocket testSock familyId ) = mptcpSock
     sendPacket sockMetrics queryPkt
     putStrLn "Sent the TCP SS request"
 
@@ -402,7 +403,7 @@ startMonitorConnection mptcpSock mConn = do
 -- 1. save the connection to a JSON file and pass it to mptcpnumerics
 -- 2.
 -- 3.
--- Maybe ? 
+-- Maybe ?
 getCapsForConnection :: MptcpConnection -> IO [Word32]
 getCapsForConnection con = do
     -- returns a bytestring
@@ -745,7 +746,7 @@ createLogger = newStdoutLoggerSet defaultBufSize
 
 inspectIDiagAnswer :: Packet InetDiagMsg -> IO ()
 inspectIDiagAnswer (Packet hdr cus attrs) =
-   putStrLn $ "Idiag answer" ++ showAttributes attrs
+   putStrLn $ "Idiag answer " ++ showAttributes attrs
 inspectIDiagAnswer p = putStrLn $ "test" ++ showPacket p
 
 -- inspectIDiagAnswer (DoneMsg err) = putStrLn "DONE MSG"

@@ -20,8 +20,10 @@ let
 
           # from nixpkgs-stackage overlay
           ip = pkgs.haskell.lib.dontCheck hold.ip;
+
+          c2hsc = pkgs.haskell.lib.dontCheck hold.c2hsc;
+
           # ip = pkgs.haskell.packages.stackage.lts-1321.ip;
-          # ip = hold.ip_1_5_0;
           # QuickCheck = haskellPackagesOld.QuickCheck_2_13_1;
           # ip_1_5_0 = haskellPackagesOld.ip_1_5_0.override { };
         };

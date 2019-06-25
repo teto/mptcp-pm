@@ -31,7 +31,7 @@ Flag Dev {
 common shared-properties
     build-depends: base, optparse-applicative, 
       containers, bytestring, fast-logger, process, cereal, ip, aeson,
-       netlink >= 1.1.1.1, bytestring-conversion
+       netlink >= 1.1.1.1, bytestring-conversion, c2hsc
     default-language: Haskell2010
     -- -fno-warn-unused-imports
     ghc-options: -Wall -fno-warn-unused-binds -fno-warn-unused-matches
@@ -43,8 +43,9 @@ common shared-properties
     -- apparently this just helps getting a better error messages
     Includes:          tcp_states.h, linux/sock_diag.h, linux/inet_diag.h
     Other-modules:     IDiag, Net.Tcp, Net.Mptcp, Net.IPAddress, Generated
-    -- TODO try to pass it from CLI instead
+    -- TODO try to pass it from CLI instead , Net.TcpInfo
     include-dirs: .
+    -- , Net.TcpInfo
     autogen-modules: Generated
 
 
