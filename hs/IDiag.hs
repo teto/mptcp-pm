@@ -11,9 +11,11 @@ Portability : Linux
 -}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DeriveAnyClass #-}
 module IDiag (
   InetDiagMsg (..)
-  , genQueryPacket 
+  , genQueryPacket
+  , loadExtension
 ) where
 
 -- import Generated
@@ -41,13 +43,12 @@ import qualified Data.Bits as B
 import Data.Bits ((.|.))
 import qualified Data.Map as Map
 import Data.ByteString ()
--- import Data.ByteString.Char8 as C8 (pack)
--- import Data.IP
+import Data.ByteString.Char8 as C8 (unpack)
 import Net.IPAddress
 import Net.IP ()
 -- import Net.IPv4
 import Net.Tcp
-import Data.ByteString (ByteString, pack)
+import Data.ByteString (ByteString, pack, )
 
 import GHC.Generics
 
@@ -55,13 +56,12 @@ import GHC.Generics
 magicSeq :: Word32
 magicSeq = 123456
 
--- toIpv4 :: ByteString -> String
--- toIpv4 val = Data.List.intercalate "." ( map show (unpack val))
-
 
 -- TODO provide constructor from Cookie
 -- and one fronConnection
--- | InetDiagFromCookie Word64
+-- {| InetDiagFromCookie Word64
+--
+-- |}
 data InetDiagSockId  = InetDiagSockId  {
   idiag_sport :: Word16
   , idiag_dport :: Word16
@@ -78,6 +78,7 @@ data InetDiagSockId  = InetDiagSockId  {
 
 } deriving (Eq, Show)
 
+{-# OPTIONS_GHC -Wno-incomplete-patterns #-}
 
 
 -- TODO we need a way to rebuild from the integer to the enum
@@ -105,8 +106,11 @@ enumsToWord (x:xs) = (shiftL x) .|. (enumsToWord xs)
 wordToEnums :: Enum2Bits a =>  Word32 -> [a]
 wordToEnums  _ = []
 
--- This generates a response of inet_diag_msg
--- rename to answer ?
+-- defined in include/uapi/linux/inet_diag.h
+-- data InetDiagReq = InetDiagMsg {
+
+-- {| This generates a response of inet_diag_msg
+-- rename to answer ? |}
 data InetDiagMsg = InetDiagMsg {
   idiag_family :: Word8
   , idiag_state :: Word8
@@ -192,6 +196,8 @@ putSockDiagRequestHeader request = do
   putStates $ idiag_states request
   putInetDiagSockid $ diag_sockid request
 
+-- | 
+-- Usually accompanied with attributes ?
 getInetDiagMsg :: Get InetDiagMsg
 getInetDiagMsg  = do
     family <- getWord8
@@ -248,31 +254,30 @@ putInetDiagSockid cust = do
   putWord32host $ idiag_intf cust
   putWord64host $ idiag_cookie cust
 
--- include/uapi/linux/inet_diag.h
 -- struct tcpvegas_info {
 -- 	__u32	tcpv_enabled;
 -- 	__u32	tcpv_rttcnt;
 -- 	__u32	tcpv_rtt;
 -- 	__u32	tcpv_minrtt;
 -- };
-data DiagVegasInfo = TcpVegasInfo {
-  -- TODO hide ?
-  tcpInfoVegasEnabled :: Word32
-  , tcpInfoRttCount :: Word32
-  , tcpInfoRtt :: Word32
-  , tcpInfoMinrtt :: Word32
-}
+-- data DiagVegasInfo = TcpVegasInfo {
+--   -- TODO hide ?
+--   tcpInfoVegasEnabled :: Word32
+--   , tcpInfoRttCount :: Word32
+--   , tcpInfoRtt :: Word32
+--   , tcpInfoMinrtt :: Word32
+-- }
 
-instance Convertable DiagVegasInfo where
-  getPut  = putDiagVegasInfo
-  getGet _  = getDiagVegasInfo
-
-
-putDiagVegasInfo :: DiagVegasInfo -> Put
-putDiagVegasInfo info = error "should not be needed"
+-- instance Convertable DiagVegasInfo where
+--   getPut  = putDiagVegasInfo
+--   getGet _  = getDiagVegasInfo
 
 
-getDiagVegasInfo :: Get DiagVegasInfo
+-- putDiagVegasInfo ::  -> Put
+-- putDiagVegasInfo info = error "should not be needed"
+
+
+getDiagVegasInfo :: Get IDiagExtension
 getDiagVegasInfo =
   TcpVegasInfo <$> getWord32host <*> getWord32host <*> getWord32host <*> getWord32host
 
@@ -280,20 +285,15 @@ getDiagVegasInfo =
 eIPPROTO_TCP :: Word8
 eIPPROTO_TCP = 6
 
--- __u32	idiag_rmem;
--- __u32	idiag_wmem;
--- __u32	idiag_fmem;
--- __u32	idiag_tmem;
-data Meminfo = Meminfo {
-  idiag_rmem :: Word32
-, idiag_wmem :: Word32
-, idiag_fmem :: Word32
-, idiag_tmem :: Word32
-}
 
+-- getTcpInfo :: Get IDiagExtension
+-- getTcpInfo =
+--   DiagTcpInfo <$> getWord8
+--   Word8 Word8 Word8 Word8 Word8 Word8 Word8 Word32 Word32 Word32 Word32 Word32 Word32 Word32 Word32 Word32 Word32 Word32 Word32 Word32 Word32 Word32 Word32 Word32 Word32 Word32 Word32 Word32 Word32 Word32 Word32
 
 -- TODO generate with c2hsc ?
-data DiagTcpInfo = DiagTcpInfo {
+-- include/uapi/linux/inet_diag.h
+data IDiagExtension =  DiagTcpInfo {
   tcpi_state :: Word8,
   tcpi_ca_state :: Word8,
   tcpi_retransmits :: Word8,
@@ -334,7 +334,27 @@ data DiagTcpInfo = DiagTcpInfo {
   tcpi_rcv_space :: Word32,
   tcpi_total_retrans :: Word32
 
-} deriving (Show, Generic)
+} | Meminfo {
+  idiag_rmem :: Word32
+, idiag_wmem :: Word32
+, idiag_fmem :: Word32
+, idiag_tmem :: Word32
+} | TcpVegasInfo {
+-- tcpvegas_info 
+  -- TODO hide ?
+  tcpInfoVegasEnabled :: Word32
+  , tcpInfoRttCount :: Word32
+  , tcpInfoRtt :: Word32
+  , tcpInfoMinrtt :: Word32
+} | CongInfo String deriving (Show, Generic, Serialize)
+
+-- encode
+instance Convertable IDiagExtension where
+  getGet _ = get
+  getPut = put
+
+-- not sure what it is
+-- INET_DIAG_MARK,		/* only with CAP_NET_ADMIN */
 
 
 -- Sends a SockDiagRequest
@@ -388,3 +408,38 @@ genQueryPacket selector tcpStatesFilter requestedInfo = let
 -- | to search for a specific connection
 queryPacketFromCookie :: Word64 -> Packet SockDiagRequest
 queryPacketFromCookie cookie =  genQueryPacket (Left cookie) [] []
+
+
+loadExtension :: Int -> ByteString -> Maybe IDiagExtension
+loadExtension key value =
+  case toEnum key of
+    -- MessageType shouldn't matter anyway ?!
+    -- DiagCong error too few bytes
+    InetDiagCong -> Nothing
+        -- Just $ CongInfo $ unpack value
+                        -- Right x -> Just CongInfo x
+                        -- Left err -> error $ "DiagCong error " ++ err
+                        --
+    -- InetDiagNone -> Nothing
+    -- InetDiagInfo ->  case runGet (getGet 42) value of
+    --                     Right x -> Just x
+    --                     _ -> Nothing
+    -- InetDiagVegasinfo -> Nothing
+    -- InetDiagTos -> Nothing
+    -- InetDiagTclass -> Nothing
+    -- InetDiagSkmeminfo -> Nothing
+    -- InetDiagShutdown -> Nothing
+    -- InetDiagDctcpinfo -> Nothing
+    -- InetDiagProtocol -> Nothing
+    -- InetDiagSkv6only -> Nothing
+    -- InetDiagLocals -> Nothing
+    -- InetDiagPeers -> Nothing
+    -- InetDiagPad -> Nothing
+    -- InetDiagMark -> Nothing
+    -- InetDiagBbrinfo -> Nothing
+    -- InetDiagClassId -> Nothing
+    -- InetDiagMd5sig -> Nothing
+    -- InetDiagMax -> Nothing
+    _ -> case runGet (getGet 42) value of
+                        Right x -> Just x
+                        Left err -> error $ "fourre-tout error " ++ err

@@ -76,6 +76,7 @@ executable short
 library
     Build-tools:       hsc2hs, c2hs
     ghc-options: -Wall -fno-warn-unused-binds -fno-warn-unused-matches
+    default-language: Haskell2010
     -- apparently this just helps getting a better error messages
     Includes:          tcp_states.h, linux/sock_diag.h, linux/inet_diag.h
     include-dirs: .

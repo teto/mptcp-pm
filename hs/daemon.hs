@@ -431,11 +431,8 @@ getCapsForConnection con = do
 showAttributes :: Attributes -> String
 showAttributes attrs =
   let
-    -- f k v = [show k, " = ", show v]
-    -- mapped = Map.mapWithKey f attrs
     mapped = Map.foldrWithKey (\k v -> (dumpAttribute k v ++)  ) "\n " attrs
   in
-    -- putStrLn $ intercalate "," $ mapped
     mapped
 
 putW32 :: Word32 -> ByteString
@@ -744,9 +741,27 @@ createLogger = newStdoutLoggerSet defaultBufSize
 -- fromOctetsLE :: [Word8] -> Word32
 -- fromOctetsLE = fromOctetsBE . reverse
 
+
+dumpExtensionAttribute :: Int -> ByteString -> String
+dumpExtensionAttribute attrId value =
+    show (toEnum attrId :: IDiagExt) ++ " " ++ show (loadExtension attrId value)
+    -- show $ (toEnum attrId :: IDiagExt)
+
+showExtensionAttributes :: Attributes -> String
+showExtensionAttributes attrs =
+    let
+        -- $ loadExtension
+        mapped = Map.foldrWithKey (\k v -> ( dumpExtensionAttribute k v ++ )) "\n " attrs
+    in
+        mapped
+
+
+--
 inspectIDiagAnswer :: Packet InetDiagMsg -> IO ()
 inspectIDiagAnswer (Packet hdr cus attrs) =
-   putStrLn $ "Idiag answer " ++ showAttributes attrs
+    putStrLn ("Idiag answer " ++ show cus) >>
+    putStrLn ("Idiag answer " ++ show hdr) >>
+    putStrLn (showExtensionAttributes attrs)
 inspectIDiagAnswer p = putStrLn $ "test" ++ showPacket p
 
 -- inspectIDiagAnswer (DoneMsg err) = putStrLn "DONE MSG"
@@ -759,6 +774,7 @@ inspectIDiagAnswer p = putStrLn $ "test" ++ showPacket p
 --             ++ "Supposing it's a mptcp command: " ++ dumpCommand ( toEnum $ fromIntegral cmd)
 
 
+-- la en fait c des reponses que j'obtiens ?
 inspectIdiagAnswers :: [Packet InetDiagMsg] -> IO ()
 inspectIdiagAnswers packets = do
   putStrLn "Start inspecting IDIAG answers"
