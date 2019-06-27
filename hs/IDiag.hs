@@ -31,7 +31,7 @@ import Data.Serialize.Get ()
 import Data.Serialize.Put ()
 
 -- for replicateM
--- import Control.Monad
+import Control.Monad (replicateM)
 
 import System.Linux.Netlink
 import System.Linux.Netlink.Constants
@@ -43,7 +43,7 @@ import qualified Data.Bits as B
 import Data.Bits ((.|.))
 import qualified Data.Map as Map
 import Data.ByteString ()
-import Data.ByteString.Char8 as C8 (unpack)
+-- import Data.ByteString.Char8 as C8 (unpack)
 import Net.IPAddress
 import Net.IP ()
 -- import Net.IPv4
@@ -356,6 +356,19 @@ instance Convertable IDiagExtension where
 -- not sure what it is
 -- INET_DIAG_MARK,		/* only with CAP_NET_ADMIN */
 
+getTcpVegasInfo :: Get IDiagExtension
+getTcpVegasInfo = TcpVegasInfo <$> getWord32host <*> getWord32host <*> getWord32host <*> getWord32host
+
+getMemInfo :: Get IDiagExtension
+getMemInfo = Meminfo <$> getWord32host <*> getWord32host <*> getWord32host <*> getWord32host
+
+getCongInfo :: Get IDiagExtension
+getCongInfo = Meminfo <$> getWord32host <*> getWord32host <*> getWord32host <*> getWord32host
+
+getDiagTcpInfo :: Get DiagTcpInfo
+getDiagTcpInfo = 
+   DiagTcpInfo <$> getWord8 <*> getWord8 <*> getWord8 <*> getWord8 <*> getWord8 <*> getWord8 <*> getWord8
+  <*> getWord32 <*>getWord32 <*>getWord32 <*>getWord32 <*>getWord32 <*>getWord32 <*>getWord32 <*>getWord32 <*>getWord32 <*>getWord32 <*>getWord32 <*>getWord32 <*>getWord32 <*>getWord32 <*>getWord32 <*>getWord32 <*>getWord32 <*>getWord32 <*>getWord32 <*>getWord32 <*>getWord32 <*>getWord32 <*>getWord32 <*>getWord32 <*>
 
 -- Sends a SockDiagRequest
 -- expects INetDiag
@@ -415,11 +428,10 @@ loadExtension key value =
   case toEnum key of
     -- MessageType shouldn't matter anyway ?!
     -- DiagCong error too few bytes
-    InetDiagCong -> Nothing
-        -- Just $ CongInfo $ unpack value
-                        -- Right x -> Just CongInfo x
-                        -- Left err -> error $ "DiagCong error " ++ err
-                        --
+    -- InetDiagCong -> Just CongInfo $ unpack value
+    InetDiagCong -> case decode value of
+                        Right x -> Just $ x
+                        Left err -> error $ "DiagCong error " ++ err
     -- InetDiagNone -> Nothing
     -- InetDiagInfo ->  case runGet (getGet 42) value of
     --                     Right x -> Just x
@@ -440,6 +452,8 @@ loadExtension key value =
     -- InetDiagClassId -> Nothing
     -- InetDiagMd5sig -> Nothing
     -- InetDiagMax -> Nothing
-    _ -> case runGet (getGet 42) value of
+    -- _ -> case runGet (getGet 42) value of
+    _ -> case decode value of
                         Right x -> Just x
-                        Left err -> error $ "fourre-tout error " ++ err
+                        -- Left err -> error $ "fourre-tout error " ++ err
+                        Left err -> Nothing
