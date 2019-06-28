@@ -743,18 +743,22 @@ createLogger = newStdoutLoggerSet defaultBufSize
 -- fromOctetsLE = fromOctetsBE . reverse
 
 
+
 dumpExtensionAttribute :: Int -> ByteString -> String
 dumpExtensionAttribute attrId value = let
         eExtId = (toEnum attrId :: IDiagExt)
+        ext_m = loadExtension attrId value
     in
-        traceId (show eExtId) ++ " " ++ show (loadExtension attrId value)
+        case ext_m of
+            Nothing -> "Could not load " ++ show eExtId ++ " \n"
+            Just ext -> traceId (show eExtId) ++ " " ++ showExtension ext ++ " \n"
     -- show $ (toEnum attrId :: IDiagExt)
 
 showExtensionAttributes :: Attributes -> String
 showExtensionAttributes attrs =
     let
         -- $ loadExtension
-        mapped = Map.foldrWithKey (\k v -> ( dumpExtensionAttribute k v ++ )) "\n " attrs
+        mapped = Map.foldrWithKey (\k v -> (dumpExtensionAttribute k v ++ )) "Dumping extensions:\n " attrs
     in
         mapped
 
@@ -762,8 +766,8 @@ showExtensionAttributes attrs =
 --
 inspectIDiagAnswer :: Packet InetDiagMsg -> IO ()
 inspectIDiagAnswer (Packet hdr cus attrs) =
-    putStrLn ("Idiag answer " ++ show cus) >>
-    putStrLn ("Idiag answer " ++ show hdr) >>
+    putStrLn ("Idiag custom " ++ show cus) >>
+    putStrLn ("Idiag header " ++ show hdr) >>
     putStrLn (showExtensionAttributes attrs)
 inspectIDiagAnswer p = putStrLn $ "test" ++ showPacket p
 

@@ -16,6 +16,7 @@ module IDiag (
   InetDiagMsg (..)
   , genQueryPacket
   , loadExtension
+  , showExtension
 ) where
 
 -- import Generated
@@ -398,7 +399,11 @@ getDiagTcpInfo =
 showExtension :: IDiagExtension -> String
 showExtension (CongInfo cc) = "Using CC " ++ (show cc)
 showExtension (TcpVegasInfo _ _ rtt minRtt) = "RTT=" ++ (show rtt) ++ " minRTT=" ++ show minRtt
-showExtension ext :: DiagTcpInfo Word8 Word8 Word8 Word8 Word8 Word8 Word8 Word32 Word32 Word32 Word32 Word32 Word32 Word32 Word32 Word32 Word32 Word32 Word32 Word32 Word32 Word32 Word32 Word32 Word32 Word32 Word32 Word32 Word32 Word32 Word32 = "RTT=" ++ (show rtt) ++ " minRTT=" ++ show minRtt
+--   tcpi_state :: Word8,
+showExtension (arg@DiagTcpInfo{}) = "TcpInfo: rtt/rttvar=" ++ show ( tcpi_rtt arg) ++ "/" ++ show ( tcpi_rttvar arg)
+        ++ " snd_cwnd/ssthresh=" ++ show (tcpi_snd_cwnd arg) ++ "/" ++ show (tcpi_snd_ssthresh arg)
+showExtension rest = show rest
+-- "RTT=" ++ (show rtt) ++ " minRTT=" ++ show minRtt
 
 -- | TODO use either ?
 genQueryPacket :: (Either Word64 TcpConnection) -> [TcpState] -> [IDiagExt] -> Packet SockDiagRequest
