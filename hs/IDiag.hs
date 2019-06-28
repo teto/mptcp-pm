@@ -395,6 +395,11 @@ getDiagTcpInfo =
 -- TODO if we have a cookie ignore the rest ?!
 -- requestedInfo = InetDiagNone
 
+showExtension :: IDiagExtension -> String
+showExtension (CongInfo cc) = "Using CC " ++ (show cc)
+showExtension (TcpVegasInfo _ _ rtt minRtt) = "RTT=" ++ (show rtt) ++ " minRTT=" ++ show minRtt
+showExtension ext :: DiagTcpInfo Word8 Word8 Word8 Word8 Word8 Word8 Word8 Word32 Word32 Word32 Word32 Word32 Word32 Word32 Word32 Word32 Word32 Word32 Word32 Word32 Word32 Word32 Word32 Word32 Word32 Word32 Word32 Word32 Word32 Word32 Word32 = "RTT=" ++ (show rtt) ++ " minRTT=" ++ show minRtt
+
 -- | TODO use either ?
 genQueryPacket :: (Either Word64 TcpConnection) -> [TcpState] -> [IDiagExt] -> Packet SockDiagRequest
 genQueryPacket selector tcpStatesFilter requestedInfo = let
