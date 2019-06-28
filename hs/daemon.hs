@@ -130,6 +130,10 @@ iperfClientPort = 5500
 iperfServerPort :: Word16
 iperfServerPort = 5201
 
+monitoringRateMs :: Int
+monitoringRateMs = 100
+
+
 data MyState = MyState {
   socket :: MptcpSocket -- ^Socket
   -- ThreadId/MVar
@@ -387,13 +391,15 @@ startMonitorConnection mptcpSock mConn = do
     -- >> map (capCwndPkt mptcpSock ) >>= putStrLn "toto"
 
     -- query sock capCwndPkt >>= inspectAnswers
-    let cwndPackets = map (capCwndPkt mptcpSock ) attrsList
-    -- map >>= inspectAnswers
+    -- de type [MptcpPacket]
+    let cwndPackets = map (capCwndPkt mptcpSock) attrsList
+    mapM_ (query sock) cwndPackets >> putStrLn "test"
+         -- >>= inspectAnswers
 
     -- then we should send a request for each cwnd
     mapM_ updateSubflowMetrics (subflows con)
 
-    sleepMs 5000
+    sleepMs monitoringRateMs
     putStrLn "Finished monitoring token "
     -- call ourself again
     startMonitorConnection mptcpSock mConn
@@ -610,9 +616,13 @@ dispatchPacket oldState (Packet hdr (GenlData genlHeader NoData) attributes) = l
         maybeMatch = Map.lookup token (connections oldState)
     in
         case maybeMatch of
+            -- Unknown token
             Nothing -> case cmd of
-                MPTCP_EVENT_CREATED ->
-                    let subflow = subflowFromAttributes attributes
+                MPTCP_EVENT_CREATED -> do
+                    putStrLn "Ignoring Creating EVENT"
+                    return oldState
+
+                MPTCP_EVENT_ESTABLISHED -> let subflow = subflowFromAttributes attributes
                     in
                     if subflow `notElem` filteredConnections
                         then do
@@ -622,7 +632,7 @@ dispatchPacket oldState (Packet hdr (GenlData genlHeader NoData) attributes) = l
                         else (do
                                 let newMptcpConn = MptcpConnection token [ subflow ] [] []
                                 newConn <- newMVar newMptcpConn
-                                putStrLn $ "Connection created !!\n" ++ showAttributes attributes
+                                putStrLn $ "Connection established !!\n" ++ showAttributes attributes
                                 -- onNewConnection mptcpSock attributes
                                 handle <- forkOS (startMonitorConnection mptcpSock newConn)
                                 -- r <- createProces $ startMonitor token
@@ -633,6 +643,12 @@ dispatchPacket oldState (Packet hdr (GenlData genlHeader NoData) attributes) = l
                 _ -> return oldState
 
             Just (threadId, mvarConn) -> case cmd of
+
+                MPTCP_EVENT_CREATED -> error "We should not receive MPTCP_EVENT_CREATED from here !!!"
+                MPTCP_EVENT_SUB_CLOSED -> do
+                    putStrLn $ "SUBFLOW WAS CLOSED"
+                    return oldState
+
                 MPTCP_EVENT_CLOSED -> do
                     putStrLn $ "Killing thread " ++ show threadId
                     killThread threadId
