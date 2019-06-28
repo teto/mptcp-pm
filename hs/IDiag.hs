@@ -30,8 +30,7 @@ import Data.Serialize
 import Data.Serialize.Get ()
 import Data.Serialize.Put ()
 
--- for replicateM
-import Control.Monad (replicateM)
+-- import Control.Monad (replicateM)
 
 import System.Linux.Netlink
 import System.Linux.Netlink.Constants
@@ -43,13 +42,15 @@ import qualified Data.Bits as B
 import Data.Bits ((.|.))
 import qualified Data.Map as Map
 import Data.ByteString ()
--- import Data.ByteString.Char8 as C8 (unpack)
+import Data.ByteString.Char8 as C8 (unpack)
 import Net.IPAddress
 import Net.IP ()
 -- import Net.IPv4
 import Net.Tcp
 import Data.ByteString (ByteString, pack, )
 
+-- requires cabal as a dep
+-- import Distribution.Utils.ShortText (decodeStringUtf8)
 import GHC.Generics
 
 -- iproute uses this seq number #define MAGIC_SEQ 123456
@@ -346,12 +347,13 @@ data IDiagExtension =  DiagTcpInfo {
   , tcpInfoRttCount :: Word32
   , tcpInfoRtt :: Word32
   , tcpInfoMinrtt :: Word32
-} | CongInfo String deriving (Show, Generic, Serialize)
+} | CongInfo String deriving (Show, Generic)
 
+-- ideally we should be able to , Serialize
 -- encode
-instance Convertable IDiagExtension where
-  getGet _ = get
-  getPut = put
+-- instance Convertable IDiagExtension where
+--   getGet _ = get
+--   getPut = put
 
 -- not sure what it is
 -- INET_DIAG_MARK,		/* only with CAP_NET_ADMIN */
@@ -362,13 +364,21 @@ getTcpVegasInfo = TcpVegasInfo <$> getWord32host <*> getWord32host <*> getWord32
 getMemInfo :: Get IDiagExtension
 getMemInfo = Meminfo <$> getWord32host <*> getWord32host <*> getWord32host <*> getWord32host
 
-getCongInfo :: Get IDiagExtension
-getCongInfo = Meminfo <$> getWord32host <*> getWord32host <*> getWord32host <*> getWord32host
 
-getDiagTcpInfo :: Get DiagTcpInfo
-getDiagTcpInfo = 
+-- |
+getCongInfo :: Get IDiagExtension
+getCongInfo = do
+    -- bytes = getListOf getWord8
+    left <- remaining
+    bs <- getByteString left
+    return (CongInfo $ unpack bs)
+
+-- Meminfo <$> getWord32host <*> getWord32host <*> getWord32host <*> getWord32host
+
+getDiagTcpInfo :: Get IDiagExtension
+getDiagTcpInfo =
    DiagTcpInfo <$> getWord8 <*> getWord8 <*> getWord8 <*> getWord8 <*> getWord8 <*> getWord8 <*> getWord8
-  <*> getWord32 <*>getWord32 <*>getWord32 <*>getWord32 <*>getWord32 <*>getWord32 <*>getWord32 <*>getWord32 <*>getWord32 <*>getWord32 <*>getWord32 <*>getWord32 <*>getWord32 <*>getWord32 <*>getWord32 <*>getWord32 <*>getWord32 <*>getWord32 <*>getWord32 <*>getWord32 <*>getWord32 <*>getWord32 <*>getWord32 <*>getWord32 <*>
+  <*> getWord32host <*>getWord32host <*>getWord32host <*>getWord32host <*>getWord32host <*>getWord32host <*>getWord32host <*>getWord32host <*>getWord32host <*>getWord32host <*>getWord32host <*>getWord32host <*>getWord32host <*>getWord32host <*>getWord32host <*>getWord32host <*>getWord32host <*>getWord32host <*>getWord32host <*>getWord32host <*>getWord32host <*>getWord32host <*>getWord32host <*>getWord32host
 
 -- Sends a SockDiagRequest
 -- expects INetDiag
@@ -424,19 +434,17 @@ queryPacketFromCookie cookie =  genQueryPacket (Left cookie) [] []
 
 
 loadExtension :: Int -> ByteString -> Maybe IDiagExtension
-loadExtension key value =
-  case toEnum key of
+loadExtension key value = let
+  fn = case toEnum key of
     -- MessageType shouldn't matter anyway ?!
     -- DiagCong error too few bytes
-    -- InetDiagCong -> Just CongInfo $ unpack value
-    InetDiagCong -> case decode value of
-                        Right x -> Just $ x
-                        Left err -> error $ "DiagCong error " ++ err
+    InetDiagCong -> Just getCongInfo
     -- InetDiagNone -> Nothing
+    InetDiagInfo -> Just getDiagTcpInfo
     -- InetDiagInfo ->  case runGet (getGet 42) value of
     --                     Right x -> Just x
     --                     _ -> Nothing
-    -- InetDiagVegasinfo -> Nothing
+    InetDiagVegasinfo -> Just getTcpVegasInfo
     -- InetDiagTos -> Nothing
     -- InetDiagTclass -> Nothing
     -- InetDiagSkmeminfo -> Nothing
@@ -452,8 +460,15 @@ loadExtension key value =
     -- InetDiagClassId -> Nothing
     -- InetDiagMd5sig -> Nothing
     -- InetDiagMax -> Nothing
-    -- _ -> case runGet (getGet 42) value of
-    _ -> case decode value of
-                        Right x -> Just x
-                        -- Left err -> error $ "fourre-tout error " ++ err
-                        Left err -> Nothing
+    _ -> Nothing
+    -- _ -> case decode value of
+                        -- Right x -> Just x
+                        -- -- Left err -> error $ "fourre-tout error " ++ err
+                        -- Left err -> Nothing
+
+    in case fn of
+      Nothing -> Nothing
+      Just getFn -> case runGet getFn  value of
+          Right x -> Just $ x
+          Left err -> error $ "Decoding error " ++ err
+

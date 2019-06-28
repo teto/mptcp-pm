@@ -743,8 +743,10 @@ createLogger = newStdoutLoggerSet defaultBufSize
 
 
 dumpExtensionAttribute :: Int -> ByteString -> String
-dumpExtensionAttribute attrId value =
-    show (toEnum attrId :: IDiagExt) ++ " " ++ show (loadExtension attrId value)
+dumpExtensionAttribute attrId value = let
+        eExtId = (toEnum attrId :: IDiagExt)
+    in
+        traceId (show eExtId) ++ " " ++ show (loadExtension attrId value)
     -- show $ (toEnum attrId :: IDiagExt)
 
 showExtensionAttributes :: Attributes -> String
