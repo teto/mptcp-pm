@@ -1,5 +1,5 @@
 cabal-version: 2.2
-name: netlink-pm
+name: mptcp-pm
 version: 0.0.1
 license: GPL-3.0-only
 license-file: LICENSE
@@ -35,7 +35,7 @@ Flag Dev {
 common shared-properties
     build-depends: base, optparse-applicative,
       containers, bytestring, fast-logger, process, cereal, ip, aeson,
-       netlink >= 1.1.1.1, bytestring-conversion, c2hsc
+       netlink >= 1.1.1.0, bytestring-conversion, c2hsc
     default-language: Haskell2010
     -- -fno-warn-unused-imports
     ghc-options: -Wall -fno-warn-unused-binds -fno-warn-unused-matches
