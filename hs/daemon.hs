@@ -55,7 +55,7 @@ import qualified Options.Applicative (value)
 
 -- For TcpState, FFI generated
 import Generated
-import IDiag
+import Net.SockDiag
 import Net.Mptcp
 import Net.Tcp
 import Net.IP

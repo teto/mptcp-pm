@@ -11,7 +11,7 @@ module Net.Mptcp
 where
 
 import Generated
-import IDiag ()
+import Net.SockDiag ()
 import Control.Exception (assert)
 
 import Data.Word (Word8, Word16, Word32)

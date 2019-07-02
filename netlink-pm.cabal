@@ -2,10 +2,11 @@ cabal-version: 2.2
 name: netlink-pm
 version: 0.0.1
 license: GPL-3.0-only
-license-file: gpl-3.0.txt
+license-file: LICENSE
 build-type: Simple
 Maintainer:  teto
-Category:
+Category:   Network
+Synopsis: A work in progress Multipath TCP path manager
 Homepage:   https://github.com/teto/netlink_pm
 description:
   Multipath TCP (www.multipath-tcp.org) starting from version 0.95 provides a 
@@ -45,9 +46,9 @@ common shared-properties
     Build-tools:       hsc2hs, c2hs
     -- apparently this just helps getting a better error messages
     Includes:          tcp_states.h, linux/sock_diag.h, linux/inet_diag.h
-    Other-modules:     IDiag, Net.Tcp, Net.Mptcp, Net.IPAddress, Generated
+    Other-modules:     Net.SockDiag, Net.Tcp, Net.Mptcp, Net.IPAddress, Generated
     -- TODO try to pass it from CLI instead , Net.TcpInfo
-    include-dirs: .
+    include-dirs:     headers
     -- , Net.TcpInfo
     autogen-modules: Generated
 
@@ -63,17 +64,17 @@ executable daemon
     main-is: daemon.hs
     -- extra-packages: netlink
     -- extra-lib-dirs: /home/teto/netlink-hs
-    hs-source-dirs: .
+    hs-source-dirs: ., hs
 
 -- will monitor a specific mptcp connection
 executable monitor
     import: shared-properties
-    main-is: monitor.hs
+    main-is: hs/monitor.hs
 
 -- for short tests
 executable short
     import: shared-properties
-    main-is: test.hs
+    main-is: hs/test.hs
 
 --  MyCustomLibrary
 library
@@ -82,7 +83,7 @@ library
     default-language: Haskell2010
     -- apparently this just helps getting a better error messages
     Includes:          tcp_states.h, linux/sock_diag.h, linux/inet_diag.h
-    include-dirs: .
+    include-dirs: . , headers
     -- autogen-modules: Generated
 
 
@@ -96,9 +97,9 @@ Test-Suite test
   -- import: shared-properties
   Build-tools:       hsc2hs, c2hs
   Includes:          tcp_states.h, linux/sock_diag.h, linux/inet_diag.h
-  Other-modules:     Generated, IDiag, Net.Mptcp, Net.IPAddress
+  Other-modules:     Generated, Net.SockDiag, Net.Mptcp, Net.IPAddress
   autogen-modules: Generated
-  include-dirs:      .
+  include-dirs:      headers
   build-depends:      base >=4.6
                      , HUnit
                      , netlink

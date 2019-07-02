@@ -12,7 +12,7 @@ Portability : Linux
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DeriveAnyClass #-}
-module IDiag (
+module Net.SockDiag (
   InetDiagMsg (..)
   , genQueryPacket
   , loadExtension

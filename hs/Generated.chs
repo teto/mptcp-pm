@@ -22,7 +22,7 @@ import System.Linux.Netlink.Constants (MessageType)
 import Data.Bits ()
 
 -- copy from include/net/tcp_states
-#include "tcp_states.h"
+#include <tcp_states.h>
 
 -- For anonymous C enums, we can use , Bits
 {#enum TCP_ESTABLISHED as TcpState {underscoreToCase} deriving (Eq, Show)#}
