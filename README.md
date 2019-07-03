@@ -1,62 +1,68 @@
-mptcpnetlink
-============
+
+This is a rewrite in haskell of the python netlink module.
+nix-shell -p 'haskellPackages.ghcWithHoogle(p: with p; [netlink optparse-applicative ])'
 
 
-Follow up of repository http://github.com/teto/mptcpnetlink:
-hosts 2 components that allow to control from userspace the MPTCP kernel (http://multipath-tcp.org) path management system:
+The netlink module asks for GENL_ADMIN_PERM => The operation requires the CAP_NET_ADMIN privilege
+
+sudo setcap cap_net_admin+ep hs/dist-newstyle/build/x86_64-linux/ghc-8.6.3/netlink-pm-1.0.0/x/daemon/build/daemon/daemon
+
+# Netlink explanation
+
+To fetch TCP diagnostics:
+Creates a socket with family eNETLINK_INET_DIAG (really NETLINK_SOCK_DIAG) with value 4
+AF_INET => netlink family 2
 
 
 
+# Compilation
 
-
-### Current state
-
-The current module only propagates new MPTCP sessions events (__new_session__ callback) but it should be pretty easy to extend this to other events.
-
-### REQUIREMENTS
-
-- a correctly patched kernel 
-- for the python daemon, you need this custom version of libnl (userspace netlink library) that improves the python bindings: https://github.com/teto/libnl_old 
-
-
-### COMPILATION
-
-3. Compilation of libnl:
-
+With a custom netlink and kernel
+Compile the custom netlink library with
 ```
-$ git clone https://github.com/teto/libnl_old libnl && cd libnl
-libnl$ ./autogen.sh
-libnl$ ./configure
-libnl$ make 
-libnl$ make install
-libnl$ cd python
-python# python3 setup.py build
-python# python3 setup.py install --user # will install just for your current
-user
+$ cabal configure --enable-library-profiling
 ```
-Optional: In case you modify the python code without modifying the bindings, you can also add the libnl/python/build/linux to the PYTHONPATH
-
-### HOW TO USE (once compiled/installed) ?
-
-1. First register the kernel module:
-`sysctl -w net.mptcp.mptcp_path_manager="netlink"`
-
-2. Load the python module with the number of subflows to create:
-`daemon/daemon.py --simulate 2`
-The "--simulate" flag is used to bypass the default system which is described in our paper (lig retrieves the number of LISP paths)
+```
+kernel $ make headers_install
+$ cabal configure --package-db /home/teto/netlink-hs/dist/package.conf.inplace --extra-include-dirs=/home/teto/mptcp2/build/usr/include -v3 --enable-profiling
+```
 
 
+# Usage
 
-### How to debug netlink ?
-Run `genl ctrl list` to list
-http://0x90.at/post/netlink-debugging
-https://jvns.ca/blog/2017/09/03/debugging-netlink-requests/
+Enter the nix-shell shell-test.nix and start the daemon:
 
-### Haskell experiment
+$ cabal run daemon
 
-nix-shell shell-haskell.nix
+or
+$ buildNRun
+To print a stacktrace
+cabal run daemon toto -- +RTS -xc
 
-You can test with
-$ wget http://www.amiusingmptcp.de/index.html -O /dev/null
+In a shell:
+`$ nix run nixpkgs.iperf -c iperf -s`
 
-For now launch with nix-shell -p 'haskellPackages.ghcWithHoogle(p: with p; [netlink optparse-applicative])'
+In another:
+`$ nix run nixpkgs.iperf -c iperf -c localhost -b 1KiB -t 4 --cport 5500 -4`
+
+TODO:
+ss package sends by default
+```
+-- #define SS_ALL ((1 << SS_MAX) - 1)
+-- #define SS_CONN (SS_ALL & ~((1<<SS_LISTEN)|(1<<SS_CLOSE)|(1<<SS_TIME_WAIT)|(1<<SS_SYN_RECV)))
+-- #define TIPC_SS_CONN ((1<<SS_ESTABLISHED)|(1<<SS_LISTEN)|(1<<SS_CLOSE))
+```
+- [ ] write wordToEnums function, especially to fix getSockDiagRequestHeader
+(with bitset package once it's fixed)
+
+# Testsuite
+
+# BUGS
+
+- conversion of IDiagExt is bad everywhere ? req.r.idiag_ext |= (1<<(INET_DIAG_INFO-1));
+- we need to request more states
+
+# TODO 
+- pass local/server IPs as commands to the PM ?
+- generate completion scripts via --zsh-completion-script
+- to get kernel ifindex: cat /sys/class/net/lo/ifindex
