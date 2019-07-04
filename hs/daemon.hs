@@ -107,6 +107,9 @@ import Control.Exception (assert)
 import System.IO.Unsafe
 import Data.Aeson
 
+-- for getEnvDefault
+import System.Environment.Blank
+
 -- for writeUTF8File
 -- import Distribution.Simple.Utils
 -- import Distribution.Utils.Generic
@@ -416,7 +419,10 @@ getCapsForConnection con = do
     -- returns a bytestring
     let bs = Data.Aeson.encode con
     let subflowCount = length $ subflows con
-    let filename = "mptcp_" ++ (show $ subflowCount)  ++ "_" ++ (show $ connectionToken con) ++ ".json"
+    let filename = tmpdir + "/" + "mptcp_" ++ (show $ subflowCount)  ++ "_" ++ (show $ connectionToken con) ++ ".json"
+    -- let tmpdir = getEnvDefault "TMPDIR" "/tmp"
+    let tmpdir = "/tmp"
+
     -- encode token in filename
     -- fromMaybe $
     Data.ByteString.Lazy.writeFile filename bs

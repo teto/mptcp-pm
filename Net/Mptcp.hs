@@ -11,7 +11,7 @@ module Net.Mptcp
 where
 
 import Generated
-import Net.SockDiag ()
+import Net.SockDiag (IDiagExtension)
 import Control.Exception (assert)
 
 import Data.Word (Word8, Word16, Word32)
@@ -71,6 +71,12 @@ instance Show MptcpSocket where
 type MptcpPacket = GenlPacket NoData
 
 
+data SubflowWithMetrics = SubflowWithMetrics {
+  subflow :: TcpConnection
+    -- for now let's retain DiagTcpInfo  only
+  , metrics :: [IDiagExtension]
+}
+
 -- |Data to hold MPTCP level information
 data MptcpConnection = MptcpConnection {
   connectionToken :: MptcpToken
@@ -80,17 +86,28 @@ data MptcpConnection = MptcpConnection {
 } deriving (Show, Generic)
 
 
+-- we don't really care
 instance FromJSON MptcpConnection
-instance ToJSON MptcpConnection
 
+-- export to the format expected by mptcpnumerics
+-- 
+-- toJSON :: MptcpConnection -> Value
+instance ToJSON MptcpConnection where
+  toJSON mptcpConn = object
+    [ "name" .= toJSON (show $ connectionToken mptcpConn)
+    , "sender" .= object [
+          "snd_buffer" = toJSON (tenure occupation)
+        ],
+    , "salary" .= toJSON (salary occupation)
+    ]
 
 -- TODO add to localIds
 mptcpConnAddSubflow :: MptcpConnection -> TcpConnection -> MptcpConnection
-mptcpConnAddSubflow mptcpConn subflow =
+mptcpConnAddSubflow mptcpConn sf =
   mptcpConn {
-    subflows = subflow : subflows mptcpConn
-    , localIds = localId subflow : localIds mptcpConn
-    , remoteIds = remoteId subflow : remoteIds mptcpConn
+    subflows = sf : subflows mptcpConn
+    , localIds = localId sf : localIds mptcpConn
+    , remoteIds = remoteId sf : remoteIds mptcpConn
   }
 
 mptcpConnAddLocalId :: MptcpConnection
@@ -101,7 +118,7 @@ mptcpConnAddLocalId con locId = undefined
 
 -- TODO remove subflow
 mptcpConnRemoveSubflow :: MptcpConnection -> TcpConnection -> MptcpConnection
-mptcpConnRemoveSubflow mptcpConn subflow = undefined
+mptcpConnRemoveSubflow mptcpConn sf = undefined
 
 getPort :: ByteString -> Word16
 getPort val =

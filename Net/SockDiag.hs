@@ -14,6 +14,7 @@ Portability : Linux
 {-# LANGUAGE DeriveAnyClass #-}
 module Net.SockDiag (
   InetDiagMsg (..)
+  , IDiagExtension (..)
   , genQueryPacket
   , loadExtension
   , showExtension
