@@ -5,8 +5,10 @@ Maintainer  : matt
 Stability   : testing
 Portability : Linux
 
+OverloadedStrings allows Aeson to convert
 -}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE OverloadedStrings #-}
 module Net.Mptcp
 where
 
@@ -37,6 +39,7 @@ import Net.Tcp
 import Net.IPAddress
 import Net.IPv4
 import Net.IPv6
+import Data.Text
 -- in package Unique-0.4.7.6
 -- import Data.List.Unique
 import Data.Aeson
@@ -90,16 +93,36 @@ data MptcpConnection = MptcpConnection {
 instance FromJSON MptcpConnection
 
 -- export to the format expected by mptcpnumerics
--- 
+--
 -- toJSON :: MptcpConnection -> Value
 instance ToJSON MptcpConnection where
   toJSON mptcpConn = object
     [ "name" .= toJSON (show $ connectionToken mptcpConn)
     , "sender" .= object [
-          "snd_buffer" = toJSON (tenure occupation)
-        ],
-    , "salary" .= toJSON (salary occupation)
+          -- TODO here we could read from sysctl ? or use another IDiagExtension
+          "snd_buffer" .= toJSON (40 :: Int)
+          , "capabilities" .= object []
+        ]
+    , "capabilities" .= object ([])
+    , "subflows" .= object ([])
     ]
+
+
+--
+instance ToJSON SubflowWithMetrics where
+  toJSON sf = object [
+    pack (nameFromTcpConnection $ subflow sf) .= object [
+
+      "cwnd" .= 20,
+      -- for now hardcode mss ? we could set it to one to make
+      "mss" .= 1500,
+      "var" .= 10,
+      "fowd" .= 10,
+      "bowd" .= 10,
+      "loss" .= 0.05
+      -- This is an user preference, that should be pushed when calling mptcpnumerics
+      -- , "contribution": 0.5
+    ] ]
 
 -- TODO add to localIds
 mptcpConnAddSubflow :: MptcpConnection -> TcpConnection -> MptcpConnection

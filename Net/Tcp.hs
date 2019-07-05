@@ -10,6 +10,7 @@ Portability : Linux
 module Net.Tcp (
     TcpConnection (..)
     , Net.Tcp.reverse
+    , Net.Tcp.nameFromTcpConnection
 ) where
 
 
@@ -32,6 +33,11 @@ data TcpConnection = TcpConnection {
   -- add TcpMetrics member
 
 } deriving (Show, Generic)
+
+
+nameFromTcpConnection :: TcpConnection -> String
+nameFromTcpConnection con =
+  show (srcIp con) ++ ":" ++ show (srcPort con) ++ " -> " ++ show (dstIp con) ++ ":" ++ show (dstPort con)
 
 
 reverse :: TcpConnection -> TcpConnection
