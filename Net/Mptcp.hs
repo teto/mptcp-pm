@@ -111,18 +111,19 @@ instance ToJSON MptcpConnection where
 --
 instance ToJSON SubflowWithMetrics where
   toJSON sf = object [
-    pack (nameFromTcpConnection $ subflow sf) .= object [
+    (pack (nameFromTcpConnection $ subflow sf) .= object [
 
-      "cwnd" .= 20,
+      "cwnd" .= toJSON (20 :: Int),
       -- for now hardcode mss ? we could set it to one to make
-      "mss" .= 1500,
-      "var" .= 10,
-      "fowd" .= 10,
-      "bowd" .= 10,
-      "loss" .= 0.05
+      "mss" .= toJSON (1500 :: Int),
+      "var" .= toJSON (10 :: Int),
+      "fowd" .= toJSON (10 :: Int),
+      "bowd" .= toJSON (10 :: Int),
+      "loss" .= toJSON (0.5 :: Float)
       -- This is an user preference, that should be pushed when calling mptcpnumerics
       -- , "contribution": 0.5
-    ] ]
+    ])
+    ]
 
 -- TODO add to localIds
 mptcpConnAddSubflow :: MptcpConnection -> TcpConnection -> MptcpConnection
@@ -276,7 +277,7 @@ genV6SubflowAddress addr = undefined
 -- (fromEnum MPTCP_ATTR_SADDR6, runPut $ putIPAddress addr)
 
 mptcpListToAttributes :: [MptcpAttribute] -> Attributes
-mptcpListToAttributes attrs = Map.fromList $map attrToPair attrs
+mptcpListToAttributes attrs = Map.fromList $Prelude.map attrToPair attrs
 
 
 -- mptcpAttributesToMap :: [MptcpAttribute] -> Attributes

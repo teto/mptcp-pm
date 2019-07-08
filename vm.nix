@@ -12,6 +12,7 @@ let
   # to be able to set 
   # with import <nixpkgs/nixos/lib/qemu-flags.nix> { inherit pkgs; };
 
+  # pad to get at least 2 digits
   zeroPad = n: if n < 10 then "0${toString n}" else toString n;
 
   # le defaut c'est  
@@ -21,18 +22,27 @@ let
   # we need on -netdev 
   # -device e1000
   # -nic user
+
   qemuNICFlags = nic: net: machine:
-  [ 
-      # "-device virtio-net-pci,netdev=vlan${toString nic},mac=52:54:00:12:${zeroPad net}:${zeroPad machine}"
-      # "-netdev user,id=vlan${toString nic},net=192.168.76.${toString nic}/24"
-      "-nic user,model=virtio-net-pci,id=vlan${toString nic}"
-    ];
+  [
+      "-device virtio-net-pci,netdev=vlan${toString nic},mac=52:54:00:12:${zeroPad net}:${zeroPad machine}"
+      "-netdev user,id=vlan${toString nic},net=192.168.76.${toString nic}/24"
+
+  ];
+
+
+  # new style can compact -device and -netdev into -nic
+  # qemuNICFlags = nic: net: machine:
+  # [
+  #     "-nic user,model=virtio-net-pci,id=vlan${toString nic}"
+  # ];
+
     # need to pass net=192.168.76.0/24,
 in
 {
   # TODO pass to
   imports = [
-    /home/teto/dotfiles/nixpkgs/account-teto.nix
+    # /home/teto/dotfiles/nixpkgs/account-teto.nix
 
   ];
 
@@ -86,7 +96,9 @@ in
     #   ipv6.addresses = [ { address = "2001:240:168:1001::37"; prefixLength = 25; } ];
     # };
 
-  # hostname = "mptcp.iijlab.net";
+  # networking.hostName = "netlink";
+
+  services.xserver.enable = false;
 
   # "nixos=https://github.com/nixos/nixpkgs-channels/archive/nixos-19.03.tar.gz"
   nix = {
@@ -99,7 +111,7 @@ in
   # mountNix
   nixos-shell.mounts.extraMounts = {
 
-    "/mnt/examples" = ./.;
+    # "/mnt/examples" = ./.;
 
     "/mnt/nixos-shell" = {
       target = ./..;
