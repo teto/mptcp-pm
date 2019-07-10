@@ -23,12 +23,11 @@ let
   # -device e1000
   # -nic user
 
-  qemuNICFlags = nic: net: machine:
-  [
-      "-device virtio-net-pci,netdev=vlan${toString nic},mac=52:54:00:12:${zeroPad net}:${zeroPad machine}"
-      "-netdev user,id=vlan${toString nic},net=192.168.76.${toString nic}/24"
-
-  ];
+  # qemuNICFlags = nic: net: machine:
+  # [
+  #     "-device virtio-net-pci,netdev=vlan${toString nic},mac=52:54:00:12:${zeroPad net}:${zeroPad machine}"
+  #     "-netdev user,id=vlan${toString nic},net=192.168.76.${toString nic}/24"
+  # ];
 
 
   # new style can compact -device and -netdev into -nic
@@ -46,18 +45,19 @@ in
 
   ];
 
-      # cmdline="root=/dev/sda1 earlycon=ttyS0 console=ttyS0 init=/nix/var/nix/profiles/system/init boot.debug=1 boot.consoleLogLevel=1 nokaslr tcp_probe.port=5201 tcp_probe.full=1";
-      # # # x86_64 is a symlink towards x86
-      # kernel="/home/teto/mptcp/build/arch/x86_64/boot/bzImage";
+  # cmdline="root=/dev/sda1 earlycon=ttyS0 console=ttyS0 init=/nix/var/nix/profiles/system/init boot.debug=1 boot.consoleLogLevel=1 nokaslr tcp_probe.port=5201 tcp_probe.full=1";
+  # # # x86_64 is a symlink towards x86
+  # kernel="/home/teto/mptcp/build/arch/x86_64/boot/bzImage";
 
   # Will add an eth
   virtualisation.vlans = vlans;
+
+  # boot.kernel.sysctl."net.ipv6.conf.all.forwarding" = true;
 
   environment.systemPackages = with pkgs; [
     # mptcpnumerics  # from my overlay ? copy it here
   ];
 
-  # 
   # boot.initrd.supportedFilesystems
   # /mnt-root//nix/var/nix/profiles/system/init
   # cmdline="root=/dev/sda1 earlycon=ttyS0 console=ttyS0 init=/nix/var/nix/profiles/system/init boot.debug=1 raid=noautodetect nokaslr
@@ -75,18 +75,21 @@ in
   # virtualisation.qemu.options doit etre une liste
   # zipLists [ 1 2 ] [ "a" "b" ]
   # => [ { fst = 1; snd = "a"; } { fst = 2; snd = "b"; } ]
-  virtualisation.qemu.options = with pkgs.lib; let
-              m = {snd = 1;};
-              interfacesNumbered = zipLists vlans (range 1 255);
-              # interfaces = flip map interfacesNumbered ({ fst, snd }:
-              #   nameValuePair "eth${toString snd}" { ipv4.addresses =
-              #     [ { address = "192.168.${toString fst}.${toString m.snd}";
-              #         prefixLength = 24;
-              #     } ];
-              #   });
-    in
-      flip map interfacesNumbered
-        ({ fst, snd }: qemuNICFlags snd fst m.snd);
+
+  # done automatically by assigned address
+
+  # virtualisation.qemu.options = with pkgs.lib; let
+  #             m = {snd = 1;};
+  #             interfacesNumbered = zipLists vlans (range 1 255);
+  #             # interfaces = flip map interfacesNumbered ({ fst, snd }:
+  #             #   nameValuePair "eth${toString snd}" { ipv4.addresses =
+  #             #     [ { address = "192.168.${toString fst}.${toString m.snd}";
+  #             #         prefixLength = 24;
+  #             #     } ];
+  #             #   });
+  #   in
+  #     flip map interfacesNumbered
+  #       ({ fst, snd }: qemuNICFlags snd fst m.snd);
 
   # TODO load up an mptcp module
 
