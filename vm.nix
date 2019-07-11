@@ -6,29 +6,7 @@
 let
   userNixpkgs = /home/teto/nixpkgs;
   customOverlay = /home/teto/home;
-  vlans = [ 2 1 ];
-
-  # Extracted from qemu-flags 
-  # to be able to set 
-  # with import <nixpkgs/nixos/lib/qemu-flags.nix> { inherit pkgs; };
-
-  # pad to get at least 2 digits
-  zeroPad = n: if n < 10 then "0${toString n}" else toString n;
-
-  # le defaut c'est  
-  # -net nic,netdev=user.0,model=virtio -netdev user,id=user.0${QEMU_NET_OPTS:+,$QEMU_NET_OPTS} \
-  # ,sock=$QEMU_VDE_SOCKET_${toString net}"
-  # see https://wiki.qemu.org/Documentation/Networking 's doc
-  # we need on -netdev 
-  # -device e1000
-  # -nic user
-
-  # qemuNICFlags = nic: net: machine:
-  # [
-  #     "-device virtio-net-pci,netdev=vlan${toString nic},mac=52:54:00:12:${zeroPad net}:${zeroPad machine}"
-  #     "-netdev user,id=vlan${toString nic},net=192.168.76.${toString nic}/24"
-  # ];
-
+  vlans = [ 0 1 ];
 
   # new style can compact -device and -netdev into -nic
   # qemuNICFlags = nic: net: machine:
@@ -36,14 +14,12 @@ let
   #     "-nic user,model=virtio-net-pci,id=vlan${toString nic}"
   # ];
 
-    # need to pass net=192.168.76.0/24,
 in
 {
   # TODO pass to
-  imports = [
-    # /home/teto/dotfiles/nixpkgs/account-teto.nix
-
-  ];
+  # imports = [
+  #   # /home/teto/dotfiles/nixpkgs/account-teto.nix
+  # ];
 
   # cmdline="root=/dev/sda1 earlycon=ttyS0 console=ttyS0 init=/nix/var/nix/profiles/system/init boot.debug=1 boot.consoleLogLevel=1 nokaslr tcp_probe.port=5201 tcp_probe.full=1";
   # # # x86_64 is a symlink towards x86
@@ -71,7 +47,7 @@ in
   # ];
 
   # -m must be a machine
-  # qemuNICFlags = nic: net: machine: because 
+  # qemuNICFlags = nic: net: machine: because
   # virtualisation.qemu.options doit etre une liste
   # zipLists [ 1 2 ] [ "a" "b" ]
   # => [ { fst = 1; snd = "a"; } { fst = 2; snd = "b"; } ]
