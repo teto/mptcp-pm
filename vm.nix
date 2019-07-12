@@ -27,10 +27,12 @@ in
 
   # Will add an eth
   virtualisation.vlans = vlans;
+  virtualisation.qemu.networkingOptions = [ ];
 
   # boot.kernel.sysctl."net.ipv6.conf.all.forwarding" = true;
 
   environment.systemPackages = with pkgs; [
+    neovim
     # mptcpnumerics  # from my overlay ? copy it here
   ];
 
