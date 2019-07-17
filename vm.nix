@@ -1,22 +1,12 @@
-# to use with nixos-shell https://github.com/Mic92/nixos-shell
-# jjjjjj
-# $QEMU_OPTS
-# TODO: this could also
+# to use with nixos-shell
 { pkgs, lib, ... }:
 let
   userNixpkgs = /home/teto/nixpkgs;
   customOverlay = /home/teto/home;
   vlans = [ 0 1 ];
 
-  # new style can compact -device and -netdev into -nic
-  # qemuNICFlags = nic: net: machine:
-  # [
-  #     "-nic user,model=virtio-net-pci,id=vlan${toString nic}"
-  # ];
-
 in
 {
-  # TODO pass to
   # imports = [
   #   # /home/teto/dotfiles/nixpkgs/account-teto.nix
   # ];
@@ -47,35 +37,6 @@ in
     # si j'utilise mon propre kernel g besoin de mon propre initramfs
     # "-initrd "
   # ];
-
-  # -m must be a machine
-  # qemuNICFlags = nic: net: machine: because
-  # virtualisation.qemu.options doit etre une liste
-  # zipLists [ 1 2 ] [ "a" "b" ]
-  # => [ { fst = 1; snd = "a"; } { fst = 2; snd = "b"; } ]
-
-  # done automatically by assigned address
-
-  # virtualisation.qemu.options = with pkgs.lib; let
-  #             m = {snd = 1;};
-  #             interfacesNumbered = zipLists vlans (range 1 255);
-  #             # interfaces = flip map interfacesNumbered ({ fst, snd }:
-  #             #   nameValuePair "eth${toString snd}" { ipv4.addresses =
-  #             #     [ { address = "192.168.${toString fst}.${toString m.snd}";
-  #             #         prefixLength = 24;
-  #             #     } ];
-  #             #   });
-  #   in
-  #     flip map interfacesNumbered
-  #       ({ fst, snd }: qemuNICFlags snd fst m.snd);
-
-  # TODO load up an mptcp module
-
-  # networking.interfaces.ens192 = secrets.gitolite_server.interfaces;
-    # interfaces = {
-    #   ipv4.addresses = [ { address = "202.214.86.51"; prefixLength = 25; } ];
-    #   ipv6.addresses = [ { address = "2001:240:168:1001::37"; prefixLength = 25; } ];
-    # };
 
   # networking.hostName = "netlink";
 
