@@ -2,7 +2,7 @@
 # jjjjjj
 # $QEMU_OPTS
 # TODO: this could also
-{ pkgs, ... }:
+{ pkgs, lib, ... }:
 let
   userNixpkgs = /home/teto/nixpkgs;
   customOverlay = /home/teto/home;
@@ -27,7 +27,7 @@ in
 
   # Will add an eth
   virtualisation.vlans = vlans;
-  virtualisation.qemu.networkingOptions = [ ];
+  virtualisation.qemu.networkingOptions = lib.mkForce [ ];
 
   # boot.kernel.sysctl."net.ipv6.conf.all.forwarding" = true;
 
