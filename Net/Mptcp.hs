@@ -75,7 +75,7 @@ type MptcpPacket = GenlPacket NoData
 
 
 data SubflowWithMetrics = SubflowWithMetrics {
-  subflow :: TcpConnection
+  subflowSubflow :: TcpConnection
     -- for now let's retain DiagTcpInfo  only
   , metrics :: [IDiagExtension]
 }
@@ -83,6 +83,7 @@ data SubflowWithMetrics = SubflowWithMetrics {
 -- |Data to hold MPTCP level information
 data MptcpConnection = MptcpConnection {
   connectionToken :: MptcpToken
+  -- use SubflowWithMetrics instead ?!
   , subflows :: [TcpConnection]
   , localIds :: [Word8]  -- ^ Announced addresses
   , remoteIds :: [Word8]  -- ^ Announced addresses
@@ -111,7 +112,7 @@ instance ToJSON MptcpConnection where
 --
 instance ToJSON SubflowWithMetrics where
   toJSON sf = object [
-    (pack (nameFromTcpConnection $ subflow sf) .= object [
+    (pack (nameFromTcpConnection $ subflowSubflow sf) .= object [
 
       "cwnd" .= toJSON (20 :: Int),
       -- for now hardcode mss ? we could set it to one to make

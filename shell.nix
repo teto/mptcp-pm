@@ -19,7 +19,7 @@ let
           # QuickCheck = hold.QuickCheck_2_13_1;
 
           # from nixpkgs-stackage overlay
-          ip = pkgs.haskell.lib.dontCheck hold.ip;
+          # ip = pkgs.haskell.lib.dontCheck hold.ip;
 
           c2hsc = pkgs.haskell.lib.dontCheck hold.c2hsc;
 

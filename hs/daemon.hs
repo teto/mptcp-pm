@@ -108,7 +108,7 @@ import System.IO.Unsafe
 import Data.Aeson
 
 -- for getEnvDefault
-import System.Environment.Blank
+import System.Environment.Blank()
 
 -- for writeUTF8File
 -- import Distribution.Simple.Utils
@@ -272,7 +272,7 @@ startMonitorExternalProcess token =
     params = proc "daemon" [ show token ]
     -- todo pass the token via the environment
     newParams = params {
-        -- cmdspec = RawCommand "monitor" [ show token ] 
+        -- cmdspec = RawCommand "monitor" [ show token ]
         new_session = True
         -- cwd
         -- env
@@ -315,7 +315,7 @@ updateSubflowMetrics subflow = do
     -- let capCwndPkt = genCapCwnd familyId
     -- sendPacket testSock capCwndPkt >> putStrLn "Sent the Cap command"
 
--- TODO 
+-- TODO
 -- clude child configs in grub menu #45345
 -- send MPTCP_CMD_SND_CLAMP_WINDOW
 -- TODO we need the token to generate the command ?
@@ -387,9 +387,9 @@ startMonitorConnection mptcpSock mConn = do
     cwnds <- getCapsForConnection con
 
     putStrLn $ "Requesting to set cwnds..." ++ show cwnds
-    -- TODO capCwndAttrs capCwndPkt 
+    -- TODO capCwndAttrs capCwndPkt
     -- KISS for now (capCwndPkt mptcpSock )
-    -- zip caps (subflows con) 
+    -- zip caps (subflows con)
     let attrsList = map (\(cwnd, sf) -> capCwndAttrs token sf cwnd ) (zip cwnds (subflows con))
     -- >> map (capCwndPkt mptcpSock ) >>= putStrLn "toto"
 
@@ -419,9 +419,9 @@ getCapsForConnection con = do
     -- returns a bytestring
     let bs = Data.Aeson.encode con
     let subflowCount = length $ subflows con
-    let filename = tmpdir + "/" + "mptcp_" ++ (show $ subflowCount)  ++ "_" ++ (show $ connectionToken con) ++ ".json"
-    -- let tmpdir = getEnvDefault "TMPDIR" "/tmp"
     let tmpdir = "/tmp"
+    let filename = tmpdir ++ "/" ++ "mptcp_" ++ (show $ subflowCount)  ++ "_" ++ (show $ connectionToken con) ++ ".json"
+    -- let tmpdir = getEnvDefault "TMPDIR" "/tmp"
 
     -- encode token in filename
     -- fromMaybe $
@@ -433,7 +433,7 @@ getCapsForConnection con = do
 
     -- TODO to keep it simple it should return a list of CWNDs to apply
     -- readProcessWithExitCode  binary / args / stdin
-    (exitCode, stdout, stderr) <- readProcessWithExitCode "./fake_solver" [filename, show subflowCount] ""
+    (exitCode, stdout, stderr) <- readProcessWithExitCode "./hs/fake_solver" [filename, show subflowCount] ""
     case exitCode of
         -- for now simple, we might read json afterwards
         ExitSuccess -> return (read stdout :: [Word32])
@@ -509,7 +509,7 @@ handleAddr (Right (ErrorMsg hdr errorInt errorBstr )) = putStrLn $ "Error decodi
 --
 onNewConnection :: MptcpSocket -> Attributes -> IO ()
 onNewConnection sock attributes = do
-    -- TODO use getAttribute instead 
+    -- TODO use getAttribute instead
     let token = readToken $ Map.lookup (fromEnum MPTCP_ATTR_TOKEN) attributes
     let locId = readLocId $ Map.lookup (fromEnum MPTCP_ATTR_LOC_ID) attributes
     let answer = "e"
@@ -542,7 +542,6 @@ onNewConnection sock attributes = do
 -- unknownConnectionEvent :: M
 -- unknownConnectionMonitor :: MptcpToken -> MptcpPacket
 -- pass [MptcpAttribute] instead ?
--- 
 dispatchPacketForKnownConnection :: MptcpConnection
                                     -> MptcpGenlEvent
                                     -> Attributes
@@ -562,31 +561,29 @@ dispatchPacketForKnownConnection con event attributes = let
         -- return oldState
 
       MPTCP_EVENT_ANNOUNCED -> con
-        -- putStrLn "New address announced"
-        -- case maybeConn of
-        --     Nothing -> putStrLn "No connection with this token" >> return oldState
-        --     Just mConn -> _
-                -- case mmakeAttributeFromMaybe MPTCP_ATTR_REM_ID attrs of 
-                --     Nothing -> return oldState
-                --     Just localId ->
-                --     putStrLn "Found a match"
-                --     -- swapMVar / withMVar / modifyMVar
-                --     mptcpConn <- takeMVar mConn
-                --     -- TODO we should trigger an update in the CWND
-                --     let newCon = mptcpConnAddLocalId mptcpConn 
-                --     let newState = oldState
+
+          -- what if it's local
+            -- case makeAttributeFromMaybe MPTCP_ATTR_REM_ID attrs of
+            --     Nothing -> con
+            --     Just localId -> putStrLn "Found a match"
+            --     -- swapMVar / withMVar / modifyMVar
+            --     mptcpConn <- takeMVar mConn
+            --     -- TODO we should trigger an update in the CWND
+            --     let newCon = mptcpConnAddLocalId mptcpConn
+            --     newCon
+                -- let newState = oldState
         -- return oldState
 
-      MPTCP_EVENT_CLOSED -> do
+      MPTCP_EVENT_CLOSED ->
         -- putStrLn $ "Connection closed, deleting token " ++ show token
         -- let newState = oldState { connections = Map.delete token (connections oldState) }
         -- TODO we should kill the thread with killThread or empty the mVar !!
         -- let newState = oldState
         -- putStrLn $ "New state"
         -- return newState
-        con
+        error "should never be called"
 
-      MPTCP_EVENT_SUB_ESTABLISHED ->  let
+      MPTCP_EVENT_SUB_ESTABLISHED -> let
             subflow = subflowFromAttributes attributes
             newCon = mptcpConnAddSubflow con subflow
             in
@@ -632,8 +629,8 @@ dispatchPacket oldState (Packet hdr (GenlData genlHeader NoData) attributes) = l
                     in
                     if subflow `notElem` filteredConnections
                         then do
-                            putStrLn $ "filtered out connection" ++ show subflow 
-                            putStrLn $ "it was compared with " ++ show authorizedCon1 
+                            putStrLn $ "filtered out connection" ++ show subflow
+                            putStrLn $ "it was compared with " ++ show authorizedCon1
                             return oldState
                         else (do
                                 let newMptcpConn = MptcpConnection token [ subflow ] [] []
@@ -658,7 +655,7 @@ dispatchPacket oldState (Packet hdr (GenlData genlHeader NoData) attributes) = l
                 MPTCP_EVENT_CLOSED -> do
                     putStrLn $ "Killing thread " ++ show threadId
                     killThread threadId
-                    -- TODO remove 
+                    -- TODO remove
                     return $ oldState { connections = Map.delete token (connections oldState) }
                     -- let newState = oldState
 
@@ -669,8 +666,8 @@ dispatchPacket oldState (Packet hdr (GenlData genlHeader NoData) attributes) = l
                     let newConn = dispatchPacketForKnownConnection mptcpConn cmd attributes
                     putMVar mvarConn newConn
                     -- TODO update state
-                    let newState = oldState { 
-                        connections = Map.insert token (threadId, mvarConn) (connections oldState) 
+                    let newState = oldState {
+                        connections = Map.insert token (threadId, mvarConn) (connections oldState)
                     }
                     return newState
 
@@ -687,7 +684,7 @@ dispatchPacket s (ErrorMsg hdr errCode errPacket) = do
 -- ++ show errPacket
 showError :: Show a => Packet a -> IO ()
 showError (ErrorMsg hdr errCode errPacket) = do
-  putStrLn $ "Error msg of type " ++ showErrCode errCode ++ " Packet content:\n" 
+  putStrLn $ "Error msg of type " ++ showErrCode errCode ++ " Packet content:\n"
 showError _ = error "Not the good overload"
 
 -- netlink must contain sthg for it
@@ -839,7 +836,7 @@ main = do
   putMVar globalMetricsSock sockMetrics
 
 
-  -- 
+  --
   routingSock <- NLS.makeNLHandle (const $ pure ()) =<< NL.makeSocket
   let cb = NLS.NLCallback (pure ()) (handleAddr . runGet getGenPacket)
   NLS.nlPostMessage routingSock queryAddrs cb

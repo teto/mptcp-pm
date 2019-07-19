@@ -45,6 +45,7 @@ In a shell:
 In another:
 `$ nix run nixpkgs.iperf -c iperf -c localhost -b 1KiB -t 4 --cport 5500 -4`
 
+
 TODO:
 ss package sends by default
 ```
@@ -54,6 +55,35 @@ ss package sends by default
 ```
 - [ ] write wordToEnums function, especially to fix getSockDiagRequestHeader
 (with bitset package once it's fixed)
+
+
+Script to reload module
+
+
+```
+reload_mod() {
+    newMod="$1"
+
+	if [ -z "${newMod}" ]; then
+		echo "Use: <path to new module>"
+		echo "possibly /home/teto/mptcp2/build/net/mptcp/mptcp_netlink.ko"
+	fi
+# 1. change to another scheduler
+    mppm "fullmesh"
+	sleep 1
+# 2. rmmod the current one
+    sudo rmmod "mptcp_netlink"
+
+# 3. Insert our new module
+	sleep 1
+    sudo insmod "$1"
+
+# 4. restore path manager
+	mppm "netlink"
+
+}
+```
+
 
 # Testsuite
 
@@ -66,3 +96,4 @@ ss package sends by default
 - pass local/server IPs as commands to the PM ?
 - generate completion scripts via --zsh-completion-script
 - to get kernel ifindex: cat /sys/class/net/lo/ifindex
+
