@@ -22,9 +22,13 @@ import Control.Monad
 
 -- check ip link / localhost seems to be 1
 -- global interface index
-localhostIntfIdx :: Word32
-localhostIntfIdx = 1
+-- TODO should remove
+-- localhostIntfIdx :: Word32
+-- localhostIntfIdx = 1
 
+getInterfaceIdFromIP :: IP -> Word32
+getInterfaceIdFromIP ip =
+  1
 
 -- then I could do encode myIP
 -- instance Convertable IP where

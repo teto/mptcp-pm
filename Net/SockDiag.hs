@@ -431,10 +431,6 @@ genQueryPacket selector tcpStatesFilter requestedInfo = let
       in
         InetDiagSockId (srcPort con) (dstPort con) ipSrc ipDst (fromJust ifIndex) _cookie
 
-  -- 1 => "lo". Check with ip link ?
-  -- TODO pick from connection
-  -- ifIndex = fromIntegral localhostIntfIdx :: Word32
-
   custom = SockDiagRequest eAF_INET eIPPROTO_TCP requestedInfo tcpStatesFilter diag_req
   in
     Packet hdr custom Map.empty

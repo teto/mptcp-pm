@@ -275,7 +275,6 @@ genV4SubflowAddress attr ip = (fromEnum attr, runPut $ putWord32be w32)
 
 genV6SubflowAddress :: MptcpAttr -> IPv6 -> (Int, ByteString)
 genV6SubflowAddress addr = undefined
--- (fromEnum MPTCP_ATTR_SADDR6, runPut $ putIPAddress addr)
 
 mptcpListToAttributes :: [MptcpAttribute] -> Attributes
 mptcpListToAttributes attrs = Map.fromList $Prelude.map attrToPair attrs
@@ -407,6 +406,7 @@ resetConnectionPkt (MptcpSocket sock fid) attrs = let
     assert (hasLocAddr attrs) $ genMptcpRequest fid MPTCP_CMD_REMOVE False attrs
 
 
+-- TODO map an IP to an interface
 subflowAttrs :: TcpConnection -> [MptcpAttribute]
 subflowAttrs con = [
             LocalLocatorId $ localId con
@@ -415,7 +415,7 @@ subflowAttrs con = [
             , SubflowFamily $ eAF_INET  -- inetFamily con
             , SubflowDestAddress $ dstIp con
             , SubflowDestPort $ dstPort con
-            , SubflowInterface localhostIntfIdx
+            , SubflowInterface $ getInterfaceIdFromIP $ srcIp con
             -- https://github.com/multipath-tcp/mptcp/issues/338
             , SubflowSourceAddress $ srcIp con
             ]
@@ -438,16 +438,6 @@ capCwndPkt (MptcpSocket sock fid) attrs =
     assert (hasFamily attrs) pkt
     where
         pkt = genMptcpRequest fid MPTCP_CMD_SND_CLAMP_WINDOW False attrs
-        -- attrs = [
-        --     MptcpAttrToken token
-        --     , SubflowFamily eAF_INET
-        --     , LocalLocatorId 0
-        --     -- TODO check emote locator ?
-        --     , RemoteLocatorId 0
-        --     , SubflowInterface localhostIntfIdx
-        --     -- , SubflowInterface localhostIntfIdx
-        --     ]
-    -- putStrLn "while waiting for a real implementation"
 
 -- sport/backup/intf are optional
 -- family /loc id/remid/daddr/dport

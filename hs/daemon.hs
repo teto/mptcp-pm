@@ -127,6 +127,13 @@ globalMptcpSock = unsafePerformIO newEmptyMVar
 globalMetricsSock :: MVar NetlinkSocket
 globalMetricsSock = unsafePerformIO newEmptyMVar
 
+{-# NOINLINE globalInterfaces #-}
+-- TODO Map search in a list
+-- IP , Interface
+globalInterfaces :: MVar (Map.Map Word32 PathManagerInterface)
+globalInterfaces = unsafePerformIO newEmptyMVar
+
+
 iperfClientPort :: Word16
 iperfClientPort = 5500
 
@@ -336,8 +343,8 @@ genCapCwnd token familyId =
             , LocalLocatorId 0
             -- TODO check emote locator ?
             , RemoteLocatorId 0
-            , SubflowInterface localhostIntfIdx
-            -- , SubflowInterface localhostIntfIdx
+            -- TODO fix
+            , SubflowInterface $ getInterfaceIdFromIP (fromIPv4 localhost)
             ]
     -- putStrLn "while waiting for a real implementation"
 
@@ -487,6 +494,7 @@ inspectAnswer pkt = putStrLn $ "Inspecting answer:\n" ++ showPacket pkt
 
 
 
+-- should have this running in parallel
 queryAddrs :: NLR.RoutePacket
 queryAddrs = NL.Packet
     (NL.Header NLC.eRTM_GETADDR (NLC.fNLM_F_ROOT .|. NLC.fNLM_F_MATCH .|. NLC.fNLM_F_REQUEST) 0 0)
@@ -494,17 +502,38 @@ queryAddrs = NL.Packet
     mempty
 
 
-handleMessage :: NLR.Message -> IO()
-handleMessage (NLR.NLinkMsg _ _ _ ) = putStrLn $ "Ignoring NLinkMsg"
+-- basically a retranscription of NLR.NAddrMsg
+data PathManagerInterface = PathManagerInterface {
+  address :: IP,
+  interfaceId :: Word32 -- ^ refers to addrInterfaceIndex
+}
+
+
+-- TODO show host interfaces
+-- dumpInterfaces
+
+-- TODO we should store this
+-- really only interested in NAddrMsg
+handleMessage :: NLR.Message -> IO ()
+handleMessage (NLR.NLinkMsg _ _ _ ) = putStrLn "Ignoring NLinkMsg" 
 handleMessage (NLR.NNeighMsg _ _ _ _ _ ) = putStrLn $ "Ignoring NNeighMsg"
-handleMessage (NLR.NAddrMsg _ _ _ _ _ ) = putStrLn $ "Ignoring NNeighMsg"
+-- lol here we need to update the list of interfaces
+handleMessage (NLR.NAddrMsg family maskLen flags scope addrIntf) = do
+  infs <- takeMVar globalInterfaces
+  -- TODO update w
+  -- newInfs = infs
+
+  -- decode
+  let newInf = PathManagerInterface (IP ) addrIntf
+  let newInfs = Map.insert addrIntf infs
+  putMVar globalInterfaces newInfs
 
 -- TODO handle remove/new event
 handleAddr :: Either String NLR.RoutePacket -> IO ()
 handleAddr (Left errStr) = putStrLn $ "Error decoding packet: " ++ errStr
-handleAddr (Right (Packet hdr pkt _)) = handleMessage pkt
 handleAddr (Right (DoneMsg hdr)) = putStrLn $ "Error decoding packet: " ++ show hdr
 handleAddr (Right (ErrorMsg hdr errorInt errorBstr )) = putStrLn $ "Error decoding packet: " ++ show hdr
+handleAddr (Right (Packet hdr pkt _)) = handleMessage pkt
 
 --
 onNewConnection :: MptcpSocket -> Attributes -> IO ()
@@ -800,6 +829,19 @@ inspectIDiagAnswer p = putStrLn $ "test" ++ showPacket p
 --             ++ "Supposing it's a mptcp command: " ++ dumpCommand ( toEnum $ fromIntegral cmd)
 
 
+
+-- Updates the list of interfaces
+-- should run in background
+--
+trackSystemInterfaces :: IO()
+trackSystemInterfaces = do
+  -- check routing information
+  routingSock <- NLS.makeNLHandle (const $ pure ()) =<< NL.makeSocket
+  let cb = NLS.NLCallback (pure ()) (handleAddr . runGet getGenPacket)
+  NLS.nlPostMessage routingSock queryAddrs cb
+  NLS.nlWaitCurrent routingSock
+
+
 -- la en fait c des reponses que j'obtiens ?
 inspectIdiagAnswers :: [Packet InetDiagMsg] -> IO ()
 inspectIdiagAnswers packets = do
@@ -817,9 +859,7 @@ main = do
   -- logger <- createLogger
   -- pushLogStr logger (toLogStr "ok")
 
-  -- globalState <- newIORef mempty
   -- globalState <- newEmptyMVar
-  -- putStrLn "dumping important values:"
   -- putStrLn $ "RESET" ++ show MPTCP_CMD_REMOVE
   -- putStrLn $ dumpMptcpCommands MPTCP_CMD_UNSPEC
   putStrLn "Creating MPTCP netlink socket..."
@@ -835,13 +875,18 @@ main = do
   -- putMVar
   putMVar globalMetricsSock sockMetrics
 
+  -- a threadid
+  -- TODO put an empty map
+  putMVar globalInterfaces Map.empty
+  routeNl <- forkIO trackSystemInterfaces
 
-  --
-  routingSock <- NLS.makeNLHandle (const $ pure ()) =<< NL.makeSocket
-  let cb = NLS.NLCallback (pure ()) (handleAddr . runGet getGenPacket)
-  NLS.nlPostMessage routingSock queryAddrs cb
-  NLS.nlWaitCurrent routingSock
+  -- check routing information
+  -- routingSock <- NLS.makeNLHandle (const $ pure ()) =<< NL.makeSocket
+  -- let cb = NLS.NLCallback (pure ()) (handleAddr . runGet getGenPacket)
+  -- NLS.nlPostMessage routingSock queryAddrs cb
+  -- NLS.nlWaitCurrent routingSock
 
+  return ()
   putStr "socket created. MPTCP Family id " >> Prelude.print fid
   -- putStr "socket created. tcp_metrics Family id " >> print fidMetrics
   -- That's what I should use in fact !! (Word16, [CtrlAttrMcastGroup])
