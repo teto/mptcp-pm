@@ -15,6 +15,8 @@ import Data.Serialize.Get
 import Data.Serialize.Put
 import Data.Word (Word32)
 import Data.ByteString (ByteString)
+-- import Data.Either (fromRight)
+import System.Linux.Netlink.Constants as NLC
 
 -- for replicateM
 import Control.Monad
@@ -26,6 +28,7 @@ import Control.Monad
 -- localhostIntfIdx :: Word32
 -- localhostIntfIdx = 1
 
+-- TODO should consult
 getInterfaceIdFromIP :: IP -> Word32
 getInterfaceIdFromIP ip =
   1
@@ -42,6 +45,23 @@ getIPv4FromByteString :: ByteString -> Either String IPv4
 getIPv4FromByteString val =
   runGet (Net.IPv4.fromOctets <$> getWord8 <*> getWord8 <*> getWord8 <*> getWord8) val
 
+
+getIPFromByteString :: NLC.AddressFamily -> ByteString -> Either String IP
+getIPFromByteString addrFamily ipBstr
+  | addrFamily == eAF_INET = case  getIPv4FromByteString ipBstr of
+                                Right ip -> Right $ fromIPv4 ip
+                                Left m -> Left m
+  | addrFamily == eAF_INET6 = case  getIPv6FromByteString ipBstr of
+                                Right ip -> Right $ fromIPv6 ip
+                                x -> x
+  | otherwise = error $ "unsupported addrFamily " ++ show addrFamily
+
+        -- fromIPv6 $ Right getIPv6FromByteString ipBstr
+
+-- 
+-- getIPv4FromByteStringUnsafe ::
+-- getIPv4FromByteStringUnsafe = 
+  
 
 getIPv6FromByteString :: ByteString -> Either String IPv6
 getIPv6FromByteString bs =

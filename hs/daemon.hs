@@ -64,7 +64,7 @@ import Net.IPAddress
 
 -- for replicateM
 -- import Control.Monad
-import Data.Maybe ()
+import Data.Maybe (fromMaybe)
 import Data.Foldable ()
 import Foreign.C.Types (CInt)
 import Foreign.C.Error
@@ -72,6 +72,7 @@ import Foreign.C.Error
 import System.Linux.Netlink as NL
 import System.Linux.Netlink.GeNetlink as GENL
 import System.Linux.Netlink.Constants as NLC
+import System.Linux.Netlink.Constants (eRTM_NEWADDR)
 -- import System.Linux.Netlink.Helpers
 import System.Log.FastLogger
 import System.Linux.Netlink.GeNetlink.Control
@@ -531,39 +532,64 @@ data PathManagerInterface = PathManagerInterface {
 --   putMVar globalInterfaces newInfs
 
 
-handleInterfaceNotification :: Attributes -> Word32 -> PathManagerInterface
-handleInterfaceNotification ip addrIntf =
-  PathManagerInterface ip addrIntf
-  where
-    ip = undefined
+
+
+
+-- TODO we should use the 
+handleInterfaceNotification
+  :: AddressFamily -> Attributes -> Word32 -> PathManagerInterface
+handleInterfaceNotification addrFamily attrs addrIntf = PathManagerInterface
+  ip
+  addrIntf
+ where
+    -- ip = undefined
+    -- gets the bytestring
+  ipBstr = fromMaybe $ NLR.getIFAddr attrs
+  ip = getIPFromByteString addrFamily ipBstr
+  -- ip = if addrFamily == eAF_INET
+  --   then fromIPv4 $ Right getIPv4FromByteString ipBstr
+  --   else if addrFamily == eAF_INET6
+  --     then fromIPv6 $ getIPv6FromByteString ipBstr
+  --     else error "This address should not be supported"
 
 
 -- TODO handle remove/new event
 handleAddr :: Either String NLR.RoutePacket -> IO ()
 handleAddr (Left errStr) = putStrLn $ "Error decoding packet: " ++ errStr
-handleAddr (Right (DoneMsg hdr)) = putStrLn $ "Error decoding packet: " ++ show hdr
-handleAddr (Right (ErrorMsg hdr errorInt errorBstr )) = putStrLn $ "Error decoding packet: " ++ show hdr
+handleAddr (Right (DoneMsg hdr)) =
+  putStrLn $ "Error decoding packet: " ++ show hdr
+handleAddr (Right (ErrorMsg hdr errorInt errorBstr)) =
+  putStrLn $ "Error decoding packet: " ++ show hdr
 -- TODO need handleMessage pkt
 -- family maskLen flags scope addrIntf
-handleAddr (Right (Packet hdr pkt attrs)) =
-  do
-    oldIntfs <- takeMVar globalInterfaces
-    putMVar globalInterfaces (case pkt of
-      (arg@NLR.NAddrMsg{}) -> let 
-        newIntf = handleInterfaceNotification attrs (NLR.addrInterfaceIndex arg)
-        msgType =  messageType hdr 
-        in case msgType of
-          (NLC.eRTM_NEWADDR) -> Map.insert ip newIntf oldIntfs
-          -- eRTM_GETADDR ->    
-          eRTM_DELADDR -> Map.delete (ip) oldIntfs
+handleAddr (Right (Packet hdr pkt attrs)) = do
+  oldIntfs <- takeMVar globalInterfaces
+  putMVar
+    globalInterfaces
+    (case pkt of
+      (arg@NLR.NAddrMsg{}) ->
+        let newIntf = handleInterfaceNotification
+              (NLR.addrFamily arg)
+              attrs
+              (NLR.addrInterfaceIndex arg)
+            msgType = messageType hdr
+        in  if msgType == eRTM_NEWADDR
+              then Map.insert ip newIntf oldIntfs
+              else if msgType == eRTM_DELADDR
+                then
+            -- eRTM_GETADDR ->    
+                     Map.delete (ip) oldIntfs
+                else oldIntfs
 
       -- _ -> error "can't be anything else"
-      _ -> oldIntfs)
+      _ -> oldIntfs
+    )
     -- putMVar globalInterfaces newIntfs
-  where
+
+ where
       -- gets the bytestring
-      ipBstr = NLR.getIFAddr attrs
-      ip = fromIPv4 localhost
+  ipBstr = NLR.getIFAddr attrs
+  ip     = fromIPv4 localhost
 
 -- (arg@DiagTcpInfo{})
 
