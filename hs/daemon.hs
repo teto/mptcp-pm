@@ -135,7 +135,6 @@ globalMetricsSock = unsafePerformIO newEmptyMVar
 globalInterfaces :: MVar (Map.Map IP PathManagerInterface)
 globalInterfaces = unsafePerformIO newEmptyMVar
 
-
 iperfClientPort :: Word16
 iperfClientPort = 5500
 
@@ -211,6 +210,14 @@ data Sample = Sample {
 -- TODO use 3rd party library levels
 -- data Verbosity = Normal | Debug
 
+
+dumpSystemInterfaces :: IO()
+dumpSystemInterfaces = do
+  putStrLn "Dumping interfaces"
+  interfaces <- readMVar globalInterfaces
+  -- TODO dump a map
+  putStrLn $ show interfaces
+  putStrLn "End of dump"
 
 
 -- TODO register subcommands instead
@@ -509,7 +516,7 @@ queryAddrs = NL.Packet
 data PathManagerInterface = PathManagerInterface {
   address :: IP,
   interfaceId :: Word32 -- ^ refers to addrInterfaceIndex
-}
+} deriving Show
 
 
 -- TODO show host interfaces
@@ -541,7 +548,7 @@ handleInterfaceNotification addrFamily attrs addrIntf =
   -- case of
   --   Nothing -> Nothing
   --   Just val -> 
-    PathManagerInterface ip addrIntf
+    trace "building interface" PathManagerInterface ip addrIntf
  where
     -- ip = undefined
     -- gets the bytestring / assume it always work
@@ -562,6 +569,7 @@ handleAddr (Right (ErrorMsg hdr errorInt errorBstr)) =
 -- TODO need handleMessage pkt
 -- family maskLen flags scope addrIntf
 handleAddr (Right (Packet hdr pkt attrs)) = do
+  trace "HELLO" putStrLn $ "received packet"
   oldIntfs <- takeMVar globalInterfaces
   putMVar
     globalInterfaces
@@ -573,15 +581,21 @@ handleAddr (Right (Packet hdr pkt attrs)) = do
               (NLR.addrInterfaceIndex arg)
             msgType = messageType hdr
         in  if msgType == eRTM_NEWADDR
-              then Map.insert ip newIntf oldIntfs
-              else if msgType == eRTM_DELADDR
-                then
-            -- eRTM_GETADDR ->    
-                     Map.delete (ip) oldIntfs
-                else oldIntfs
+              then trace "adding ip" Map.insert ip newIntf oldIntfs
+              -- >> putStrLn "Added interface"
+              else if msgType == eRTM_GETADDR
+                then trace "oldIntfs" oldIntfs
+
+                else if msgType == eRTM_DELADDR
+                  then
+                      trace "deleting ip" Map.delete (ip) oldIntfs
+                      -- >> putStrLn "Removed interface"
+                  else oldIntfs
 
       -- _ -> error "can't be anything else"
-      _ -> oldIntfs
+      (arg@NLR.NNeighMsg{}) -> trace "neighbor msg" oldIntfs
+      (arg@NLR.NLinkMsg{}) -> trace "link msg" oldIntfs
+      -- _ -> oldIntfs
     )
     -- putMVar globalInterfaces newIntfs
 
@@ -934,9 +948,11 @@ main = do
 
   -- a threadid
   -- TODO put an empty map
+  putStrLn "Now Tracking system interfaces..."
   putMVar globalInterfaces Map.empty
   routeNl <- forkIO trackSystemInterfaces
 
+  dumpSystemInterfaces 
   -- check routing information
   -- routingSock <- NLS.makeNLHandle (const $ pure ()) =<< NL.makeSocket
   -- let cb = NLS.NLCallback (pure ()) (handleAddr . runGet getGenPacket)

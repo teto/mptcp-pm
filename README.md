@@ -48,11 +48,9 @@ In another:
 
 TODO:
 ss package sends by default
-```
 -- #define SS_ALL ((1 << SS_MAX) - 1)
 -- #define SS_CONN (SS_ALL & ~((1<<SS_LISTEN)|(1<<SS_CLOSE)|(1<<SS_TIME_WAIT)|(1<<SS_SYN_RECV)))
 -- #define TIPC_SS_CONN ((1<<SS_ESTABLISHED)|(1<<SS_LISTEN)|(1<<SS_CLOSE))
-```
 - [ ] write wordToEnums function, especially to fix getSockDiagRequestHeader
 (with bitset package once it's fixed)
 
