@@ -50,7 +50,7 @@ Useful functions in Map
 module Main where
 
 import Prelude hiding (concat)
-import Options.Applicative hiding (value, ErrorMsg)
+import Options.Applicative hiding (value, ErrorMsg, empty)
 import qualified Options.Applicative (value)
 
 -- For TcpState, FFI generated
@@ -87,7 +87,7 @@ import Data.Word (Word16, Word32)
 import Data.Serialize.Get (runGet)
 import Data.Serialize.Put
 -- import Data.Either (fromRight)
-import Data.ByteString (ByteString)
+import Data.ByteString (ByteString, empty)
 import Data.ByteString.Lazy (writeFile)
 -- import qualified Data.ByteString.Char8 as BSC
 import qualified Data.Map as Map
@@ -533,24 +533,23 @@ data PathManagerInterface = PathManagerInterface {
 
 
 
-
-
 -- TODO we should use the 
 handleInterfaceNotification
   :: AddressFamily -> Attributes -> Word32 -> PathManagerInterface
-handleInterfaceNotification addrFamily attrs addrIntf = PathManagerInterface
-  ip
-  addrIntf
+handleInterfaceNotification addrFamily attrs addrIntf =
+
+  -- case of
+  --   Nothing -> Nothing
+  --   Just val -> 
+    PathManagerInterface ip addrIntf
  where
     -- ip = undefined
-    -- gets the bytestring
-  ipBstr = fromMaybe $ NLR.getIFAddr attrs
-  ip = getIPFromByteString addrFamily ipBstr
-  -- ip = if addrFamily == eAF_INET
-  --   then fromIPv4 $ Right getIPv4FromByteString ipBstr
-  --   else if addrFamily == eAF_INET6
-  --     then fromIPv6 $ getIPv6FromByteString ipBstr
-  --     else error "This address should not be supported"
+    -- gets the bytestring / assume it always work
+  ipBstr = fromMaybe empty (NLR.getIFAddr attrs)
+  -- ip = getIPFromByteString addrFamily ipBstr
+  ip = case (getIPFromByteString addrFamily ipBstr) of
+    Right val -> val
+    Left err -> undefined
 
 
 -- TODO handle remove/new event

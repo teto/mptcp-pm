@@ -48,12 +48,8 @@ getIPv4FromByteString val =
 
 getIPFromByteString :: NLC.AddressFamily -> ByteString -> Either String IP
 getIPFromByteString addrFamily ipBstr
-  | addrFamily == eAF_INET = case  getIPv4FromByteString ipBstr of
-                                Right ip -> Right $ fromIPv4 ip
-                                Left m -> Left m
-  | addrFamily == eAF_INET6 = case  getIPv6FromByteString ipBstr of
-                                Right ip -> Right $ fromIPv6 ip
-                                x -> x
+  | addrFamily == eAF_INET = fromIPv4 <$> getIPv4FromByteString ipBstr
+  | addrFamily == eAF_INET6 = fromIPv6 <$> getIPv6FromByteString ipBstr
   | otherwise = error $ "unsupported addrFamily " ++ show addrFamily
 
         -- fromIPv6 $ Right getIPv6FromByteString ipBstr
