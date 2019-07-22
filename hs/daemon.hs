@@ -130,7 +130,8 @@ globalMetricsSock = unsafePerformIO newEmptyMVar
 {-# NOINLINE globalInterfaces #-}
 -- TODO Map search in a list
 -- IP , Interface
-globalInterfaces :: MVar (Map.Map Word32 PathManagerInterface)
+-- globalInterfaces :: MVar (Map.Map Word32 PathManagerInterface)
+globalInterfaces :: MVar (Map.Map IP PathManagerInterface)
 globalInterfaces = unsafePerformIO newEmptyMVar
 
 
@@ -503,6 +504,7 @@ queryAddrs = NL.Packet
 
 
 -- basically a retranscription of NLR.NAddrMsg
+-- or SystemInterface ?
 data PathManagerInterface = PathManagerInterface {
   address :: IP,
   interfaceId :: Word32 -- ^ refers to addrInterfaceIndex
@@ -514,28 +516,58 @@ data PathManagerInterface = PathManagerInterface {
 
 -- TODO we should store this
 -- really only interested in NAddrMsg
-handleMessage :: NLR.Message -> IO ()
-handleMessage (NLR.NLinkMsg _ _ _ ) = putStrLn "Ignoring NLinkMsg" 
-handleMessage (NLR.NNeighMsg _ _ _ _ _ ) = putStrLn $ "Ignoring NNeighMsg"
+-- handleMessage :: NLR.Message -> IO ()
+-- handleMessage (NLR.NLinkMsg _ _ _ ) = putStrLn "Ignoring NLinkMsg"
+-- handleMessage (NLR.NNeighMsg _ _ _ _ _ ) = putStrLn $ "Ignoring NNeighMsg"
 -- lol here we need to update the list of interfaces
-handleMessage (NLR.NAddrMsg family maskLen flags scope addrIntf) = do
-  infs <- takeMVar globalInterfaces
-  -- TODO update w
-  -- newInfs = infs
+-- handleMessage (NLR.NAddrMsg family maskLen flags scope addrIntf) = do
+--   infs <- takeMVar globalInterfaces
+--   -- TODO update w
+--   -- newInfs = infs
 
-  -- decode
-  let newInf = PathManagerInterface (IP ) addrIntf
-  let newInfs = Map.insert addrIntf infs
-  putMVar globalInterfaces newInfs
+--   -- decode/getIFAddr
+--   let newInf = PathManagerInterface (IP ) addrIntf
+--   let newInfs = Map.insert addrIntf infs
+--   putMVar globalInterfaces newInfs
+
+
+handleInterfaceNotification :: Attributes -> Word32 -> PathManagerInterface
+handleInterfaceNotification ip addrIntf =
+  PathManagerInterface ip addrIntf
+  where
+    ip = undefined
+
 
 -- TODO handle remove/new event
 handleAddr :: Either String NLR.RoutePacket -> IO ()
 handleAddr (Left errStr) = putStrLn $ "Error decoding packet: " ++ errStr
 handleAddr (Right (DoneMsg hdr)) = putStrLn $ "Error decoding packet: " ++ show hdr
 handleAddr (Right (ErrorMsg hdr errorInt errorBstr )) = putStrLn $ "Error decoding packet: " ++ show hdr
-handleAddr (Right (Packet hdr pkt _)) = handleMessage pkt
+-- TODO need handleMessage pkt
+-- family maskLen flags scope addrIntf
+handleAddr (Right (Packet hdr pkt attrs)) =
+  do
+    oldIntfs <- takeMVar globalInterfaces
+    putMVar globalInterfaces (case pkt of
+      (arg@NLR.NAddrMsg{}) -> let 
+        newIntf = handleInterfaceNotification attrs (NLR.addrInterfaceIndex arg)
+        msgType =  messageType hdr 
+        in case msgType of
+          (NLC.eRTM_NEWADDR) -> Map.insert ip newIntf oldIntfs
+          -- eRTM_GETADDR ->    
+          eRTM_DELADDR -> Map.delete (ip) oldIntfs
 
---
+      -- _ -> error "can't be anything else"
+      _ -> oldIntfs)
+    -- putMVar globalInterfaces newIntfs
+  where
+      -- gets the bytestring
+      ipBstr = NLR.getIFAddr attrs
+      ip = fromIPv4 localhost
+
+-- (arg@DiagTcpInfo{})
+
+
 onNewConnection :: MptcpSocket -> Attributes -> IO ()
 onNewConnection sock attributes = do
     -- TODO use getAttribute instead
