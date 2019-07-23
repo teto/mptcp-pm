@@ -49,7 +49,7 @@ Useful functions in Map
 -- !nix-shell ../shell-haskell.nix -i ghc
 module Main where
 
-import Prelude hiding (concat)
+import Prelude hiding (concat, init)
 import Options.Applicative hiding (value, ErrorMsg, empty)
 import qualified Options.Applicative (value)
 
@@ -57,6 +57,7 @@ import qualified Options.Applicative (value)
 import Generated
 import Net.SockDiag
 import Net.Mptcp
+import Net.Mptcp.PathManager
 import Net.Tcp
 import Net.IP
 import Net.IPv4 hiding (print)
@@ -89,6 +90,8 @@ import Data.Serialize.Put
 -- import Data.Either (fromRight)
 import Data.ByteString (ByteString, empty)
 import Data.ByteString.Lazy (writeFile)
+import Data.ByteString.Char8 (unpack, init)
+
 -- import qualified Data.ByteString.Char8 as BSC
 import qualified Data.Map as Map
 
@@ -111,6 +114,7 @@ import Data.Aeson
 -- for getEnvDefault
 import System.Environment.Blank()
 
+
 -- for writeUTF8File
 -- import Distribution.Simple.Utils
 -- import Distribution.Utils.Generic
@@ -131,8 +135,8 @@ globalMetricsSock = unsafePerformIO newEmptyMVar
 {-# NOINLINE globalInterfaces #-}
 -- TODO Map search in a list
 -- IP , Interface
--- globalInterfaces :: MVar (Map.Map Word32 PathManagerInterface)
-globalInterfaces :: MVar (Map.Map IP PathManagerInterface)
+-- globalInterfaces :: MVar (Map.Map Word32 NetworkInterface)
+globalInterfaces :: MVar (Map.Map IP NetworkInterface)
 globalInterfaces = unsafePerformIO newEmptyMVar
 
 iperfClientPort :: Word16
@@ -143,6 +147,16 @@ iperfServerPort = 5201
 
 monitoringRateMs :: Int
 monitoringRateMs = 100
+
+-- should be able to ignore based on regex
+interfacesToIgnore :: [String]
+interfacesToIgnore = [
+  "virbr0"
+  , "virbr1"
+  , "nlmon0"
+  , "ppp0"
+  , "lo"
+  ]
 
 
 data MyState = MyState {
@@ -214,9 +228,12 @@ data Sample = Sample {
 dumpSystemInterfaces :: IO()
 dumpSystemInterfaces = do
   putStrLn "Dumping interfaces"
-  interfaces <- readMVar globalInterfaces
-  -- TODO dump a map
-  putStrLn $ show interfaces
+  -- isEmptyMVar globalInterfaces
+  res <- tryReadMVar globalInterfaces 
+  case (res) of
+    Nothing -> putStrLn "No interfaces"
+    Just interfaces -> putStrLn $ show interfaces
+
   putStrLn "End of dump"
 
 
@@ -513,9 +530,12 @@ queryAddrs = NL.Packet
 
 -- basically a retranscription of NLR.NAddrMsg
 -- or SystemInterface ?
-data PathManagerInterface = PathManagerInterface {
-  address :: IP,
-  interfaceId :: Word32 -- ^ refers to addrInterfaceIndex
+-- TODO add ifname ? flags ?
+-- Rename to NetworkInterface / System ?
+data NetworkInterface = NetworkInterface {
+  ipAddress :: IP,
+  interfaceName :: String,  -- ^ eth0 / ppp0
+  interfaceId :: Word32  -- ^ refers to addrInterfaceIndex
 } deriving Show
 
 
@@ -534,7 +554,7 @@ data PathManagerInterface = PathManagerInterface {
 --   -- newInfs = infs
 
 --   -- decode/getIFAddr
---   let newInf = PathManagerInterface (IP ) addrIntf
+--   let newInf = NetworkInterface (IP ) addrIntf
 --   let newInfs = Map.insert addrIntf infs
 --   putMVar globalInterfaces newInfs
 
@@ -542,22 +562,35 @@ data PathManagerInterface = PathManagerInterface {
 
 -- TODO we should use the 
 handleInterfaceNotification
-  :: AddressFamily -> Attributes -> Word32 -> PathManagerInterface
+  :: AddressFamily -> Attributes -> Word32 -> Maybe NetworkInterface
 handleInterfaceNotification addrFamily attrs addrIntf =
 
   -- case of
   --   Nothing -> Nothing
   --   Just val -> 
-    trace "building interface" PathManagerInterface ip addrIntf
- where
+  -- TODO
+  -- filter on flags too (UP), should be != LOOPBACK
+  -- lo: <LOOPBACK,UP,LOWER_UP> and
+  -- eno1: <BROADCAST,MULTICAST,UP,LOWER_UP
+  case ifNameM of
+    Nothing -> Nothing
+    Just ifName -> case (elem ifName interfacesToIgnore ) of
+                        True -> Nothing
+                        False -> Just $ NetworkInterface ip ifName addrIntf
+  where
     -- ip = undefined
     -- gets the bytestring / assume it always work
   ipBstr = fromMaybe empty (NLR.getIFAddr attrs)
+  ifNameBstr = (Map.lookup NLC.eIFLA_IFNAME attrs)
+  ifNameM = getString <$> ifNameBstr
   -- ip = getIPFromByteString addrFamily ipBstr
   ip = case (getIPFromByteString addrFamily ipBstr) of
     Right val -> val
     Left err -> undefined
 
+-- taken from netlink
+getString :: ByteString -> String
+getString b = unpack (init b)
 
 -- TODO handle remove/new event
 handleAddr :: Either String NLR.RoutePacket -> IO ()
@@ -569,40 +602,40 @@ handleAddr (Right (ErrorMsg hdr errorInt errorBstr)) =
 -- TODO need handleMessage pkt
 -- family maskLen flags scope addrIntf
 handleAddr (Right (Packet hdr pkt attrs)) = do
-  trace "HELLO" putStrLn $ "received packet"
-  oldIntfs <- takeMVar globalInterfaces
-  putMVar
-    globalInterfaces
-    (case pkt of
-      (arg@NLR.NAddrMsg{}) ->
-        let newIntf = handleInterfaceNotification
-              (NLR.addrFamily arg)
-              attrs
-              (NLR.addrInterfaceIndex arg)
-            msgType = messageType hdr
-        in  if msgType == eRTM_NEWADDR
-              then trace "adding ip" Map.insert ip newIntf oldIntfs
-              -- >> putStrLn "Added interface"
-              else if msgType == eRTM_GETADDR
-                then trace "oldIntfs" oldIntfs
+  (putStrLn $ "received packet" ++ show pkt)
+  oldIntfs <- trace "taking MVAR" (takeMVar globalInterfaces)
 
-                else if msgType == eRTM_DELADDR
-                  then
-                      trace "deleting ip" Map.delete (ip) oldIntfs
-                      -- >> putStrLn "Removed interface"
-                  else oldIntfs
+  let toto = (case pkt of
+        arg@NLR.NAddrMsg{} ->
+          let resIntf = handleInterfaceNotification (NLR.addrFamily arg) attrs (NLR.addrInterfaceIndex arg)
+          in case resIntf of 
+                Nothing -> oldIntfs
+                Just newIntf -> let
+                  ip = ipAddress newIntf
+                  in if msgType == eRTM_NEWADDR
+                        then trace "adding ip" (Map.insert ip newIntf oldIntfs)
+                        -- >> putStrLn "Added interface"
+                        else if msgType == eRTM_GETADDR
+                        then trace "GET_ADDR" oldIntfs
 
-      -- _ -> error "can't be anything else"
-      (arg@NLR.NNeighMsg{}) -> trace "neighbor msg" oldIntfs
-      (arg@NLR.NLinkMsg{}) -> trace "link msg" oldIntfs
-      -- _ -> oldIntfs
-    )
-    -- putMVar globalInterfaces newIntfs
+                        else if msgType == eRTM_DELADDR
+                        then
+                        trace "deleting ip" (Map.delete (ip) oldIntfs)
+                        -- >> putStrLn "Removed interface"
+                        else trace "other type" oldIntfs
+
+        -- _ -> error "can't be anything else"
+        arg@NLR.NNeighMsg{} -> trace "neighbor msg" oldIntfs
+        arg@NLR.NLinkMsg{} -> trace "link msg" oldIntfs
+        )
+  -- case toto of
+  --     Nothing -> oldIntfs
+      -- Just val ->
+  trace ("putting mvar") (putMVar globalInterfaces $! (toto))
 
  where
-      -- gets the bytestring
-  ipBstr = NLR.getIFAddr attrs
-  ip     = fromIPv4 localhost
+    -- gets the bytestring
+    msgType = messageType hdr
 
 -- (arg@DiagTcpInfo{})
 
@@ -632,11 +665,6 @@ onNewConnection sock attributes = do
           putStrLn "Finished resetting"
       _ -> onNewConnection sock attributes
     return ()
-
-
--- |Class to implement different path managers
--- class PathManager a where
---     onNewSubflow :: TcpConnection -> [MptcpPacket]
 
 
 -- unknownConnectionEvent :: M
@@ -737,6 +765,11 @@ dispatchPacket oldState (Packet hdr (GenlData genlHeader NoData) attributes) = l
                                 newConn <- newMVar newMptcpConn
                                 putStrLn $ "Connection established !!\n" ++ showAttributes attributes
                                 -- onNewConnection mptcpSock attributes
+
+                                -- open additionnal subflows
+                                onNewEstablishement newConn
+
+                                -- start monitoring connection
                                 handle <- forkOS (startMonitorConnection mptcpSock newConn)
                                 -- r <- createProces $ startMonitor token
                                 -- putStrLn $ "Connection created !!\n" ++ show subflow

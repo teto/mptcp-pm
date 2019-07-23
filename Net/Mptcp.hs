@@ -415,7 +415,8 @@ subflowAttrs con = [
             , SubflowFamily $ eAF_INET  -- inetFamily con
             , SubflowDestAddress $ dstIp con
             , SubflowDestPort $ dstPort con
-            , SubflowInterface $ getInterfaceIdFromIP $ srcIp con
+            -- should fail if doesn't exist
+            , SubflowInterface $ fromJust $ subflowInterface con
             -- https://github.com/multipath-tcp/mptcp/issues/338
             , SubflowSourceAddress $ srcIp con
             ]

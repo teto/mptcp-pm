@@ -33,14 +33,6 @@ getInterfaceIdFromIP :: IP -> Word32
 getInterfaceIdFromIP ip =
   1
 
--- then I could do encode myIP
--- instance Convertable IP where
---   getPut =  putIPAddress
---   getGet _ = getIPAddress
-
--- TODO I could use Serialize for IP instead
--- instance Serialize IP where
-
 getIPv4FromByteString :: ByteString -> Either String IPv4
 getIPv4FromByteString val =
   runGet (Net.IPv4.fromOctets <$> getWord8 <*> getWord8 <*> getWord8 <*> getWord8) val
@@ -52,35 +44,13 @@ getIPFromByteString addrFamily ipBstr
   | addrFamily == eAF_INET6 = fromIPv6 <$> getIPv6FromByteString ipBstr
   | otherwise = error $ "unsupported addrFamily " ++ show addrFamily
 
-        -- fromIPv6 $ Right getIPv6FromByteString ipBstr
-
--- 
--- getIPv4FromByteStringUnsafe ::
--- getIPv4FromByteStringUnsafe = 
-  
 
 getIPv6FromByteString :: ByteString -> Either String IPv6
 getIPv6FromByteString bs =
-  -- returns a list to me
-  -- <$> replicateM 16 (getWord8) in
-  -- TODO check ?
   let
     val = Net.IPv6.fromWord32s <$> getWord32be <*> getWord32be <*> getWord32be <*> getWord32be
   in
     runGet val bs
-
--- TODO pass the type ?
--- getIPAddressFromByteString :: ByteString -> Maybe IP
--- getIPAddressFromByteString bstr =
---   let
---     -- val = (fromOctets <$> getWord8 <*> getWord8 <*> getWord8 <*> getWord8)
---     -- probably could use Word32 instead ?
---   in
---   case runGet val bstr  of
---     Left err -> error "maybe it was an ipv6"
---     Right ip -> Just $ fromIPv4 ip
-    --
-    -- fromIPv6 c
 
 
 -- big endian for IDiag
@@ -108,14 +78,8 @@ putIPv4Address :: IPv4 -> Put
 putIPv4Address addr =
     let
       w32 = getIPv4 addr
-      -- (ip1, ip2, ip3, ip4) = toOctets $ addr
     in do
       putWord32be w32
-      -- mapM_ putWord8 t
-      -- putWord8 ip1
-      -- putWord8 ip2
-      -- putWord8 ip3
-      -- putWord8 ip4
       replicateM_ 3 (putWord32be 0)
 
 
