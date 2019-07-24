@@ -51,28 +51,7 @@ data MptcpSocket = MptcpSocket NetlinkSocket Word16
 instance Show MptcpSocket where
   show sock = let (MptcpSocket nlSock fid) = sock in ("Mptcp netlink socket: " ++ show fid)
 
--- isIPv4address
--- |Data to hold subflows information
--- use http://hackage.haskell.org/package/data-default-0.5.3/docs/Data-Default.html
--- data default to provide default values
-
--- prevents hie from working correctly ?!
--- instance Default TcpConnection where
---   def = TcpConnection {
---         srcIp = fromIPv4 Net.IPv4.localhost
---         , dstIp = fromIPv4 Net.IPv4.localhost
---         , srcPort = 0
---         , dstPort = 0
---         , priority = Nothing
---         , localId = 0
---         , remoteId = 0
---         , inetFamily  = eAF_INET
---         , subflowInterface = Nothing
---       }
-
-
 type MptcpPacket = GenlPacket NoData
-
 
 data SubflowWithMetrics = SubflowWithMetrics {
   subflowSubflow :: TcpConnection
@@ -407,6 +386,7 @@ resetConnectionPkt (MptcpSocket sock fid) attrs = let
 
 
 -- TODO map an IP to an interface
+-- pass token ?
 subflowAttrs :: TcpConnection -> [MptcpAttribute]
 subflowAttrs con = [
             LocalLocatorId $ localId con
@@ -421,8 +401,11 @@ subflowAttrs con = [
             , SubflowSourceAddress $ srcIp con
             ]
 
+-- mptcpConnectionAttrs :: MptcpConnection 
+-- mptcpConnectionAttrs 
 
 -- TODO pass a TcpConnection instead ?
+-- should be a set in fact [MptcpAttribute]
 capCwndAttrs :: MptcpToken -> TcpConnection -> Word32 -> [MptcpAttribute]
 capCwndAttrs token sf cwnd = let
   capSubflowAttrs = [
@@ -443,6 +426,7 @@ capCwndPkt (MptcpSocket sock fid) attrs =
 -- sport/backup/intf are optional
 -- family /loc id/remid/daddr/dport
 -- TODO pass new subflow ?
+-- should get rid of MptcpSocket
 newSubflowPkt :: MptcpSocket -> [MptcpAttribute] -> MptcpPacket
 newSubflowPkt (MptcpSocket sock fid) attrs = let
     cmd = MPTCP_CMD_SUB_CREATE

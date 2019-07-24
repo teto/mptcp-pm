@@ -46,7 +46,8 @@ common shared-properties
     Build-tools:       hsc2hs, c2hs
     -- apparently this just helps getting a better error messages
     Includes:          tcp_states.h, linux/sock_diag.h, linux/inet_diag.h
-    Other-modules:     Net.SockDiag, Net.Tcp, Net.Mptcp, Net.IPAddress, Generated
+    Other-modules:     Net.SockDiag, Net.Tcp, Net.Mptcp, Net.IPAddress,
+      Net.Mptcp.PathManager, Generated
     -- TODO try to pass it from CLI instead , Net.TcpInfo
     include-dirs:     headers
     -- , Net.TcpInfo

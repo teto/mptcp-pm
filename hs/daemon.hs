@@ -136,7 +136,7 @@ globalMetricsSock = unsafePerformIO newEmptyMVar
 -- TODO Map search in a list
 -- IP , Interface
 -- globalInterfaces :: MVar (Map.Map Word32 NetworkInterface)
-globalInterfaces :: MVar (Map.Map IP NetworkInterface)
+globalInterfaces :: MVar (AvailablePaths)
 globalInterfaces = unsafePerformIO newEmptyMVar
 
 iperfClientPort :: Word16
@@ -158,6 +158,9 @@ interfacesToIgnore = [
   , "lo"
   ]
 
+-- the path manager used in the 
+pathManager :: PathManager
+pathManager = ndiffports
 
 data MyState = MyState {
   socket :: MptcpSocket -- ^Socket
@@ -528,17 +531,6 @@ queryAddrs = NL.Packet
     mempty
 
 
--- basically a retranscription of NLR.NAddrMsg
--- or SystemInterface ?
--- TODO add ifname ? flags ?
--- Rename to NetworkInterface / System ?
-data NetworkInterface = NetworkInterface {
-  ipAddress :: IP,
-  interfaceName :: String,  -- ^ eth0 / ppp0
-  interfaceId :: Word32  -- ^ refers to addrInterfaceIndex
-} deriving Show
-
-
 -- TODO show host interfaces
 -- dumpInterfaces
 
@@ -670,6 +662,7 @@ onNewConnection sock attributes = do
 -- unknownConnectionEvent :: M
 -- unknownConnectionMonitor :: MptcpToken -> MptcpPacket
 -- pass [MptcpAttribute] instead ?
+-- TODO here we should pass a path manager
 dispatchPacketForKnownConnection :: MptcpConnection
                                     -> MptcpGenlEvent
                                     -> Attributes
@@ -714,6 +707,7 @@ dispatchPacketForKnownConnection con event attributes = let
       MPTCP_EVENT_SUB_ESTABLISHED -> let
             subflow = subflowFromAttributes attributes
             newCon = mptcpConnAddSubflow con subflow
+
             in
                 newCon
         -- let newState = oldState
@@ -767,7 +761,7 @@ dispatchPacket oldState (Packet hdr (GenlData genlHeader NoData) attributes) = l
                                 -- onNewConnection mptcpSock attributes
 
                                 -- open additionnal subflows
-                                onNewEstablishement newConn
+                                (onMasterEstablishement pm) newConn
 
                                 -- start monitoring connection
                                 handle <- forkOS (startMonitorConnection mptcpSock newConn)
