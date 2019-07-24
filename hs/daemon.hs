@@ -358,6 +358,7 @@ updateSubflowMetrics subflow = do
 --token, family, loc_id, rem_id, [saddr4 | saddr6,
 -- daddr4 | daddr6, dport [, sport, backup, if_idx]]
 
+-- TODO fix interface/ ocmpletely broken
 genCapCwnd :: MptcpToken
               -> Word16 -- ^family id
               -> MptcpPacket
@@ -369,6 +370,7 @@ genCapCwnd token familyId =
         attrs = [
             MptcpAttrToken token
             , SubflowFamily eAF_INET
+            -- TODO
             , LocalLocatorId 0
             -- TODO check emote locator ?
             , RemoteLocatorId 0
@@ -376,6 +378,7 @@ genCapCwnd token familyId =
             , SubflowInterface $ getInterfaceIdFromIP (fromIPv4 localhost)
             ]
     -- putStrLn "while waiting for a real implementation"
+
 
 -- Use a Mvar here to
 startMonitorConnection :: MptcpSocket -> MVar MptcpConnection -> IO ()
@@ -735,6 +738,7 @@ dispatchPacket :: MyState -> MptcpPacket -> IO MyState
 dispatchPacket oldState (Packet hdr (GenlData genlHeader NoData) attributes) = let
         cmd = toEnum $ fromIntegral $ genlCmd genlHeader
         (MyState mptcpSock conns) = oldState
+        (MptcpSocket mptcpSockRaw fid) = mptcpSock
 
         -- i suppose token is always available right ?
         token = readToken $ Map.lookup (fromEnum MPTCP_ATTR_TOKEN) attributes
@@ -761,7 +765,11 @@ dispatchPacket oldState (Packet hdr (GenlData genlHeader NoData) attributes) = l
                                 -- onNewConnection mptcpSock attributes
 
                                 -- open additionnal subflows
-                                (onMasterEstablishement pm) newConn
+                                availablePaths <- readMVar globalInterfaces
+                                let pkts = (onMasterEstablishement pathManager) mptcpSock newMptcpConn availablePaths
+
+                                -- requests for
+                                mapM_ (sendPacket $ mptcpSockRaw) pkts
 
                                 -- start monitoring connection
                                 handle <- forkOS (startMonitorConnection mptcpSock newConn)

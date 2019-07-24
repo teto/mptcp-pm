@@ -100,7 +100,7 @@ in
     echo "to regenerate C bindings"
     echo "make headers_install in the linux kernel"
     echo "cabal clean"
-    echo "cabal configure --package-db /home/teto/netlink-hs/dist/package.conf.inplace --extra-include-dirs=/home/teto/mptcp2/build/usr/include -v3"
+    echo "cabal configure --package-db /home/teto/netlink-hs/dist/package.conf.inplace --extra-include-dirs=/home/teto/mptcp/build/usr/include -v3"
 
     echo "to run the daemon "
     echo "buildNrun"

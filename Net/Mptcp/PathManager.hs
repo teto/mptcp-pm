@@ -18,6 +18,8 @@ The default should deal
 module Net.Mptcp.PathManager (
     PathManager (..)
     , NetworkInterface(..)
+    , AvailablePaths
+    , ndiffports
 ) where
 
 
