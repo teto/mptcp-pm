@@ -768,6 +768,7 @@ dispatchPacket oldState (Packet hdr (GenlData genlHeader NoData) attributes) = l
                                 availablePaths <- readMVar globalInterfaces
                                 let pkts = (onMasterEstablishement pathManager) mptcpSock newMptcpConn availablePaths
 
+                                putStrLn "List of requests made on new master:"
                                 -- requests for
                                 mapM_ (sendPacket $ mptcpSockRaw) pkts
 
@@ -904,7 +905,7 @@ dumpExtensionAttribute attrId value = let
         ext_m = loadExtension attrId value
     in
         case ext_m of
-            Nothing -> "Could not load " ++ show eExtId ++ " \n"
+            Nothing -> "Could not load " ++ show eExtId ++ " (unsupported)\n"
             Just ext -> traceId (show eExtId) ++ " " ++ showExtension ext ++ " \n"
     -- show $ (toEnum attrId :: IDiagExt)
 
@@ -946,6 +947,7 @@ trackSystemInterfaces = do
   let cb = NLS.NLCallback (pure ()) (handleAddr . runGet getGenPacket)
   NLS.nlPostMessage routingSock queryAddrs cb
   NLS.nlWaitCurrent routingSock
+  dumpSystemInterfaces
 
 
 -- la en fait c des reponses que j'obtiens ?
@@ -987,14 +989,14 @@ main = do
   putMVar globalInterfaces Map.empty
   routeNl <- forkIO trackSystemInterfaces
 
-  dumpSystemInterfaces 
+  -- dumpSystemInterfaces 
+
   -- check routing information
   -- routingSock <- NLS.makeNLHandle (const $ pure ()) =<< NL.makeSocket
   -- let cb = NLS.NLCallback (pure ()) (handleAddr . runGet getGenPacket)
   -- NLS.nlPostMessage routingSock queryAddrs cb
   -- NLS.nlWaitCurrent routingSock
 
-  return ()
   putStr "socket created. MPTCP Family id " >> Prelude.print fid
   -- putStr "socket created. tcp_metrics Family id " >> print fidMetrics
   -- That's what I should use in fact !! (Word16, [CtrlAttrMcastGroup])

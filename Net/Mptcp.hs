@@ -287,7 +287,8 @@ subflowFromAttributes attrs =
     sfFamily = getPort $ fromJust (Map.lookup (fromEnum MPTCP_ATTR_FAMILY) attrs)
     prio = Nothing   -- (SubflowPriority N)
   in
-    TcpConnection _srcIp _dstIp sport dport prio lid rid eAF_INET (Just intfId)
+    -- TODO fix sfFamily
+    TcpConnection _srcIp _dstIp sport dport prio lid rid sfFamily (Just intfId)
 
 -- makeSubflowFromAttributes ::
 
@@ -369,6 +370,7 @@ isAttribute :: MptcpAttribute -- ^ to compare with
                -> Bool
 isAttribute ref toCompare = fst (attrToPair toCompare) == fst (attrToPair ref)
 
+-- create a fake LocalLocatorId
 hasLocAddr :: [MptcpAttribute] -> Bool
 hasLocAddr attrs = Prelude.any (isAttribute (LocalLocatorId 0)) attrs
 

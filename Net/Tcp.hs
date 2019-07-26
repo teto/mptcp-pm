@@ -28,7 +28,7 @@ data TcpConnection = TcpConnection {
   , priority :: Maybe Word8 -- ^subflow priority
   , localId :: Word8  -- ^ Convert to AddressFamily
   , remoteId :: Word8
-  , inetFamily :: Word16
+  , inetFamily :: Word16   -- ^ Keep it as address family ?
   , subflowInterface :: Maybe Word32 -- ^Interface of Maybe ?
   -- add TcpMetrics member
 

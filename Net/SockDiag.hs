@@ -23,8 +23,7 @@ module Net.SockDiag (
 -- import Generated
 import Data.Word (Word8, Word16, Word32, Word64)
 
-import Prelude hiding (length, concat)
-import Prelude hiding (length, concat)
+import Prelude hiding (length, concat, init)
 
 import Data.Maybe (fromJust)
 
@@ -44,7 +43,7 @@ import qualified Data.Bits as B
 import Data.Bits ((.|.))
 import qualified Data.Map as Map
 import Data.ByteString ()
-import Data.ByteString.Char8 as C8 (unpack)
+import Data.ByteString.Char8 as C8 (unpack, init)
 import Net.IPAddress
 import Net.IP ()
 -- import Net.IPv4
@@ -373,7 +372,7 @@ getCongInfo = do
     -- bytes = getListOf getWord8
     left <- remaining
     bs <- getByteString left
-    return (CongInfo $ unpack bs)
+    return (CongInfo $ unpack $ init bs)
 
 -- Meminfo <$> getWord32host <*> getWord32host <*> getWord32host <*> getWord32host
 

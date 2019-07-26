@@ -69,14 +69,27 @@ ndiffports = PathManager {
 }
 
 
+-- per interface
+-- (a -> b -> b) -> b -> t a -> b
+genPkt :: MptcpSocket -> MptcpConnection -> NetworkInterface -> [MptcpPacket] -> [MptcpPacket]
+genPkt mptcpSock con intf pkts =
+    pkts ++ [newSubflowPkt mptcpSock newSubflowAttrs]
+    where
+        newSubflowAttrs = [
+                MptcpAttrToken $ connectionToken con
+            ]
+
+
+
+
 {-
   Generate requests
 -}
 nportsOnMasterEstablishement :: MptcpSocket -> MptcpConnection -> AvailablePaths -> [MptcpPacket]
 nportsOnMasterEstablishement mptcpSock con paths = do
   -- foldr :: (a -> b -> b) -> b -> Map k a -> b
-  -- foldr genPkt [] paths
-    []
+  foldr (genPkt mptcpSock con) [] paths
+    -- []
 
   where
     -- genPkt NetworkInterface
