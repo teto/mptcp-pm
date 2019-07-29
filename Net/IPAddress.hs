@@ -83,3 +83,8 @@ putIPv4Address addr =
       replicateM_ 3 (putWord32be 0)
 
 
+getAddressFamily :: IP -> AddressFamily
+getAddressFamily = case_ (const eAF_INET) (const eAF_INET6)
+
+-- isIPv6 :: IP -> Bool
+-- isIPv6 = case_ (const False) (const True)

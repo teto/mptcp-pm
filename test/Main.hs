@@ -41,7 +41,6 @@ iperfConnection = TcpConnection {
         , subflowInterface = Nothing
         , localId = 0
         , remoteId = 0
-        , inetFamily = 2
     }
 
 modifiedConnection = iperfConnection {

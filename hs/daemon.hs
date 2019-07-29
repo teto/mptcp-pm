@@ -94,6 +94,7 @@ import Data.ByteString.Char8 (unpack, init)
 
 -- import qualified Data.ByteString.Char8 as BSC
 import qualified Data.Map as Map
+import qualified Data.Set as Set
 
 import Data.Bits (Bits(..))
 
@@ -182,7 +183,6 @@ authorizedCon1 = TcpConnection {
         , subflowInterface = Nothing
         , localId = 0
         , remoteId = 0
-        , inetFamily = eAF_INET
     }
 
 filteredConnections :: [TcpConnection]
@@ -393,29 +393,11 @@ startMonitorConnection mptcpSock mConn = do
     putStrLn $ show con ++ "..."
     let token = connectionToken con
 
+    -- let resetAttrs = [ (MptcpAttrToken token ), (LocalLocatorId 0)]
+    -- let resetPkt = resetConnectionPkt mptcpSock resetAttrs
 
-    let resetAttrs = [ (MptcpAttrToken token ), (LocalLocatorId 0)]
+    -- TODO this is the issue
     let masterSf = head $ subflows con
-    let newSubflowAttrs = [
-            MptcpAttrToken token
-            ] ++ (subflowAttrs $ masterSf { srcPort = 0 })
-    let capSubflowAttrs = [
-            MptcpAttrToken token
-            , SubflowMaxCwnd 3
-            , SubflowSourcePort $ srcPort masterSf
-            ] ++ (subflowAttrs masterSf)
-    let resetPkt = resetConnectionPkt mptcpSock resetAttrs
-    let newSfPkt = newSubflowPkt mptcpSock newSubflowAttrs
-    -- let capCwndPkt = capCwndPkt mptcpSock capSubflowAttrs
-
-    -- updateCwndCap
-    -- queryOne
-    -- putStrLn $ "Sending RESET for token " ++ show token
-    -- query sock resetPkt >>= inspectAnswers
-
-    -- putStrLn $ "Master sf " ++ show masterSf
-    -- putStrLn $ "Trying to cap subflow cwd... with token " ++ show token
-    -- putStrLn $ "Sending " ++ show capCwndPkt
 
     -- putStrLn $ "Master sf " ++ show masterSf
     -- putStrLn $ "Trying to create new subflow... with token " ++ show token
@@ -426,15 +408,14 @@ startMonitorConnection mptcpSock mConn = do
     cwnds <- getCapsForConnection con
 
     putStrLn $ "Requesting to set cwnds..." ++ show cwnds
-    -- TODO capCwndAttrs capCwndPkt
+    -- TODO fix
     -- KISS for now (capCwndPkt mptcpSock )
-    -- zip caps (subflows con)
-    let attrsList = map (\(cwnd, sf) -> capCwndAttrs token sf cwnd ) (zip cwnds (subflows con))
+    let cwndPackets  = map (\(cwnd, sf) -> capCwndPkt mptcpSock con cwnd sf ) (zip cwnds (subflows con))
     -- >> map (capCwndPkt mptcpSock ) >>= putStrLn "toto"
 
     -- query sock capCwndPkt >>= inspectAnswers
     -- de type [MptcpPacket]
-    let cwndPackets = map (capCwndPkt mptcpSock) attrsList
+    -- let cwndPackets = map (capCwndPkt mptcpSock) attrsList
     mapM_ (query sock) cwndPackets >> putStrLn "test"
          -- >>= inspectAnswers
 
@@ -759,7 +740,11 @@ dispatchPacket oldState (Packet hdr (GenlData genlHeader NoData) attributes) = l
                             putStrLn $ "it was compared with " ++ show authorizedCon1
                             return oldState
                         else (do
-                                let newMptcpConn = MptcpConnection token [ subflow ] [] []
+                                let newMptcpConn = mptcpConnAddSubflow
+                                                      (MptcpConnection token [] Set.empty Set.empty)
+                                                      subflow
+
+
                                 newConn <- newMVar newMptcpConn
                                 putStrLn $ "Connection established !!\n" ++ showAttributes attributes
                                 -- onNewConnection mptcpSock attributes
@@ -989,7 +974,7 @@ main = do
   putMVar globalInterfaces Map.empty
   routeNl <- forkIO trackSystemInterfaces
 
-  -- dumpSystemInterfaces 
+  -- dumpSystemInterfaces
 
   -- check routing information
   -- routingSock <- NLS.makeNLHandle (const $ pure ()) =<< NL.makeSocket

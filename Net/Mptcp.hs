@@ -40,6 +40,8 @@ import Net.IPAddress
 import Net.IPv4
 import Net.IPv6
 import Data.Text
+-- import Data.Set ()
+import qualified Data.Set as Set
 -- in package Unique-0.4.7.6
 -- import Data.List.Unique
 import Data.Aeson
@@ -60,12 +62,17 @@ data SubflowWithMetrics = SubflowWithMetrics {
 }
 
 -- |Data to hold MPTCP level information
+-- TODO use Data.Set
 data MptcpConnection = MptcpConnection {
   connectionToken :: MptcpToken
   -- use SubflowWithMetrics instead ?!
   , subflows :: [TcpConnection]
-  , localIds :: [Word8]  -- ^ Announced addresses
-  , remoteIds :: [Word8]  -- ^ Announced addresses
+  -- TODO convert to Data.Set ?
+  -- , localIds :: [Word8]  -- ^ Announced addresses
+  -- , remoteIds :: [Word8]  -- ^ Announced addresses
+
+  , localIds :: Set.Set Word8  -- ^ Announced addresses
+  , remoteIds :: Set.Set Word8   -- ^ Announced addresses
 } deriving (Show, Generic)
 
 
@@ -105,17 +112,19 @@ instance ToJSON SubflowWithMetrics where
     ])
     ]
 
--- TODO add to localIds
+
+-- |Adds a subflow to the connection
+-- use sets instead ?
 mptcpConnAddSubflow :: MptcpConnection -> TcpConnection -> MptcpConnection
 mptcpConnAddSubflow mptcpConn sf =
   mptcpConn {
     subflows = sf : subflows mptcpConn
-    , localIds = localId sf : localIds mptcpConn
-    , remoteIds = remoteId sf : remoteIds mptcpConn
+    , localIds = Set.insert (localId sf) (localIds mptcpConn)
+    , remoteIds = Set.insert (remoteId sf) (remoteIds mptcpConn)
   }
 
 mptcpConnAddLocalId :: MptcpConnection
-                       -> Word8 -- ^ Local id to add
+                       -> Word8 -- ^Local id to add
                        -> MptcpConnection
 mptcpConnAddLocalId con locId = undefined
 
@@ -171,7 +180,7 @@ readLocId maybeVal = case maybeVal of
   Nothing -> error "Missing locator id"
   Just val -> case runGet getWord8 val of
     -- TODO generate an error here !
-    Left _ -> 0
+    Left _ -> error "Could not get locId !!"
     Right locId -> locId
   -- runGet getWord8 val
 
@@ -210,7 +219,7 @@ data MptcpAttributes = MptcpAttributes {
 data MptcpAttribute =
     MptcpAttrToken MptcpToken |
     -- v4 or v6, AddressFamily is a netlink def
-    SubflowFamily AddressFamily |
+    SubflowFamily AddressFamily | -- ^ should be Word16 too
     -- remote/local ?
     RemoteLocatorId Word8 |
     LocalLocatorId Word8 |
@@ -284,11 +293,11 @@ subflowFromAttributes attrs =
     (LocalLocatorId lid) = fromJust $ makeAttributeFromMaybe MPTCP_ATTR_LOC_ID attrs
     (RemoteLocatorId rid) = fromJust $ makeAttributeFromMaybe MPTCP_ATTR_REM_ID attrs
     (SubflowInterface intfId) = fromJust $ makeAttributeFromMaybe MPTCP_ATTR_IF_IDX attrs
-    sfFamily = getPort $ fromJust (Map.lookup (fromEnum MPTCP_ATTR_FAMILY) attrs)
+    -- sfFamily = getPort $ fromJust (Map.lookup (fromEnum MPTCP_ATTR_FAMILY) attrs)
     prio = Nothing   -- (SubflowPriority N)
   in
     -- TODO fix sfFamily
-    TcpConnection _srcIp _dstIp sport dport prio lid rid sfFamily (Just intfId)
+    TcpConnection _srcIp _dstIp sport dport prio lid rid (Just intfId)
 
 -- makeSubflowFromAttributes ::
 
@@ -332,7 +341,12 @@ makeAttribute :: Int -- ^ MPTCP_ATTR_TOKEN value
 makeAttribute i val =
   case toEnum i of
     MPTCP_ATTR_TOKEN -> Just (MptcpAttrToken $ readToken $ Just val)
-    MPTCP_ATTR_FAMILY -> Just (SubflowFamily $ eAF_INET)
+    -- TODO fix
+    MPTCP_ATTR_FAMILY ->
+        case runGet getWord16host val of
+          -- assert it's eAF_INET or eAF_INET6
+          Right x -> Just $ SubflowFamily (toEnum ( fromIntegral x :: Int))
+          _ -> Nothing
     MPTCP_ATTR_SADDR4 -> SubflowSourceAddress <$> fromIPv4 <$> e2M ( getIPv4FromByteString val)
     MPTCP_ATTR_DADDR4 -> SubflowDestAddress <$> fromIPv4 <$> e2M (getIPv4FromByteString val)
     MPTCP_ATTR_SADDR6 -> SubflowSourceAddress <$> fromIPv6 <$> e2M (getIPv6FromByteString val)
@@ -341,10 +355,10 @@ makeAttribute i val =
     MPTCP_ATTR_DPORT -> SubflowDestPort <$> port where port = e2M $ runGet getWord16host val
     MPTCP_ATTR_LOC_ID -> Just (LocalLocatorId $ readLocId $ Just val )
     MPTCP_ATTR_REM_ID -> Just (RemoteLocatorId $ readLocId $ Just val )
-    MPTCP_ATTR_IF_IDX ->
+    MPTCP_ATTR_IF_IDX -> trace ("if_idx: " ++ show val) (
              case runGet getWord32be val of
                 Right x -> Just $ SubflowInterface x
-                _ -> Nothing
+                _ -> Nothing)
     MPTCP_ATTR_BACKUP -> trace "makeAttribute BACKUP" Nothing
     MPTCP_ATTR_ERROR -> trace "makeAttribute ERROR" Nothing
     MPTCP_ATTR_TIMEOUT -> undefined
@@ -391,47 +405,39 @@ resetConnectionPkt (MptcpSocket sock fid) attrs = let
 -- pass token ?
 subflowAttrs :: TcpConnection -> [MptcpAttribute]
 subflowAttrs con = [
-            LocalLocatorId $ localId con
-            , RemoteLocatorId $ remoteId con
-            -- TODO adapt
-            , SubflowFamily $ eAF_INET  -- inetFamily con
-            , SubflowDestAddress $ dstIp con
-            , SubflowDestPort $ dstPort con
-            -- should fail if doesn't exist
-            , SubflowInterface $ fromJust $ subflowInterface con
-            -- https://github.com/multipath-tcp/mptcp/issues/338
-            , SubflowSourceAddress $ srcIp con
-            ]
+    LocalLocatorId $ localId con
+    , RemoteLocatorId $ remoteId con
+    -- TODO adapt
+    , SubflowFamily $ getAddressFamily (dstIp con)
+    , SubflowDestAddress $ dstIp con
+    , SubflowDestPort $ dstPort con
+    -- should fail if doesn't exist
+    , SubflowInterface $ fromJust $ subflowInterface con
+    -- https://github.com/multipath-tcp/mptcp/issues/338
+    , SubflowSourceAddress $ srcIp con
+  ]
 
--- mptcpConnectionAttrs :: MptcpConnection 
--- mptcpConnectionAttrs 
-
--- TODO pass a TcpConnection instead ?
--- should be a set in fact [MptcpAttribute]
-capCwndAttrs :: MptcpToken -> TcpConnection -> Word32 -> [MptcpAttribute]
-capCwndAttrs token sf cwnd = let
-  capSubflowAttrs = [
-            MptcpAttrToken token
-            , SubflowMaxCwnd cwnd
-            -- This should not be necessary anymore ?
-            , SubflowSourcePort $ srcPort sf
-            ] ++ (subflowAttrs sf)
-  in
-    capSubflowAttrs
-
-capCwndPkt :: MptcpSocket -> [MptcpAttribute] -> MptcpPacket
-capCwndPkt (MptcpSocket sock fid) attrs =
+-- |Generate a request to create a new subflow
+capCwndPkt :: MptcpSocket -> MptcpConnection -> Word32 -> TcpConnection -> MptcpPacket
+capCwndPkt (MptcpSocket sock fid) mptcpCon limit sf =
     assert (hasFamily attrs) pkt
     where
         pkt = genMptcpRequest fid MPTCP_CMD_SND_CLAMP_WINDOW False attrs
+        attrs = connectionAttrs mptcpCon
+              ++ [ SubflowMaxCwnd limit ]
+
+
+connectionAttrs :: MptcpConnection -> [MptcpAttribute]
+connectionAttrs con = [ MptcpAttrToken $ connectionToken con ]
 
 -- sport/backup/intf are optional
 -- family /loc id/remid/daddr/dport
 -- TODO pass new subflow ?
--- should get rid of MptcpSocket
-newSubflowPkt :: MptcpSocket -> [MptcpAttribute] -> MptcpPacket
-newSubflowPkt (MptcpSocket sock fid) attrs = let
+-- should get rid of MptcpSocket  [MptcpAttribute] ->
+newSubflowPkt :: MptcpSocket -> MptcpConnection -> TcpConnection -> MptcpPacket
+newSubflowPkt (MptcpSocket sock fid) mptcpCon sf = let
     cmd = MPTCP_CMD_SUB_CREATE
+    attrs = connectionAttrs mptcpCon ++ subflowAttrs sf
     pkt = genMptcpRequest fid MPTCP_CMD_SUB_CREATE False attrs
   in
     assert (hasFamily attrs) pkt

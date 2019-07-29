@@ -28,6 +28,9 @@ $ cabal configure --package-db /home/teto/netlink-hs/dist/package.conf.inplace -
 ```
 
 
+To compile the doc (and understand why HIE fails displaying anything)
+`cabal haddock --all`
+
 # Usage
 
 Enter the nix-shell shell-test.nix and start the daemon:

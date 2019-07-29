@@ -68,14 +68,14 @@ executable daemon
     hs-source-dirs: ., hs
 
 -- will monitor a specific mptcp connection
-executable monitor
-    import: shared-properties
-    main-is: hs/monitor.hs
+-- executable monitor
+--     import: shared-properties
+--     main-is: hs/monitor.hs
 
 -- for short tests
-executable short
-    import: shared-properties
-    main-is: hs/test.hs
+-- executable short
+--     import: shared-properties
+--     main-is: hs/test.hs
 
 --  MyCustomLibrary
 library

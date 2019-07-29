@@ -111,8 +111,9 @@ wordToEnums  _ = []
 -- defined in include/uapi/linux/inet_diag.h
 -- data InetDiagReq = InetDiagMsg {
 
--- {| This generates a response of inet_diag_msg
--- rename to answer ? |}
+{- | This generates a response of inet_diag_msg
+rename to answer ? 
+-}
 data InetDiagMsg = InetDiagMsg {
   idiag_family :: Word8
   , idiag_state :: Word8

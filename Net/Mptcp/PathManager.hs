@@ -23,6 +23,7 @@ module Net.Mptcp.PathManager (
 ) where
 
 
+import Net.Tcp
 import Net.Mptcp
 import Net.IP
 import Data.Word (Word32)
@@ -72,13 +73,26 @@ ndiffports = PathManager {
 -- per interface
 -- (a -> b -> b) -> b -> t a -> b
 genPkt :: MptcpSocket -> MptcpConnection -> NetworkInterface -> [MptcpPacket] -> [MptcpPacket]
-genPkt mptcpSock con intf pkts =
-    pkts ++ [newSubflowPkt mptcpSock newSubflowAttrs]
+genPkt mptcpSock mptcpCon intf pkts =
+    pkts ++ [newSubflowPkt mptcpSock mptcpCon generatedCon]
     where
-        newSubflowAttrs = [
-                MptcpAttrToken $ connectionToken con
-            ]
+        generatedCon = TcpConnection {
+          srcPort = 0  -- let the kernel handle it
+          , dstPort = dstPort masterSf
+          , srcIp = ipAddress intf
+          , dstIp =  dstIp masterSf  -- same as master
+          , priority = Nothing
+          -- TODO fix this
+          , localId = fromIntegral $ interfaceId intf    -- how to get it ? or do I generate it ?
+          , remoteId = remoteId masterSf
+          , subflowInterface = Just $ interfaceId intf
+        }
 
+        masterSf = head $ subflows mptcpCon
+
+        -- newSubflowAttrs = [
+        --         MptcpAttrToken $ connectionToken con
+        --     ]
 
 
 
@@ -91,10 +105,10 @@ nportsOnMasterEstablishement mptcpSock con paths = do
   foldr (genPkt mptcpSock con) [] paths
     -- []
 
-  where
-    -- genPkt NetworkInterface
-    -- let newSfPkt = newSubflowPkt mptcpSock newSubflowAttrs
-    newSubflowAttrs = [
-          MptcpAttrToken $ connectionToken con
-        ]
+  -- where
+  --   -- genPkt NetworkInterface
+  --   -- let newSfPkt = newSubflowPkt mptcpSock newSubflowAttrs
+  --   newSubflowAttrs = [
+  --         MptcpAttrToken $ connectionToken con
+  --       ]
   -- ++ (subflowAttrs $ masterSf { srcPort = 0 })

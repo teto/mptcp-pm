@@ -28,7 +28,7 @@ data TcpConnection = TcpConnection {
   , priority :: Maybe Word8 -- ^subflow priority
   , localId :: Word8  -- ^ Convert to AddressFamily
   , remoteId :: Word8
-  , inetFamily :: Word16   -- ^ Keep it as address family ?
+  -- TODO remove could be deduced from srcIp / dstIp ?
   , subflowInterface :: Maybe Word32 -- ^Interface of Maybe ?
   -- add TcpMetrics member
 
@@ -50,7 +50,6 @@ reverse con = TcpConnection {
   , localId = remoteId con
   , remoteId = localId con
   , subflowInterface = Nothing
-  , inetFamily = inetFamily con
 }
 
 
