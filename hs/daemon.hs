@@ -105,7 +105,7 @@ import Debug.Trace
 -- import Control.Exception
 
 import Control.Concurrent
-import Control.Exception (assert)
+-- import Control.Exception (assert)
 -- import Control.Concurrent.Chan
 -- import Data.IORef
 -- import Control.Concurrent.Async
@@ -345,11 +345,7 @@ updateSubflowMetrics subflow = do
 
     -- exported from my own version !!
     recvMulti sockMetrics >>= inspectIdiagAnswers
-    -- for now let's discard the answer
-    -- recvOne sockMetrics >>= inspectIdiagAnswers
 
-    -- let capCwndPkt = genCapCwnd familyId
-    -- sendPacket testSock capCwndPkt >> putStrLn "Sent the Cap command"
 
 -- TODO
 -- clude child configs in grub menu #45345
@@ -357,27 +353,6 @@ updateSubflowMetrics subflow = do
 -- TODO we need the token to generate the command ?
 --token, family, loc_id, rem_id, [saddr4 | saddr6,
 -- daddr4 | daddr6, dport [, sport, backup, if_idx]]
-
--- TODO fix interface/ ocmpletely broken
-genCapCwnd :: MptcpToken
-              -> Word16 -- ^family id
-              -> MptcpPacket
-genCapCwnd token familyId =
-    assert (hasFamily attrs) pkt
-    where
-        pkt = genMptcpRequest familyId MPTCP_CMD_SND_CLAMP_WINDOW True attrs
-        -- attrs = Map.empty
-        attrs = [
-            MptcpAttrToken token
-            , SubflowFamily eAF_INET
-            -- TODO
-            , LocalLocatorId 0
-            -- TODO check emote locator ?
-            , RemoteLocatorId 0
-            -- TODO fix
-            , SubflowInterface $ getInterfaceIdFromIP (fromIPv4 localhost)
-            ]
-    -- putStrLn "while waiting for a real implementation"
 
 
 -- Use a Mvar here to

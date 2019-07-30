@@ -29,9 +29,9 @@ import Control.Monad
 -- localhostIntfIdx = 1
 
 -- TODO should consult
-getInterfaceIdFromIP :: IP -> Word32
-getInterfaceIdFromIP ip =
-  1
+-- getInterfaceIdFromIP :: IP -> Word32
+-- getInterfaceIdFromIP ip =
+--   1
 
 getIPv4FromByteString :: ByteString -> Either String IPv4
 getIPv4FromByteString val =
