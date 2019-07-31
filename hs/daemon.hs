@@ -64,7 +64,7 @@ import Net.IPv4 hiding (print)
 import Net.IPAddress
 
 -- for replicateM
--- import Control.Monad
+import Control.Monad (foldM)
 import Data.Maybe (fromMaybe)
 import Data.Foldable ()
 import Foreign.C.Types (CInt)
@@ -163,6 +163,7 @@ interfacesToIgnore = [
 pathManager :: PathManager
 pathManager = ndiffports
 
+-- |Helper to pass information across functions
 data MyState = MyState {
   socket :: MptcpSocket -- ^Socket
   -- ThreadId/MVar
@@ -184,6 +185,9 @@ authorizedCon1 = TcpConnection {
         , localId = 0
         , remoteId = 0
     }
+
+authorizedCon2 :: TcpConnection
+authorizedCon2 = authorizedCon1 { srcIp = fromIPv4 $ Net.IPv4.ipv4 192 168 0 130 }
 
 filteredConnections :: [TcpConnection]
 filteredConnections = [
@@ -245,10 +249,7 @@ dumpSystemInterfaces = do
 --  ( command "add" (info addOptions ( progDesc "Add a file to the repository" ))
  -- <> command "commit" (info commitOptions ( progDesc "Record changes to the repository" ))
 -- can use several constructors depending on the PM ?
--- eitherReader
 -- ByteString
--- <>  ( metavar "ServerIP"
---readerError
 sample :: Parser Sample
 sample = Sample
       <$> argument str
@@ -321,13 +322,6 @@ startMonitorExternalProcess token =
 sleepMs :: Int -> IO()
 sleepMs n = threadDelay (n * 1000)
 
--- Need a specific chan
--- TODO it should start a forkIO that fetches metrics and updates stuff
--- Chan ->
--- readChan is blocking sadly
--- modifyMVar_
-
-
 -- here we may want to run mptcpnumerics to get some results
 updateSubflowMetrics :: TcpConnection -> IO ()
 updateSubflowMetrics subflow = do
@@ -365,19 +359,12 @@ startMonitorConnection mptcpSock mConn = do
     -- for this connection
     -- query metrics for the whole MPTCP connection
     con <- readMVar mConn
+    putStrLn "Showing MPTCP connection"
     putStrLn $ show con ++ "..."
     let token = connectionToken con
 
-    -- let resetAttrs = [ (MptcpAttrToken token ), (LocalLocatorId 0)]
-    -- let resetPkt = resetConnectionPkt mptcpSock resetAttrs
-
     -- TODO this is the issue
     let masterSf = head $ subflows con
-
-    -- putStrLn $ "Master sf " ++ show masterSf
-    -- putStrLn $ "Trying to create new subflow... with token " ++ show token
-    -- putStrLn $ "Sending " ++ show newSfPkt
-    -- query sock newSfPkt >>= inspectAnswers
 
     putStrLn "Running mptcpnumerics"
     cwnds <- getCapsForConnection con
@@ -385,14 +372,11 @@ startMonitorConnection mptcpSock mConn = do
     putStrLn $ "Requesting to set cwnds..." ++ show cwnds
     -- TODO fix
     -- KISS for now (capCwndPkt mptcpSock )
-    let cwndPackets  = map (\(cwnd, sf) -> capCwndPkt mptcpSock con cwnd sf ) (zip cwnds (subflows con))
+    let cwndPackets  = map (\(cwnd, sf) -> capCwndPkt mptcpSock con cwnd sf) (zip cwnds (subflows con))
     -- >> map (capCwndPkt mptcpSock ) >>= putStrLn "toto"
 
     -- query sock capCwndPkt >>= inspectAnswers
-    -- de type [MptcpPacket]
-    -- let cwndPackets = map (capCwndPkt mptcpSock) attrsList
     mapM_ (query sock) cwndPackets >> putStrLn "test"
-         -- >>= inspectAnswers
 
     -- then we should send a request for each cwnd
     mapM_ updateSubflowMetrics (subflows con)
@@ -591,57 +575,20 @@ handleAddr (Right (Packet hdr pkt attrs)) = do
 -- (arg@DiagTcpInfo{})
 
 
-onNewConnection :: MptcpSocket -> Attributes -> IO ()
-onNewConnection sock attributes = do
-    -- TODO use getAttribute instead
-    let token = readToken $ Map.lookup (fromEnum MPTCP_ATTR_TOKEN) attributes
-    let locId = readLocId $ Map.lookup (fromEnum MPTCP_ATTR_LOC_ID) attributes
-    let answer = "e"
-    -- answer <-  Prelude.getLine
-    -- putStrLn "What do you want to do ? (c.reate subflow, d.elete connection, r.eset connection)"
-    -- announceSubflow sock token >>= inspectAnswers >> putStrLn "Finished announcing"
-    case answer of
-      "c" -> do
-        putStrLn "Creating new subflow !!"
-        -- let pkt = createNewSubflow sock token attributes
-        return ()
-      "d" -> putStrLn "Not implemented"
-        -- removeSubflow sock token locId >>= inspectAnswers >> putStrLn "Finished announcing"
-      -- "e" -> putStrLn "check for existence" >>
-      --     checkIfSocketExists sock token >>= inspectAnswers
-      "r" -> putStrLn "Reset the connection" >>
-        -- TODO expects token
-        -- TODO discard result
-          -- resetTheConnection sock token >>= inspectAnswers >>
-          putStrLn "Finished resetting"
-      _ -> onNewConnection sock attributes
-    return ()
-
-
--- unknownConnectionEvent :: M
--- unknownConnectionMonitor :: MptcpToken -> MptcpPacket
--- pass [MptcpAttribute] instead ?
--- TODO here we should pass a path manager
+-- |Deal with events for already registered connections
+-- Warn: MPTCP_EVENT_ESTABLISHED registers a "null" interface
 dispatchPacketForKnownConnection :: MptcpConnection
                                     -> MptcpGenlEvent
                                     -> Attributes
                                     -> MptcpConnection
-                                    -- -> IO MyState
 dispatchPacketForKnownConnection con event attributes = let
         token = connectionToken con
+        subflow = subflowFromAttributes attributes
     in
     case event of
-      -- TODO wait for established instead ?
-      -- MPTCP_EVENT_CREATED -> do
 
       MPTCP_EVENT_ESTABLISHED -> con
-        -- do
-        -- putStrLn "Connection established !"
-        -- TODO llok
-        -- return oldState
-
       MPTCP_EVENT_ANNOUNCED -> con
-
           -- what if it's local
             -- case makeAttributeFromMaybe MPTCP_ATTR_REM_ID attrs of
             --     Nothing -> con
@@ -664,9 +611,7 @@ dispatchPacketForKnownConnection con event attributes = let
         error "should never be called"
 
       MPTCP_EVENT_SUB_ESTABLISHED -> let
-            subflow = subflowFromAttributes attributes
             newCon = mptcpConnAddSubflow con subflow
-
             in
                 newCon
         -- let newState = oldState
@@ -677,15 +622,20 @@ dispatchPacketForKnownConnection con event attributes = let
         -- return newState
 
       -- TODO remove
-      MPTCP_EVENT_SUB_CLOSED -> con
-            -- putStrLn "Subflow closed"
-            -- putStrLn "TODO remove subflow"
-            -- >> mptcpConnRemoveSubflow
-            -- return oldState
+      MPTCP_EVENT_SUB_CLOSED -> let
+              newCon = mptcpConnRemoveSubflow con subflow
+            in
+              newCon
 
       MPTCP_CMD_EXIST -> con
+
       _ -> error $ "should not happen " ++ show event
-      -- >> return oldState
+
+
+acceptConnection :: TcpConnection -> Bool
+-- acceptConnection subflow = subflow `notElem` filteredConnections
+acceptConnection subflow = True
+
 
 -- TODO pass a PathManager
 -- |^
@@ -699,73 +649,81 @@ dispatchPacket oldState (Packet hdr (GenlData genlHeader NoData) attributes) = l
         -- i suppose token is always available right ?
         token = readToken $ Map.lookup (fromEnum MPTCP_ATTR_TOKEN) attributes
         maybeMatch = Map.lookup token (connections oldState)
-    in
+    in do
+        putStrLn $ "dispatch cmd " ++ show cmd ++ " for token " ++ show token
         case maybeMatch of
             -- Unknown token
-            Nothing -> case cmd of
-                MPTCP_EVENT_CREATED -> do
-                    putStrLn "Ignoring Creating EVENT"
-                    return oldState
+            Nothing -> do
 
-                MPTCP_EVENT_ESTABLISHED -> let subflow = subflowFromAttributes attributes
-                    in
-                    if subflow `notElem` filteredConnections
-                        then do
-                            putStrLn $ "filtered out connection" ++ show subflow
-                            putStrLn $ "it was compared with " ++ show authorizedCon1
-                            return oldState
-                        else (do
-                                let newMptcpConn = mptcpConnAddSubflow
-                                                      (MptcpConnection token [] Set.empty Set.empty)
-                                                      subflow
+                putStrLn $ "Unknown token/connection " ++ show token
+                case cmd of
+
+                  MPTCP_EVENT_ESTABLISHED -> do
+                      putStrLn "Ignoring Creating EVENT"
+                      return oldState
+
+                  MPTCP_EVENT_CREATED -> let
+                        subflow = subflowFromAttributes attributes
+                      in
+                      if acceptConnection subflow == False
+                          then do
+                              putStrLn $ "filtered out connection" ++ show subflow
+                              return oldState
+                          else (do
+                                  -- should we add the subflow yet ? it doesn't have the correct interface idx
+                                  -- mptcpConnAddSubflow subflow
+                                  let newMptcpConn = (MptcpConnection token [] Set.empty Set.empty)
 
 
-                                newConn <- newMVar newMptcpConn
-                                putStrLn $ "Connection established !!\n" ++ showAttributes attributes
-                                -- onNewConnection mptcpSock attributes
+                                  newConn <- newMVar newMptcpConn
+                                  putStrLn $ "Connection established !!\n" ++ showAttributes attributes
 
-                                -- open additionnal subflows
-                                availablePaths <- readMVar globalInterfaces
-                                let pkts = (onMasterEstablishement pathManager) mptcpSock newMptcpConn availablePaths
+                                  -- TODO reestablish later on
+                                  -- open additionnal subflows
+                                  -- availablePaths <- readMVar globalInterfaces
+                                  -- let pkts = (onMasterEstablishement pathManager) mptcpSock newMptcpConn availablePaths
 
-                                putStrLn "List of requests made on new master:"
-                                -- requests for
-                                mapM_ (sendPacket $ mptcpSockRaw) pkts
+                                  -- putStrLn "List of requests made on new master:"
+                                  -- mapM_ (sendPacket $ mptcpSockRaw) pkts
 
-                                -- start monitoring connection
-                                handle <- forkOS (startMonitorConnection mptcpSock newConn)
-                                -- r <- createProces $ startMonitor token
-                                -- putStrLn $ "Connection created !!\n" ++ show subflow
-                                let newState = oldState { connections = Map.insert token (handle, newConn) (connections oldState) }
-                                return newState)
+                                  -- start monitoring connection
+                                  threadId <- forkOS (startMonitorConnection mptcpSock newConn)
 
-                _ -> return oldState
+                                  putStrLn $ "Inserting new MVar "
+                                  let newState = oldState {
+                                      connections = Map.insert token (threadId, newConn) (connections oldState)
+                                  }
+                                  return newState)
 
-            Just (threadId, mvarConn) -> case cmd of
+                  _ -> return oldState
 
-                MPTCP_EVENT_CREATED -> error "We should not receive MPTCP_EVENT_CREATED from here !!!"
-                MPTCP_EVENT_SUB_CLOSED -> do
-                    putStrLn $ "SUBFLOW WAS CLOSED"
-                    return oldState
+            Just (threadId, mvarConn) -> do
+                putStrLn $ "MATT: Received request for a known connection "
+                case cmd of
 
-                MPTCP_EVENT_CLOSED -> do
-                    putStrLn $ "Killing thread " ++ show threadId
-                    killThread threadId
-                    -- TODO remove
-                    return $ oldState { connections = Map.delete token (connections oldState) }
-                    -- let newState = oldState
+--                     MPTCP_EVENT_CREATED -> error "We should not receive MPTCP_EVENT_CREATED from here !!!"
+                    MPTCP_EVENT_SUB_CLOSED -> do
+                        putStrLn $ "SUBFLOW WAS CLOSED"
+                        return oldState
 
-            -- TODO update connection
-                -- TODO filter first
-                _ -> do
-                    mptcpConn <- takeMVar mvarConn
-                    let newConn = dispatchPacketForKnownConnection mptcpConn cmd attributes
-                    putMVar mvarConn newConn
-                    -- TODO update state
-                    let newState = oldState {
-                        connections = Map.insert token (threadId, mvarConn) (connections oldState)
-                    }
-                    return newState
+                    MPTCP_EVENT_CLOSED -> do
+                        putStrLn $ "Killing thread " ++ show threadId
+                        killThread threadId
+                        return $ oldState { connections = Map.delete token (connections oldState) }
+
+                -- TODO update connection
+                    -- TODO filter first
+                    _ -> do
+
+                        putStrLn $ "Forwarding to dispatchPacketForKnownConnection "
+                        mptcpConn <- takeMVar mvarConn
+                        let newConn = dispatchPacketForKnownConnection mptcpConn cmd attributes
+                        putMVar mvarConn newConn
+                        -- TODO update state
+                        let newState = oldState {
+                            connections = Map.insert token (threadId, mvarConn) (connections oldState)
+                        }
+                        return newState
 
 
 dispatchPacket s (DoneMsg err) =
@@ -796,11 +754,13 @@ showErrCode err
 --   ePERM -> "EPERM"
 --   eNOTCONN -> "NOT connected"
 
-inspectResult :: MyState -> Either String MptcpPacket -> IO()
-inspectResult myState result =  case result of
-    Left ex -> putStrLn $ "An error in parsing happened" ++ show ex
-    Right myPack -> dispatchPacket myState myPack >> putStrLn "Valid packet"
+inspectResult :: MyState -> Either String MptcpPacket -> IO MyState
+inspectResult myState result = case result of
+      Left ex -> putStrLn ("An error in parsing happened" ++ show ex) >> return myState
+      Right myPack -> dispatchPacket myState myPack
 
+
+-- |Infinite loop basically
 doDumpLoop :: MyState -> IO MyState
 doDumpLoop myState = do
     let (MptcpSocket simpleSock fid) = socket myState
@@ -808,9 +768,12 @@ doDumpLoop myState = do
     results <- recvOne' simpleSock ::  IO [Either String MptcpPacket]
 
     -- TODO retrieve packets
-    mapM_ (inspectResult myState) results
+    -- here we should update the state according
+    -- mapM_ (inspectResult myState) results
+    -- (Foldable t, Monad m) => (b -> a -> m b) -> b -> t a -> m b
+    modifiedState <- foldM inspectResult myState results
 
-    newState <- doDumpLoop myState
+    newState <- doDumpLoop modifiedState
     return newState
 
 -- regarder dans query/joinMulticastGroup/recvOne
@@ -820,9 +783,9 @@ listenToEvents (MptcpSocket sock fid) my_group = do
   -- TODO should check it works correctly !
   joinMulticastGroup sock (grpId my_group)
   putStrLn $ "Joined grp " ++ grpName my_group
-  let globalState = MyState mptcpSocket  Map.empty
+  let globalState = MyState mptcpSocket Map.empty
   _ <- doDumpLoop globalState
-  putStrLn "TOTO"
+  putStrLn "end of listenToEvents"
   where
     mptcpSocket = MptcpSocket sock fid
     -- globalState = MyState mptcpSocket Map.empty

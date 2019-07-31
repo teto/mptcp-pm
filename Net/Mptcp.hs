@@ -117,7 +117,7 @@ instance ToJSON SubflowWithMetrics where
 -- use sets instead ?
 mptcpConnAddSubflow :: MptcpConnection -> TcpConnection -> MptcpConnection
 mptcpConnAddSubflow mptcpConn sf =
-  mptcpConn {
+  trace ("Adding subflow" ++ show sf)  mptcpConn {
     subflows = sf : subflows mptcpConn
     , localIds = Set.insert (localId sf) (localIds mptcpConn)
     , remoteIds = Set.insert (remoteId sf) (remoteIds mptcpConn)
@@ -129,9 +129,10 @@ mptcpConnAddLocalId :: MptcpConnection
 mptcpConnAddLocalId con locId = undefined
 
 
--- TODO remove subflow
+-- |Remove subflow from an MPTCP connection
 mptcpConnRemoveSubflow :: MptcpConnection -> TcpConnection -> MptcpConnection
 mptcpConnRemoveSubflow mptcpConn sf = undefined
+
 
 getPort :: ByteString -> Word16
 getPort val =
@@ -184,13 +185,6 @@ readLocId maybeVal = case maybeVal of
     Right locId -> locId
   -- runGet getWord8 val
 
--- inspectResult :: MyState -> Either String MptcpPacket -> IO()
--- inspectResult myState result =  case result of
---     Left ex -> putStrLn $ "An error in parsing happened" ++ show ex
---     -- Right myPack -> dispatchPacket myState myPack >> putStrLn "Valid packet"
---     Right myPack ->  putStrLn "inspect result Valid packet"
-
-
 -- doDumpLoop :: MyState -> IO MyState
 -- doDumpLoop myState = do
 --     let (MptcpSocket simpleSock fid) = socket myState
@@ -201,21 +195,22 @@ readLocId maybeVal = case maybeVal of
 --     return newState
 
 
-data MptcpAttributes = MptcpAttributes {
-    connToken :: Word32
-    , localLocatorID :: Maybe Word8
-    , remoteLocatorID :: Maybe Word8
-    , family :: Word16 -- Remove ?
-    -- |Pointer to the Attributes map used to build this struct. This is purely
-    -- |for forward compat, please file a feature report if you have to use this.
-    , staSelf       :: Attributes
-} deriving (Show, Eq, Read)
+-- data MptcpAttributes = MptcpAttributes {
+--     connToken :: Word32
+--     , localLocatorID :: Maybe Word8
+--     , remoteLocatorID :: Maybe Word8
+--     , family :: Word16 -- Remove ?
+--     -- |Pointer to the Attributes map used to build this struct. This is purely
+--     -- |for forward compat, please file a feature report if you have to use this.
+--     , staSelf       :: Attributes
+-- } deriving (Show, Eq, Read)
 
 -- Wouldn't it be easier to work with ?
 -- data MptcpEvent = NewConnection {
 -- }
 
 
+-- |Represents every possible setting sent/received on the netlink channel
 data MptcpAttribute =
     MptcpAttrToken MptcpToken |
     -- v4 or v6, AddressFamily is a netlink def
@@ -331,7 +326,7 @@ makeAttributeFromMaybe :: MptcpAttr -> Attributes -> Maybe MptcpAttribute
 makeAttributeFromMaybe attrType attrs =
   let res = Map.lookup (fromEnum attrType) attrs in
   case res of
-    Nothing -> Nothing
+    Nothing -> error $ "Could not build attr " ++ show attrType
     Just bytestring -> makeAttribute (fromEnum attrType) bytestring
 
 -- | Builds an MptcpAttribute from
@@ -359,7 +354,8 @@ makeAttribute i val =
              case runGet getWord32be val of
                 Right x -> Just $ SubflowInterface x
                 _ -> Nothing)
-    MPTCP_ATTR_BACKUP -> trace "makeAttribute BACKUP" Nothing
+    -- backup is u8
+    MPTCP_ATTR_BACKUP -> Just (SubflowBackup $ readLocId $ Just val )
     MPTCP_ATTR_ERROR -> trace "makeAttribute ERROR" Nothing
     MPTCP_ATTR_TIMEOUT -> undefined
     MPTCP_ATTR_CWND -> undefined
@@ -394,6 +390,7 @@ hasFamily = Prelude.any (isAttribute (SubflowFamily eAF_INET))
 -- need to prepare a request
 -- type GenlPacket a = Packet (GenlData a)
 -- REQUIRES: LOC_ID / TOKEN
+-- TODO pass TcpConnection 
 resetConnectionPkt :: MptcpSocket -> [MptcpAttribute] -> MptcpPacket
 resetConnectionPkt (MptcpSocket sock fid) attrs = let
     cmd = MPTCP_CMD_REMOVE
@@ -425,6 +422,7 @@ capCwndPkt (MptcpSocket sock fid) mptcpCon limit sf =
         pkt = genMptcpRequest fid MPTCP_CMD_SND_CLAMP_WINDOW False attrs
         attrs = connectionAttrs mptcpCon
               ++ [ SubflowMaxCwnd limit ]
+              ++ subflowAttrs sf
 
 
 connectionAttrs :: MptcpConnection -> [MptcpAttribute]

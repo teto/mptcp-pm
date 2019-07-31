@@ -50,7 +50,6 @@ common shared-properties
       Net.Mptcp.PathManager, Generated
     -- TODO try to pass it from CLI instead , Net.TcpInfo
     include-dirs:     headers
-    -- , Net.TcpInfo
     autogen-modules: Generated
 
 
@@ -61,10 +60,10 @@ executable daemon
     import: shared-properties
     -- build-depends: MyCustomLibrary
     -- ghc-options: -i/home/teto/netlink-hs
-    ghc-options: -Wall -fno-warn-unused-binds -fno-warn-unused-matches -threaded
+    -- see https://wiki.haskell.org/FAQ#How_can_I_get_a_stack_backtrace_when_my_program_throws_an_exception.3F
+    ghc-options: -Wall -fno-warn-unused-binds -fno-warn-unused-matches -threaded -fforce-recomp -prof -auto-all -rtsopts
     main-is: daemon.hs
     -- extra-packages: netlink
-    -- extra-lib-dirs: /home/teto/netlink-hs
     hs-source-dirs: ., hs
 
 -- will monitor a specific mptcp connection
