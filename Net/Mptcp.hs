@@ -412,6 +412,7 @@ subflowAttrs con = [
     , SubflowInterface $ fromJust $ subflowInterface con
     -- https://github.com/multipath-tcp/mptcp/issues/338
     , SubflowSourceAddress $ srcIp con
+    , SubflowSourcePort $ srcPort con
   ]
 
 -- |Generate a request to create a new subflow

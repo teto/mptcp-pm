@@ -21,4 +21,3 @@ import Data.Bits ()
 
 -- For anonymous C enums, we can use , Bits
 {#enum TCP_ESTABLISHED as TcpState {underscoreToCase} deriving (Eq, Show)#}
-

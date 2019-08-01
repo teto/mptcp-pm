@@ -56,6 +56,7 @@ import qualified Options.Applicative (value)
 -- For TcpState, FFI generated
 import Net.SockDiag
 import Net.Mptcp
+--  hiding(mapIPtoInterfaceIdx)
 import Net.Mptcp.PathManager
 import Net.Tcp
 import Net.IP
@@ -63,6 +64,7 @@ import Net.IPv4 hiding (print)
 import Net.IPAddress
 
 import Net.SockDiag.Constants
+import Net.Tcp.Constants
 import Net.Mptcp.Constants
 
 
@@ -143,7 +145,7 @@ globalMetricsSock = unsafePerformIO newEmptyMVar
 -- TODO Map search in a list
 -- IP , Interface
 -- globalInterfaces :: MVar (Map.Map Word32 NetworkInterface)
-globalInterfaces :: MVar (AvailablePaths)
+globalInterfaces :: MVar AvailablePaths
 globalInterfaces = unsafePerformIO newEmptyMVar
 
 iperfClientPort :: Word16
@@ -152,8 +154,13 @@ iperfClientPort = 5500
 iperfServerPort :: Word16
 iperfServerPort = 5201
 
-monitoringRateMs :: Int
-monitoringRateMs = 100
+-- |
+onSuccessSleepingDelay :: Int
+onSuccessSleepingDelay = 100
+
+
+onFailureSleepingDelay :: Int
+onFailureSleepingDelay = 10
 
 -- should be able to ignore based on regex
 interfacesToIgnore :: [String]
@@ -243,9 +250,9 @@ dumpSystemInterfaces = do
   putStrLn "Dumping interfaces"
   -- isEmptyMVar globalInterfaces
   res <- tryReadMVar globalInterfaces 
-  case (res) of
+  case res of
     Nothing -> putStrLn "No interfaces"
-    Just interfaces -> putStrLn $ show interfaces
+    Just interfaces -> Prelude.print interfaces
 
   putStrLn "End of dump"
 
@@ -375,7 +382,9 @@ startMonitorConnection mptcpSock mConn = do
     putStrLn "Running mptcpnumerics"
     cwnds_m <- getCapsForConnection con
     case cwnds_m of
-        Nothing -> putStrLn "Couldn't fetch the values"
+        Nothing -> do 
+            putStrLn "Couldn't fetch the values"
+            sleepMs onFailureSleepingDelay
         Just cwnds -> do
 
             putStrLn $ "Requesting to set cwnds..." ++ show cwnds
@@ -390,8 +399,9 @@ startMonitorConnection mptcpSock mConn = do
             -- then we should send a request for each cwnd
             mapM_ updateSubflowMetrics (subflows con)
 
-            sleepMs monitoringRateMs
-            putStrLn "Finished monitoring token "
+            sleepMs onSuccessSleepingDelay
+    putStrLn "Finished monitoring token "
+
     -- call ourself again
     startMonitorConnection mptcpSock mConn
 
@@ -411,25 +421,21 @@ getCapsForConnection con = do
     let filename = tmpdir ++ "/" ++ "mptcp_" ++ (show $ subflowCount)  ++ "_" ++ (show $ connectionToken con) ++ ".json"
     -- let tmpdir = getEnvDefault "TMPDIR" "/tmp"
 
-    -- encode token in filename
-    -- fromMaybe $
     Data.ByteString.Lazy.writeFile filename bs
 
-    -- eitherDecode
-    -- TODO run readProcessWithExitCode instead
-    -- FilePath -> [String] -> String -> IO (ExitCode, String, String)
 
     -- TODO to keep it simple it should return a list of CWNDs to apply
     -- readProcessWithExitCode  binary / args / stdin
     (exitCode, stdout, stderr) <- readProcessWithExitCode "./hs/fake_solver" [filename, show subflowCount] ""
-    -- http://hackage.haskell.org/package/base/docs/Text-Read.html 
-    -- readPrec 
+
+    putStrLn $ "exitCode: " ++ show exitCode
+    putStrLn $ "stdout:\n" ++ stdout
+    -- http://hackage.haskell.org/package/base/docs/Text-Read.html
     let values = (case exitCode of
         -- for now simple, we might read json afterwards
                       ExitSuccess -> (readMaybe stdout) :: Maybe [Word32]
                       ExitFailure val -> error $ "stdout:" ++ stdout ++ " stderr: " ++ stderr
                       )
-    -- (map (\(val, str) -> val) values)
     return values
 
 -- type Attributes = Map Int ByteString
@@ -464,7 +470,7 @@ inspectAnswers packets = do
 --   in showPacket pkt
 
 showHeaderCustom :: GenlHeader -> String
-showHeaderCustom hdr = show hdr
+showHeaderCustom = show
 
 inspectAnswer :: GenlPacket NoData -> IO ()
 -- inspectAnswer packet = putStrLn $ "Inspecting answer:\n" ++ showPacket packet
@@ -569,7 +575,7 @@ handleAddr (Right (Packet hdr pkt attrs)) = do
 
                         else if msgType == eRTM_DELADDR
                         then
-                        trace "deleting ip" (Map.delete (ip) oldIntfs)
+                        trace "deleting ip" (Map.delete ip oldIntfs)
                         -- >> putStrLn "Removed interface"
                         else trace "other type" oldIntfs
 
@@ -650,6 +656,14 @@ acceptConnection :: TcpConnection -> Bool
 -- acceptConnection subflow = subflow `notElem` filteredConnections
 acceptConnection subflow = True
 
+-- |
+mapSubflowToInterfaceIdx :: IP -> IO (Maybe Word32)
+mapSubflowToInterfaceIdx ip = do
+
+  res <- tryReadMVar globalInterfaces
+  case res of
+    Nothing -> error "Couldn't access the list of interfaces"
+    Just interfaces -> return $ mapIPtoInterfaceIdx interfaces ip
 
 -- TODO pass a PathManager
 -- |^
@@ -685,8 +699,11 @@ dispatchPacket oldState (Packet hdr (GenlData genlHeader NoData) attributes) = l
                               return oldState
                           else (do
                                   -- should we add the subflow yet ? it doesn't have the correct interface idx
-                                  -- mptcpConnAddSubflow subflow
-                                  let newMptcpConn = (MptcpConnection token [] Set.empty Set.empty)
+                                  -- 
+                                  mappedInterface <- mapSubflowToInterfaceIdx (srcIp subflow)
+                                  let fixedSubflow = subflow { subflowInterface = mappedInterface }
+                                  -- let newMptcpConn = (MptcpConnection token [] Set.empty Set.empty)
+                                  let newMptcpConn = mptcpConnAddSubflow (MptcpConnection token [] Set.empty Set.empty) fixedSubflow
 
 
                                   newConn <- newMVar newMptcpConn
@@ -751,7 +768,7 @@ dispatchPacket s (ErrorMsg hdr errCode errPacket) = do
 
 -- ++ show errPacket
 showError :: Show a => Packet a -> IO ()
-showError (ErrorMsg hdr errCode errPacket) = do
+showError (ErrorMsg hdr errCode errPacket) =
   putStrLn $ "Error msg of type " ++ showErrCode errCode ++ " Packet content:\n"
 showError _ = error "Not the good overload"
 
@@ -787,8 +804,7 @@ doDumpLoop myState = do
     -- (Foldable t, Monad m) => (b -> a -> m b) -> b -> t a -> m b
     modifiedState <- foldM inspectResult myState results
 
-    newState <- doDumpLoop modifiedState
-    return newState
+    doDumpLoop modifiedState
 
 -- regarder dans query/joinMulticastGroup/recvOne
 listenToEvents :: MptcpSocket -> CtrlAttrMcastGroup -> IO ()

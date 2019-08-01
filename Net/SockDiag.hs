@@ -45,7 +45,7 @@ import Net.IPAddress
 import Net.IP ()
 -- import Net.IPv4
 import Net.Tcp
-import Net.Mptcp.Constants
+import Net.Tcp.Constants
 import Net.SockDiag.Constants
 import Data.ByteString (ByteString, pack, )
 

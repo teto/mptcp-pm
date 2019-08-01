@@ -5,7 +5,7 @@ The default should deal
 
 -- Need to deal with change in interface
 -}
--- There should be 
+-- There should be
 -- OnInterfaceChange
 
 
@@ -19,6 +19,8 @@ module Net.Mptcp.PathManager (
     PathManager (..)
     , NetworkInterface(..)
     , AvailablePaths
+    , mapIPtoInterfaceIdx
+    -- TODO don't export / move to its own file
     , ndiffports
 ) where
 
@@ -30,9 +32,7 @@ import Data.Word (Word32)
 import qualified Data.Map as Map
 
 -- basically a retranscription of NLR.NAddrMsg
--- or SystemInterface ?
--- TODO add ifname ? flags ?
--- Rename to NetworkInterface / System ?
+-- TODO add flags ?
 data NetworkInterface = NetworkInterface {
   ipAddress :: IP,   -- ^ Should be a list or a set
   interfaceName :: String,  -- ^ eth0 / ppp0
@@ -44,6 +44,12 @@ data NetworkInterface = NetworkInterface {
 -- [NetworkInterface]
 type AvailablePaths = Map.Map IP NetworkInterface
 
+
+
+-- |
+mapIPtoInterfaceIdx :: AvailablePaths -> IP -> Maybe Word32
+mapIPtoInterfaceIdx paths ip =
+    interfaceId <$> Map.lookup ip paths
 
 -- class AvailableIPsContainer a where
 
