@@ -12,7 +12,6 @@ OverloadedStrings allows Aeson to convert
 module Net.Mptcp
 where
 
-import Generated
 import Net.SockDiag (IDiagExtension)
 import Control.Exception (assert)
 
@@ -39,6 +38,7 @@ import Net.Tcp
 import Net.IPAddress
 import Net.IPv4
 import Net.IPv6
+import Net.Mptcp.Constants
 import Data.Text
 -- import Data.Set ()
 import qualified Data.Set as Set

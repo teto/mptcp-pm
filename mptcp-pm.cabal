@@ -47,10 +47,10 @@ common shared-properties
     -- apparently this just helps getting a better error messages
     Includes:          tcp_states.h, linux/sock_diag.h, linux/inet_diag.h
     Other-modules:     Net.SockDiag, Net.Tcp, Net.Mptcp, Net.IPAddress,
-      Net.Mptcp.PathManager, Generated
+      Net.Mptcp.PathManager, Net.Mptcp.Constants, Net.SockDiag.Constants
     -- TODO try to pass it from CLI instead , Net.TcpInfo
     include-dirs:     headers
-    autogen-modules: Generated
+    autogen-modules: Net.Mptcp.Constants, Net.SockDiag.Constants
 
 
 
@@ -61,7 +61,7 @@ executable daemon
     -- build-depends: MyCustomLibrary
     -- ghc-options: -i/home/teto/netlink-hs
     -- see https://wiki.haskell.org/FAQ#How_can_I_get_a_stack_backtrace_when_my_program_throws_an_exception.3F
-    ghc-options: -Wall -fno-warn-unused-binds -fno-warn-unused-matches -threaded -fforce-recomp -prof -auto-all -rtsopts
+    ghc-options: -Wall -fno-warn-unused-binds -fno-warn-unused-matches -threaded -fforce-recomp -prof -fprof-auto -rtsopts
     main-is: daemon.hs
     -- extra-packages: netlink
     hs-source-dirs: ., hs
@@ -84,7 +84,6 @@ library
     -- apparently this just helps getting a better error messages
     Includes:          tcp_states.h, linux/sock_diag.h, linux/inet_diag.h
     include-dirs: . , headers
-    -- autogen-modules: Generated
 
 
 Test-Suite test
@@ -97,8 +96,8 @@ Test-Suite test
   -- import: shared-properties
   Build-tools:       hsc2hs, c2hs
   Includes:          tcp_states.h, linux/sock_diag.h, linux/inet_diag.h
-  Other-modules:     Generated, Net.SockDiag, Net.Mptcp, Net.IPAddress
-  autogen-modules: Generated
+  Other-modules:     Net.SockDiag, Net.Mptcp, Net.IPAddress, Net.Mptcp.Constants, Net.SockDiag.Constants
+  autogen-modules: Net.Mptcp.Constants, Net.SockDiag.Constants
   include-dirs:      headers
   build-depends:      base >=4.12 && <4.20
                      , HUnit

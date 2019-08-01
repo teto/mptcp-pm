@@ -13,7 +13,7 @@ import Net.IPv4
 import Net.IPv6
 import Data.Serialize.Get
 import Data.Serialize.Put
-import Data.Word (Word32)
+-- import Data.Word (Word32)
 import Data.ByteString (ByteString)
 -- import Data.Either (fromRight)
 import System.Linux.Netlink.Constants as NLC
@@ -53,11 +53,6 @@ getIPv6FromByteString bs =
     runGet val bs
 
 
--- big endian for IDiag
--- replicateM 4 (putWord32be $ dst cust) -- dest
--- assuming it's an ipv4
--- valid for the ip v 4 only
--- one constructor is getIPv4 :: Word32
 putIPAddress :: IP -> Put
 putIPAddress addr =
   case_ putIPv4Address putIPv6Address addr

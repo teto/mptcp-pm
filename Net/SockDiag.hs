@@ -35,9 +35,6 @@ import Data.Serialize.Put ()
 
 import System.Linux.Netlink
 import System.Linux.Netlink.Constants
--- For TcpState, FFI generated
-import Generated
--- (IDiagExt, TcpState, msgTypeSockDiag)
 
 import qualified Data.Bits as B
 import Data.Bits ((.|.))
@@ -48,6 +45,8 @@ import Net.IPAddress
 import Net.IP ()
 -- import Net.IPv4
 import Net.Tcp
+import Net.Mptcp.Constants
+import Net.SockDiag.Constants
 import Data.ByteString (ByteString, pack, )
 
 -- requires cabal as a dep
@@ -55,6 +54,7 @@ import Data.ByteString (ByteString, pack, )
 import GHC.Generics
 
 -- iproute uses this seq number #define MAGIC_SEQ 123456
+-- TODO we could remove it
 magicSeq :: Word32
 magicSeq = 123456
 

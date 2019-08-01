@@ -54,7 +54,6 @@ import Options.Applicative hiding (value, ErrorMsg, empty)
 import qualified Options.Applicative (value)
 
 -- For TcpState, FFI generated
-import Generated
 import Net.SockDiag
 import Net.Mptcp
 import Net.Mptcp.PathManager
@@ -62,6 +61,13 @@ import Net.Tcp
 import Net.IP
 import Net.IPv4 hiding (print)
 import Net.IPAddress
+
+import Net.SockDiag.Constants
+import Net.Mptcp.Constants
+
+
+-- for readList
+import Text.Read
 
 -- for replicateM
 import Control.Monad (foldM)
@@ -367,22 +373,25 @@ startMonitorConnection mptcpSock mConn = do
     let masterSf = head $ subflows con
 
     putStrLn "Running mptcpnumerics"
-    cwnds <- getCapsForConnection con
+    cwnds_m <- getCapsForConnection con
+    case cwnds_m of
+        Nothing -> putStrLn "Couldn't fetch the values"
+        Just cwnds -> do
 
-    putStrLn $ "Requesting to set cwnds..." ++ show cwnds
-    -- TODO fix
-    -- KISS for now (capCwndPkt mptcpSock )
-    let cwndPackets  = map (\(cwnd, sf) -> capCwndPkt mptcpSock con cwnd sf) (zip cwnds (subflows con))
-    -- >> map (capCwndPkt mptcpSock ) >>= putStrLn "toto"
+            putStrLn $ "Requesting to set cwnds..." ++ show cwnds
+            -- TODO fix
+            -- KISS for now (capCwndPkt mptcpSock )
+            let cwndPackets  = map (\(cwnd, sf) -> capCwndPkt mptcpSock con cwnd sf) (zip cwnds (subflows con))
+            -- >> map (capCwndPkt mptcpSock ) >>= putStrLn "toto"
 
-    -- query sock capCwndPkt >>= inspectAnswers
-    mapM_ (query sock) cwndPackets >> putStrLn "test"
+            -- query sock capCwndPkt >>= inspectAnswers
+            mapM_ (query sock) cwndPackets >> putStrLn "test"
 
-    -- then we should send a request for each cwnd
-    mapM_ updateSubflowMetrics (subflows con)
+            -- then we should send a request for each cwnd
+            mapM_ updateSubflowMetrics (subflows con)
 
-    sleepMs monitoringRateMs
-    putStrLn "Finished monitoring token "
+            sleepMs monitoringRateMs
+            putStrLn "Finished monitoring token "
     -- call ourself again
     startMonitorConnection mptcpSock mConn
 
@@ -393,7 +402,7 @@ startMonitorConnection mptcpSock mConn = do
 -- 2.
 -- 3.
 -- Maybe ?
-getCapsForConnection :: MptcpConnection -> IO [Word32]
+getCapsForConnection :: MptcpConnection -> IO (Maybe [Word32])
 getCapsForConnection con = do
     -- returns a bytestring
     let bs = Data.Aeson.encode con
@@ -413,10 +422,15 @@ getCapsForConnection con = do
     -- TODO to keep it simple it should return a list of CWNDs to apply
     -- readProcessWithExitCode  binary / args / stdin
     (exitCode, stdout, stderr) <- readProcessWithExitCode "./hs/fake_solver" [filename, show subflowCount] ""
-    case exitCode of
+    -- http://hackage.haskell.org/package/base/docs/Text-Read.html 
+    -- readPrec 
+    let values = (case exitCode of
         -- for now simple, we might read json afterwards
-        ExitSuccess -> return (read stdout :: [Word32])
-        ExitFailure val -> error $ "stdout:" ++ stdout ++ " stderr: " ++ stderr
+                      ExitSuccess -> (readMaybe stdout) :: Maybe [Word32]
+                      ExitFailure val -> error $ "stdout:" ++ stdout ++ " stderr: " ++ stderr
+                      )
+    -- (map (\(val, str) -> val) values)
+    return values
 
 -- type Attributes = Map Int ByteString
 -- the library contains showAttrs / showNLAttrs

@@ -1,10 +1,7 @@
 {-# LANGUAGE ForeignFunctionInterface #-}
 {-|
-Module      : 
+Module      : Net.Mptcp.Constants
 Description : A module to bridge the haskell code to underlying C code
-Maintainer  : ongy
-Stability   : testing
-Portability : Linux
 
 I consider this module internal.
 The documentation may be a bit sparse.
@@ -14,11 +11,11 @@ https://stackoverflow.com/questions/6689969/how-does-one-interface-with-a-c-enum
 TODO might be best to just use the netlink script and adapt it
 https://github.com/Ongy/netlink-hs/issues/7
 -}
-module Generated
+module Net.Mptcp.Constants
 where
 
 import Data.Word (Word8)
-import System.Linux.Netlink.Constants (MessageType)
+-- import System.Linux.Netlink.Constants (MessageType)
 import Data.Bits ()
 
 -- copy from include/net/tcp_states
@@ -49,22 +46,3 @@ mptcpGenlCmdGrpName = {#const MPTCP_GENL_CMD_GRP_NAME #}
 mptcpGenlEvGrpName :: String
 mptcpGenlEvGrpName  = {#const MPTCP_GENL_EV_GRP_NAME #}
 
--- from include/uapi/linux/inet_diag.h
-#include <linux/inet_diag.h>
-
--- let it use Bits as well as fNLM_F_REQUEST so that I can chain them with .|.
--- , Bits TODO rename to eDiagExt ?
-{#enum INET_DIAG_NONE as IDiagExt {underscoreToCase} deriving (Eq, Show)#}
-
-#include <linux/sock_diag.h>
-
-msgTypeSockDiag :: MessageType
-msgTypeSockDiag  = {#const SOCK_DIAG_BY_FAMILY #}
-
-
--- {#enum AF_UNSPEC as eAddressFamily {underscoreToCase} deriving (Eq, Show)#}
--- TODO generate AF_INET (6) from include/linux/socket.h
--- IPPROTO_TCP defined in include/uapi/linux/in.h
-
--- Convert struct ?
--- inet_diag_req_v2 
