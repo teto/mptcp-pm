@@ -416,11 +416,16 @@ subflowAttrs con = [
   ]
 
 -- |Generate a request to create a new subflow
+-- TODO
 capCwndPkt :: MptcpSocket -> MptcpConnection -> Word32 -> TcpConnection -> MptcpPacket
 capCwndPkt (MptcpSocket sock fid) mptcpCon limit sf =
     assert (hasFamily attrs) pkt
     where
-        pkt = genMptcpRequest fid MPTCP_CMD_SND_CLAMP_WINDOW False attrs
+        oldPkt = genMptcpRequest fid MPTCP_CMD_SND_CLAMP_WINDOW False attrs
+        -- TODO maybe cleanup interface after that: try to update Header
+        -- messageSeqNum =
+        -- messagePID
+        pkt = oldPkt { packetHeader = (packetHeader oldPkt) { messagePID = 42 } }
         attrs = connectionAttrs mptcpCon
               ++ [ SubflowMaxCwnd limit ]
               ++ subflowAttrs sf

@@ -62,7 +62,7 @@ import Net.Mptcp.PathManager.Default
 import Net.Tcp
 import Net.IP
 import Net.IPv4 hiding (print)
-import Net.IPAddress
+-- import Net.IPAddress
 
 import Net.SockDiag.Constants
 import Net.Tcp.Constants
@@ -74,8 +74,8 @@ import Text.Read
 
 -- for replicateM
 import Control.Monad (foldM)
-import Data.Maybe (fromMaybe)
-import Data.Foldable ()
+-- import Data.Maybe (fromMaybe)
+import Data.Foldable (concat)
 import Foreign.C.Types (CInt)
 -- for eOK, ePERM
 import Foreign.C.Error
@@ -83,7 +83,7 @@ import Foreign.C.Error
 import System.Linux.Netlink as NL
 import System.Linux.Netlink.GeNetlink as GENL
 import System.Linux.Netlink.Constants as NLC
-import System.Linux.Netlink.Constants (eRTM_NEWADDR)
+-- import System.Linux.Netlink.Constants (eRTM_NEWADDR)
 -- import System.Linux.Netlink.Helpers
 import System.Log.FastLogger
 import System.Linux.Netlink.GeNetlink.Control
@@ -98,9 +98,9 @@ import Data.Word (Word16, Word32)
 import Data.Serialize.Get (runGet)
 import Data.Serialize.Put
 -- import Data.Either (fromRight)
-import Data.ByteString (ByteString, empty)
+import Data.ByteString (ByteString)
 import Data.ByteString.Lazy (writeFile)
-import Data.ByteString.Char8 (unpack, init)
+-- import Data.ByteString.Char8 (unpack, init)
 
 -- import qualified Data.ByteString.Char8 as BSC
 import qualified Data.Map as Map
@@ -366,7 +366,8 @@ startMonitorConnection :: MptcpSocket -> MVar MptcpConnection -> IO ()
 startMonitorConnection mptcpSock mConn = do
     -- ++ show token
     let (MptcpSocket sock familyId) = mptcpSock
-    putStr "Start monitoring connection..."
+    myId <- myThreadId
+    putStr $ show myId ++ "Start monitoring connection..."
     -- as long as conn is not empty we keep going ?
     -- for this connection
     -- query metrics for the whole MPTCP connection
@@ -393,10 +394,18 @@ startMonitorConnection mptcpSock mConn = do
             -- >> map (capCwndPkt mptcpSock ) >>= putStrLn "toto"
 
             -- query sock capCwndPkt >>= inspectAnswers
-            mapM (query sock) cwndPackets >>= inspectAnswers >> return ()
+            -- query returns IO [Packet a]
+            -- concatMap
+            answers <- mapM (query sock) cwndPackets
+            let concatAnswers = concat answers
+
+            putStrLn "started inspecting Answers"
+            inspectAnswers concatAnswers
+            putStrLn "finished inspectAnswers "
 
             -- then we should send a request for each cwnd
-            mapM_ updateSubflowMetrics (subflows con)
+            -- for now disabled to clean up
+            -- mapM_ updateSubflowMetrics (subflows con)
 
             sleepMs onSuccessSleepingDelay
     putStrLn "Finished monitoring token "
@@ -459,6 +468,7 @@ instance Show GenlHeaderMptcp where
   show (GenlHeaderMptcp (GenlHeader cmd ver)) =
     "Header: Cmd = " ++ show cmd ++ ", Version: " ++ show ver ++ "\n"
 
+--
 inspectAnswers :: [GenlPacket NoData] -> IO ()
 inspectAnswers packets = do
   mapM_ inspectAnswer packets
@@ -473,9 +483,6 @@ showHeaderCustom :: GenlHeader -> String
 showHeaderCustom = show
 
 inspectAnswer :: GenlPacket NoData -> IO ()
--- inspectAnswer packet = putStrLn $ "Inspecting answer:\n" ++ showPacket packet
--- (GenlData NoData)
--- inspectAnswer (Packet hdr (GenlData ghdr NoData) attributes) = putStrLn $ "Inspecting answer:\n"
 inspectAnswer (Packet _ (GenlData hdr NoData) attributes) = let
     cmd = genlCmd hdr
   in
