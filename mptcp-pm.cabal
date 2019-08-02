@@ -49,6 +49,7 @@ common shared-properties
     Includes:          tcp_states.h, linux/sock_diag.h, linux/inet_diag.h
     Other-modules:     Net.SockDiag, Net.Tcp, Net.Mptcp, Net.IPAddress,
       Net.Mptcp.PathManager, Net.Mptcp.Constants, Net.SockDiag.Constants, Net.Tcp.Constants
+      , Net.Mptcp.PathManager.Default
     -- TODO try to pass it from CLI instead , Net.TcpInfo
     include-dirs:     headers
     autogen-modules: Net.Mptcp.Constants, Net.SockDiag.Constants, Net.Tcp.Constants
@@ -97,7 +98,8 @@ Test-Suite test
   -- import: shared-properties
   Build-tools:       hsc2hs, c2hs
   Includes:          tcp_states.h, linux/sock_diag.h, linux/inet_diag.h
-  Other-modules:     Net.SockDiag, Net.Mptcp, Net.IPAddress, Net.Mptcp.Constants, Net.SockDiag.Constants
+  Other-modules:     Net.SockDiag, Net.Mptcp, Net.IPAddress, Net.Mptcp.Constants, Net.SockDiag.Constants, 
+                    Net.SockDiag.Constants
   autogen-modules: Net.Mptcp.Constants, Net.SockDiag.Constants
   include-dirs:      headers
   build-depends:      base >=4.12 && <4.20

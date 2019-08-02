@@ -58,6 +58,7 @@ import Net.SockDiag
 import Net.Mptcp
 --  hiding(mapIPtoInterfaceIdx)
 import Net.Mptcp.PathManager
+import Net.Mptcp.PathManager.Default
 import Net.Tcp
 import Net.IP
 import Net.IPv4 hiding (print)
@@ -76,6 +77,7 @@ import Control.Monad (foldM)
 import Data.Maybe (fromMaybe)
 import Data.Foldable ()
 import Foreign.C.Types (CInt)
+-- for eOK, ePERM
 import Foreign.C.Error
 -- import qualified System.Linux.Netlink as NL
 import System.Linux.Netlink as NL
@@ -141,12 +143,9 @@ globalMptcpSock = unsafePerformIO newEmptyMVar
 globalMetricsSock :: MVar NetlinkSocket
 globalMetricsSock = unsafePerformIO newEmptyMVar
 
-{-# NOINLINE globalInterfaces #-}
--- TODO Map search in a list
--- IP , Interface
--- globalInterfaces :: MVar (Map.Map Word32 NetworkInterface)
-globalInterfaces :: MVar AvailablePaths
-globalInterfaces = unsafePerformIO newEmptyMVar
+-- {-# NOINLINE globalInterfaces #-}
+-- globalInterfaces :: MVar AvailablePaths
+-- globalInterfaces = unsafePerformIO newEmptyMVar
 
 iperfClientPort :: Word16
 iperfClientPort = 5500
@@ -394,7 +393,7 @@ startMonitorConnection mptcpSock mConn = do
             -- >> map (capCwndPkt mptcpSock ) >>= putStrLn "toto"
 
             -- query sock capCwndPkt >>= inspectAnswers
-            mapM_ (query sock) cwndPackets >> putStrLn "test"
+            mapM (query sock) cwndPackets >>= inspectAnswers >> return ()
 
             -- then we should send a request for each cwnd
             mapM_ updateSubflowMetrics (subflows con)
@@ -421,6 +420,7 @@ getCapsForConnection con = do
     let filename = tmpdir ++ "/" ++ "mptcp_" ++ (show $ subflowCount)  ++ "_" ++ (show $ connectionToken con) ++ ".json"
     -- let tmpdir = getEnvDefault "TMPDIR" "/tmp"
 
+    -- throws upon error
     Data.ByteString.Lazy.writeFile filename bs
 
 
@@ -515,84 +515,7 @@ queryAddrs = NL.Packet
 
 
 
--- TODO we should use the 
-handleInterfaceNotification
-  :: AddressFamily -> Attributes -> Word32 -> Maybe NetworkInterface
-handleInterfaceNotification addrFamily attrs addrIntf =
 
-  -- case of
-  --   Nothing -> Nothing
-  --   Just val -> 
-  -- TODO
-  -- filter on flags too (UP), should be != LOOPBACK
-  -- lo: <LOOPBACK,UP,LOWER_UP> and
-  -- eno1: <BROADCAST,MULTICAST,UP,LOWER_UP
-  case ifNameM of
-    Nothing -> Nothing
-    Just ifName -> case (elem ifName interfacesToIgnore ) of
-                        True -> Nothing
-                        False -> Just $ NetworkInterface ip ifName addrIntf
-  where
-    -- ip = undefined
-    -- gets the bytestring / assume it always work
-  ipBstr = fromMaybe empty (NLR.getIFAddr attrs)
-  ifNameBstr = (Map.lookup NLC.eIFLA_IFNAME attrs)
-  ifNameM = getString <$> ifNameBstr
-  -- ip = getIPFromByteString addrFamily ipBstr
-  ip = case (getIPFromByteString addrFamily ipBstr) of
-    Right val -> val
-    Left err -> undefined
-
--- taken from netlink
-getString :: ByteString -> String
-getString b = unpack (init b)
-
--- TODO handle remove/new event
-handleAddr :: Either String NLR.RoutePacket -> IO ()
-handleAddr (Left errStr) = putStrLn $ "Error decoding packet: " ++ errStr
-handleAddr (Right (DoneMsg hdr)) =
-  putStrLn $ "Error decoding packet: " ++ show hdr
-handleAddr (Right (ErrorMsg hdr errorInt errorBstr)) =
-  putStrLn $ "Error decoding packet: " ++ show hdr
--- TODO need handleMessage pkt
--- family maskLen flags scope addrIntf
-handleAddr (Right (Packet hdr pkt attrs)) = do
-  (putStrLn $ "received packet" ++ show pkt)
-  oldIntfs <- trace "taking MVAR" (takeMVar globalInterfaces)
-
-  let toto = (case pkt of
-        arg@NLR.NAddrMsg{} ->
-          let resIntf = handleInterfaceNotification (NLR.addrFamily arg) attrs (NLR.addrInterfaceIndex arg)
-          in case resIntf of 
-                Nothing -> oldIntfs
-                Just newIntf -> let
-                  ip = ipAddress newIntf
-                  in if msgType == eRTM_NEWADDR
-                        then trace "adding ip" (Map.insert ip newIntf oldIntfs)
-                        -- >> putStrLn "Added interface"
-                        else if msgType == eRTM_GETADDR
-                        then trace "GET_ADDR" oldIntfs
-
-                        else if msgType == eRTM_DELADDR
-                        then
-                        trace "deleting ip" (Map.delete ip oldIntfs)
-                        -- >> putStrLn "Removed interface"
-                        else trace "other type" oldIntfs
-
-        -- _ -> error "can't be anything else"
-        arg@NLR.NNeighMsg{} -> trace "neighbor msg" oldIntfs
-        arg@NLR.NLinkMsg{} -> trace "link msg" oldIntfs
-        )
-  -- case toto of
-  --     Nothing -> oldIntfs
-      -- Just val ->
-  trace ("putting mvar") (putMVar globalInterfaces $! (toto))
-
- where
-    -- gets the bytestring
-    msgType = messageType hdr
-
--- (arg@DiagTcpInfo{})
 
 
 -- |Deal with events for already registered connections
