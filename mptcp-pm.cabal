@@ -39,19 +39,19 @@ common shared-properties
     default-language: Haskell2010
     -- -fno-warn-unused-imports 
     -- -fforce-recomp  makes it build twice
-    ghc-options: -Wall -fno-warn-unused-binds -fno-warn-unused-matches -threaded -prof -fprof-auto -rtsopts
+    ghc-options: -Wall -fno-warn-unused-binds -fno-warn-unused-matches -threaded -fprof-auto -rtsopts
 
     if flag(Dev)
         build-depends: netlink>= 1.1.1.1
     -- for the generated.hsc , c2hs seems good to generate headers
     Build-tools:       hsc2hs, c2hs
     -- apparently this just helps getting a better error messages
-    Includes:          tcp_states.h, linux/sock_diag.h, linux/inet_diag.h
+    Includes:          tcp_states.h, linux/sock_diag.h, linux/inet_diag.h, linux/mptcp.h
     Other-modules:     Net.SockDiag, Net.Tcp, Net.Mptcp, Net.IPAddress,
       Net.Mptcp.PathManager, Net.Mptcp.Constants, Net.SockDiag.Constants, Net.Tcp.Constants
       , Net.Mptcp.PathManager.Default
     -- TODO try to pass it from CLI instead , Net.TcpInfo
-    include-dirs:     headers
+    include-dirs:    headers
     autogen-modules: Net.Mptcp.Constants, Net.SockDiag.Constants, Net.Tcp.Constants
 
 
@@ -63,7 +63,7 @@ executable daemon
     -- build-depends: MyCustomLibrary
     -- ghc-options: -i/home/teto/netlink-hs
     -- see https://wiki.haskell.org/FAQ#How_can_I_get_a_stack_backtrace_when_my_program_throws_an_exception.3F
-    -- ghc-options: -Wall -fno-warn-unused-binds -fno-warn-unused-matches -threaded -fforce-recomp -prof -fprof-auto -rtsopts
+    ghc-options: -prof
     main-is: hs/daemon.hs
     -- extra-packages: netlink
     hs-source-dirs: .

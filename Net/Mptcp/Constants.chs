@@ -23,7 +23,7 @@ import Data.Bits ()
 
 -- {underscoreToCase}
 -- add prefix = "e"
-{#enum MPTCP_ATTR_UNSPEC as MptcpAttr {} omit (__MPTCP_ATTR_AFTER_LAST) deriving (Eq, Show)#}
+{#enum MPTCP_ATTR_UNSPEC as MptcpAttr {} omit (__MPTCP_ATTR_AFTER_LAST) deriving (Eq, Show, Ord)#}
 
 -- {underscoreToCase}
 -- can also be seen as a command

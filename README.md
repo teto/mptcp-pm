@@ -94,6 +94,9 @@ reload_mod() {
 - we need to request more states
 
 # TODO 
+- remove the need for MptcpSocket everywhere: it's just needed to write the
+header, which could be added/modifier later instead ! (to increase purity in the
+    library)
 - pass local/server IPs as commands to the PM ?
 - generate completion scripts via --zsh-completion-script
 - to get kernel ifindex: cat /sys/class/net/lo/ifindex

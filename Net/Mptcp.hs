@@ -76,6 +76,32 @@ data MptcpConnection = MptcpConnection {
 } deriving (Show, Generic)
 
 
+-- | Remote port
+data RemoteId = RemoteId {
+
+  remoteAddress :: IP
+  , remotePort :: Word16
+}
+
+
+-- data MptcpAttributes = Map.Map MptcpAttr MptcpAttribute
+
+
+remoteIdFromAttributes :: Attributes -> RemoteId
+remoteIdFromAttributes attrs = let
+    (SubflowDestPort dport) = fromJust $ makeAttributeFromMaybe MPTCP_ATTR_DPORT attrs
+    (SubflowFamily family) = fromJust $ makeAttributeFromMaybe MPTCP_ATTR_FAMILY attrs
+    , $ getAddressFamily (dstIp con)
+    -- ip = if family == eAF_INET then
+    --           (SubflowDestAddress ) = fromJust $ makeAttributeFromMaybe MPTCP_ATTR_FAMILY attrs
+    --         else
+    -- TODO ip
+
+    -- TODO build ip depending on 
+    -- (SubflowDestPort dport) = fromJust $ makeAttributeFromMaybe MPTCP_ATTR_DPORT attrs
+  in
+    RemoteId ip dport
+
 -- we don't really care
 instance FromJSON MptcpConnection
 
@@ -115,19 +141,35 @@ instance ToJSON SubflowWithMetrics where
 
 -- |Adds a subflow to the connection
 -- use sets instead ?
+-- TODO compose with mptcpConnAddLocalId
 mptcpConnAddSubflow :: MptcpConnection -> TcpConnection -> MptcpConnection
 mptcpConnAddSubflow mptcpConn sf =
-  trace ("Adding subflow" ++ show sf)  mptcpConn {
-    subflows = sf : subflows mptcpConn
-    , localIds = Set.insert (localId sf) (localIds mptcpConn)
-    , remoteIds = Set.insert (remoteId sf) (remoteIds mptcpConn)
-  }
+  -- trace ("Adding subflow" ++ show sf)  
+    mptcpConnAddLocalId 
+        (mptcpConnAddRemoteId
+            (mptcpConn { subflows = sf : subflows mptcpConn })
+            (remoteId sf)
+        )
+        (localId sf)
 
+    -- , localIds = Set.insert (localId sf) (localIds mptcpConn)
+    -- , remoteIds = Set.insert (remoteId sf) (remoteIds mptcpConn)
+  -- }
+
+
+-- |Add local id
 mptcpConnAddLocalId :: MptcpConnection
                        -> Word8 -- ^Local id to add
                        -> MptcpConnection
-mptcpConnAddLocalId con locId = undefined
+mptcpConnAddLocalId con locId = con { localIds = Set.insert (locId) (localIds con) }
 
+
+-- |Add remote id
+-- Le remote id doit etre associee a une addresse / TODO test protocol
+mptcpConnAddRemoteId :: MptcpConnection
+                       -> Word8 -- ^Remote id to add
+                       -> MptcpConnection
+mptcpConnAddRemoteId con remId = con { localIds = Set.insert (remId) (remoteIds con) }
 
 -- |Remove subflow from an MPTCP connection
 mptcpConnRemoveSubflow :: MptcpConnection -> TcpConnection -> MptcpConnection
@@ -267,6 +309,7 @@ mptcpListToAttributes attrs = Map.fromList $Prelude.map attrToPair attrs
 -- mptcpAttributesToMap attrs =
 --   Map.fromList $map mptcpAttributeToTuple attrs
 
+-- |Converts / should be a maybe ?
 -- TODO simplify
 subflowFromAttributes :: Attributes -> TcpConnection
 subflowFromAttributes attrs =
@@ -294,7 +337,6 @@ subflowFromAttributes attrs =
     -- TODO fix sfFamily
     TcpConnection _srcIp _dstIp sport dport prio lid rid (Just intfId)
 
--- makeSubflowFromAttributes ::
 
 -- TODO prefix with 'e' for enum
 -- Map.lookup (fromEnum attr) m
@@ -317,9 +359,24 @@ e2M :: Either a b -> Maybe b
 e2M (Right x) = Just x
 e2M _ = Nothing
 
--- makeAttributeFromMap ::
+-- un peu bidon
+-- convertAttributesIntoList :: Attributes -> [MptcpAttribute]
+-- convertAttributesIntoList attrs = let
+--       customMakeAttribute key val accum = [fromJust (makeAttribute key val)] ++ accum
+--   in 
+--       -- foldrWithKey." => (k -> a -> b -> b) -> b -> Map k a -> b
+--       Map.foldrWithKey (customMakeAttribute) [] attrs
 
--- makeAttributeFromList ::
+convertAttributesIntoMap :: Attributes -> Map.Map MptcpAttr MptcpAttribute
+convertAttributesIntoMap attrs = let
+-- traverseWithKey
+-- fromJust
+      customFn k val = fromJust (makeAttribute k val)
+      -- fromJust $ makeAttribute
+      -- (k -> a -> b) -> Map k a -> Map k b
+      newMap = Map.mapWithKey (customFn) attrs
+  in
+      Map.mapKeys (toEnum) newMap
 
 -- TODO rename fromMap
 makeAttributeFromMaybe :: MptcpAttr -> Attributes -> Maybe MptcpAttribute
@@ -365,8 +422,6 @@ makeAttribute i val =
 
 dumpAttribute :: Int -> ByteString -> String
 dumpAttribute attrId value =
-  -- TODO replace with makeAttribute followd by show ?
-  -- traceShowId
   show $ makeAttribute attrId value
 
 checkIfSocketExistsPkt :: Word16 -> [MptcpAttribute]  -> MptcpPacket
@@ -400,6 +455,7 @@ resetConnectionPkt (MptcpSocket sock fid) attrs = let
 
 -- TODO map an IP to an interface
 -- pass token ?
+-- TODO can we retreive ips as well ?!
 subflowAttrs :: TcpConnection -> [MptcpAttribute]
 subflowAttrs con = [
     LocalLocatorId $ localId con

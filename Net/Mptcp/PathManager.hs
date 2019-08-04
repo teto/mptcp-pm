@@ -81,7 +81,9 @@ mapIPtoInterfaceIdx paths ip =
 -- class AvailableIPsContainer a where
 
 
--- Reimplements
+-- |Reimplements
+-- TODO we should not need the socket
+-- onMasterEstablishement 
 data PathManager = PathManager {
   name :: String
   , onMasterEstablishement :: MptcpSocket -> MptcpConnection -> AvailablePaths -> [MptcpPacket]
