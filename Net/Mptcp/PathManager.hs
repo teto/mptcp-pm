@@ -86,6 +86,7 @@ mapIPtoInterfaceIdx paths ip =
 -- onMasterEstablishement 
 data PathManager = PathManager {
   name :: String
+    -- interfacesToIgnore :: [String]
   , onMasterEstablishement :: MptcpSocket -> MptcpConnection -> AvailablePaths -> [MptcpPacket]
   -- , onAddrChange 
 

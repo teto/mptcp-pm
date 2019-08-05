@@ -89,7 +89,6 @@ reload_mod() {
 # Testsuite
 
 # BUGS
-
 - conversion of IDiagExt is bad everywhere ? req.r.idiag_ext |= (1<<(INET_DIAG_INFO-1));
 - we need to request more states
 
@@ -97,7 +96,7 @@ reload_mod() {
 - remove the need for MptcpSocket everywhere: it's just needed to write the
 header, which could be added/modifier later instead ! (to increase purity in the
     library)
+- we need to better keep track of subflow status (established vs WIP) ?
 - pass local/server IPs as commands to the PM ?
 - generate completion scripts via --zsh-completion-script
-- to get kernel ifindex: cat /sys/class/net/lo/ifindex
 

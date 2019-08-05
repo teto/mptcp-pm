@@ -91,16 +91,11 @@ remoteIdFromAttributes :: Attributes -> RemoteId
 remoteIdFromAttributes attrs = let
     (SubflowDestPort dport) = fromJust $ makeAttributeFromMaybe MPTCP_ATTR_DPORT attrs
     (SubflowFamily family) = fromJust $ makeAttributeFromMaybe MPTCP_ATTR_FAMILY attrs
-    , $ getAddressFamily (dstIp con)
-    -- ip = if family == eAF_INET then
-    --           (SubflowDestAddress ) = fromJust $ makeAttributeFromMaybe MPTCP_ATTR_FAMILY attrs
-    --         else
-    -- TODO ip
+    SubflowDestAddress destIp = ipFromAttributes False attrs
 
-    -- TODO build ip depending on 
     -- (SubflowDestPort dport) = fromJust $ makeAttributeFromMaybe MPTCP_ATTR_DPORT attrs
   in
-    RemoteId ip dport
+    RemoteId destIp dport
 
 -- we don't really care
 instance FromJSON MptcpConnection
@@ -144,7 +139,7 @@ instance ToJSON SubflowWithMetrics where
 -- TODO compose with mptcpConnAddLocalId
 mptcpConnAddSubflow :: MptcpConnection -> TcpConnection -> MptcpConnection
 mptcpConnAddSubflow mptcpConn sf =
-  -- trace ("Adding subflow" ++ show sf)  
+  -- trace ("Adding subflow" ++ show sf)
     mptcpConnAddLocalId 
         (mptcpConnAddRemoteId
             (mptcpConn { subflows = sf : subflows mptcpConn })
@@ -183,13 +178,22 @@ getPort val =
     Right port -> port
 
 
+--
+-- The message type/ flag / sequence number / pid  (0 => from the kernel)
+-- https://elixir.bootlin.com/linux/latest/source/include/uapi/linux/netlink.h#L54
+fixHeader :: MptcpSocket -> Bool -> MptcpPacket -> MptcpPacket
+fixHeader (MptcpSocket _ fid) dump pkt = let
+    myHeader = Header 0 (flags .|. fNLM_F_ACK) 0 0
+    flags = if dump then fNLM_F_REQUEST .|. fNLM_F_MATCH .|. fNLM_F_ROOT else fNLM_F_REQUEST
+  in
+    pkt { packetHeader = myHeader }
 
--- TODO merge default attributes
--- todo pass a list of (Int, Bytestring) and build the map with fromList ?
+
 {-|
   Generates an Mptcp netlink request
+TODO we could fake the Word16/Flag and 
 -}
-genMptcpRequest :: Word16 -- ^ the family id
+genMptcpRequest :: Word16 -- ^the family id
                 -> MptcpGenlEvent -- ^The MPTCP command
                 -> Bool           -- ^Dump answer (returns EOPNOTSUPP if not possible)
                 -- -> Attributes
@@ -197,8 +201,6 @@ genMptcpRequest :: Word16 -- ^ the family id
                 -> MptcpPacket
 genMptcpRequest fid cmd dump attrs =
   let
-    -- The message type/ flag / sequence number / pid  (0 => from the kernel)
-    -- https://elixir.bootlin.com/linux/latest/source/include/uapi/linux/netlink.h#L54
     myHeader = Header (fromIntegral fid) (flags .|. fNLM_F_ACK) 0 0
     geheader = GenlHeader word8Cmd mptcpGenlVer
     flags = if dump then fNLM_F_REQUEST .|. fNLM_F_MATCH .|. fNLM_F_ROOT else fNLM_F_REQUEST
@@ -305,6 +307,24 @@ mptcpListToAttributes :: [MptcpAttribute] -> Attributes
 mptcpListToAttributes attrs = Map.fromList $Prelude.map attrToPair attrs
 
 
+-- |Retreive IP
+-- TODO could check/use addressfamily as well
+ipFromAttributes :: Bool  -- ^True if source
+                    -> Attributes -> MptcpAttribute
+ipFromAttributes True attrs =
+    case makeAttributeFromMaybe MPTCP_ATTR_SADDR4 attrs of
+      Just ip -> ip
+      Nothing -> case makeAttributeFromMaybe MPTCP_ATTR_SADDR6 attrs of
+        Just ip -> ip
+        Nothing -> error "could not get the src IP"
+
+ipFromAttributes False attrs =
+    case makeAttributeFromMaybe MPTCP_ATTR_DADDR4 attrs of
+      Just ip -> ip
+      Nothing -> case makeAttributeFromMaybe MPTCP_ATTR_DADDR6 attrs of
+        Just ip -> ip
+        Nothing -> error "could not get dest IP"
+
 -- mptcpAttributesToMap :: [MptcpAttribute] -> Attributes
 -- mptcpAttributesToMap attrs =
 --   Map.fromList $map mptcpAttributeToTuple attrs
@@ -313,24 +333,15 @@ mptcpListToAttributes attrs = Map.fromList $Prelude.map attrToPair attrs
 -- TODO simplify
 subflowFromAttributes :: Attributes -> TcpConnection
 subflowFromAttributes attrs =
-  -- makeAttribute Int ByteString
   let
     -- expects a ByteString
-    (SubflowSourcePort sport) = fromJust $ makeAttributeFromMaybe MPTCP_ATTR_SPORT attrs
-    (SubflowDestPort dport) = fromJust $ makeAttributeFromMaybe MPTCP_ATTR_DPORT attrs
-    SubflowSourceAddress _srcIp = case makeAttributeFromMaybe MPTCP_ATTR_SADDR4 attrs of
-      Just ip -> ip
-      Nothing -> case makeAttributeFromMaybe MPTCP_ATTR_SADDR6 attrs of
-        Just ip -> ip
-        Nothing -> error "could not get the src IP"
-    SubflowDestAddress _dstIp = case makeAttributeFromMaybe MPTCP_ATTR_DADDR4 attrs of
-      Just ip -> ip
-      Nothing -> case makeAttributeFromMaybe MPTCP_ATTR_DADDR6 attrs of
-        Just ip -> ip
-        Nothing -> error "could not get the dest IP"
-    (LocalLocatorId lid) = fromJust $ makeAttributeFromMaybe MPTCP_ATTR_LOC_ID attrs
-    (RemoteLocatorId rid) = fromJust $ makeAttributeFromMaybe MPTCP_ATTR_REM_ID attrs
-    (SubflowInterface intfId) = fromJust $ makeAttributeFromMaybe MPTCP_ATTR_IF_IDX attrs
+    SubflowSourcePort sport = fromJust $ makeAttributeFromMaybe MPTCP_ATTR_SPORT attrs
+    SubflowDestPort dport = fromJust $ makeAttributeFromMaybe MPTCP_ATTR_DPORT attrs
+    SubflowSourceAddress _srcIp =  ipFromAttributes True attrs
+    SubflowDestAddress _dstIp = ipFromAttributes False attrs
+    LocalLocatorId lid = fromJust $ makeAttributeFromMaybe MPTCP_ATTR_LOC_ID attrs
+    RemoteLocatorId rid = fromJust $ makeAttributeFromMaybe MPTCP_ATTR_REM_ID attrs
+    SubflowInterface intfId = fromJust $ makeAttributeFromMaybe MPTCP_ATTR_IF_IDX attrs
     -- sfFamily = getPort $ fromJust (Map.lookup (fromEnum MPTCP_ATTR_FAMILY) attrs)
     prio = Nothing   -- (SubflowPriority N)
   in
@@ -473,7 +484,9 @@ subflowAttrs con = [
 
 -- |Generate a request to create a new subflow
 -- TODO
-capCwndPkt :: MptcpSocket -> MptcpConnection -> Word32 -> TcpConnection -> MptcpPacket
+capCwndPkt :: MptcpSocket -> MptcpConnection
+              -> Word32  -- ^Limit to apply to congestion window
+              -> TcpConnection -> MptcpPacket
 capCwndPkt (MptcpSocket sock fid) mptcpCon limit sf =
     assert (hasFamily attrs) pkt
     where

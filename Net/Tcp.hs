@@ -29,7 +29,7 @@ data TcpConnection = TcpConnection {
   , localId :: Word8  -- ^ Convert to AddressFamily
   , remoteId :: Word8
   -- TODO remove could be deduced from srcIp / dstIp ?
-  , subflowInterface :: Maybe Word32 -- ^Interface of Maybe ?
+  , subflowInterface :: Maybe Word32 -- ^Interface of Maybe ? why a maybe ?
   -- add TcpMetrics member
 
 } deriving (Show, Generic)
