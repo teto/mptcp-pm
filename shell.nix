@@ -22,6 +22,7 @@ let
           # ip = pkgs.haskell.lib.dontCheck hold.ip;
 
           c2hsc = pkgs.haskell.lib.dontCheck hold.c2hsc;
+          wide-word = pkgs.haskell.lib.doJailbreak (hold.wide-word);
 
           # ip = pkgs.haskell.packages.stackage.lts-1321.ip;
           # QuickCheck = haskellPackagesOld.QuickCheck_2_13_1;
@@ -77,7 +78,7 @@ in
 
     haskellPackages.cabal-install
     # haskellPackages.bytestring-conversion
-    haskellPackages.gutenhasktags  # taken from my overlay
+    # haskellPackages.gutenhasktags  # taken from my overlay
     # haskellPackages.haskdogs # seems to build on hasktags/ recursively import things
     haskellPackages.hasktags
     haskellPackages.nvim-hs-ghcid # too old, won't support nvim-hs-contrib 2

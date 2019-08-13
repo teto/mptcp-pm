@@ -398,15 +398,10 @@ startMonitorConnection mptcpSock mConn = do
             -- query returns IO [Packet a]
             -- answers <- mapM (query sock) cwndPackets
             mapM_ (sendPacket sock) cwndPackets
-            -- let concatAnswers = concat answers
-
-            -- putStrLn "started inspecting Answers"
-            -- inspectAnswers concatAnswers
-            -- putStrLn "finished inspectAnswers "
 
             -- then we should send a request for each cwnd
             -- for now disabled to clean up
-            -- mapM_ updateSubflowMetrics (subflows con)
+            mapM_ updateSubflowMetrics (subflows con)
 
             sleepMs onSuccessSleepingDelay
     putStrLn "Finished monitoring token "

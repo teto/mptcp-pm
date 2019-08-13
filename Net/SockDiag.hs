@@ -349,7 +349,9 @@ data IDiagExtension =  DiagTcpInfo {
   , tcpInfoRttCount :: Word32
   , tcpInfoRtt :: Word32
   , tcpInfoMinrtt :: Word32
-} | CongInfo String deriving (Show, Generic)
+} | CongInfo String
+  | Shutdown Word8
+  deriving (Show, Generic)
 
 -- ideally we should be able to , Serialize
 -- encode
@@ -366,6 +368,8 @@ getTcpVegasInfo = TcpVegasInfo <$> getWord32host <*> getWord32host <*> getWord32
 getMemInfo :: Get IDiagExtension
 getMemInfo = Meminfo <$> getWord32host <*> getWord32host <*> getWord32host <*> getWord32host
 
+getShutdown :: Get IDiagExtension
+getShutdown = Shutdown <$> getWord8
 
 -- |
 getCongInfo :: Get IDiagExtension
@@ -455,7 +459,7 @@ loadExtension key value = let
     -- InetDiagTos -> Nothing
     -- InetDiagTclass -> Nothing
     -- InetDiagSkmeminfo -> Nothing
-    -- InetDiagShutdown -> Nothing
+    InetDiagShutdown -> Nothing
     -- InetDiagDctcpinfo -> Nothing
     -- InetDiagProtocol -> Nothing
     -- InetDiagSkv6only -> Nothing
