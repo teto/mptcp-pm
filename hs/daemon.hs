@@ -345,6 +345,7 @@ updateSubflowMetrics subflow = do
     putStrLn "Reading mptcp sock Mvar..."
     mptcpSock <- readMVar globalMptcpSock
     putStrLn "Finished reading"
+    -- 
     let queryPkt = genQueryPacket (Right subflow) [TcpListen, TcpEstablished]
          [InetDiagCong, InetDiagInfo, InetDiagMeminfo]
     -- let (MptcpSocket testSock familyId ) = mptcpSock

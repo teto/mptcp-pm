@@ -65,8 +65,8 @@ magicSeq = 123456
 --
 -- |}
 data InetDiagSockId  = InetDiagSockId  {
-  idiag_sport :: Word16
-  , idiag_dport :: Word16
+  idiag_sport :: Word16  -- ^Source port
+  , idiag_dport :: Word16  -- ^Destination port
 
   -- Just be careful that this is a fixed size regardless of family
   -- __be32  idiag_src[4];
@@ -75,8 +75,8 @@ data InetDiagSockId  = InetDiagSockId  {
   , idiag_src :: ByteString
   , idiag_dst :: ByteString
 
-  , idiag_intf :: Word32
-  , idiag_cookie :: Word64
+  , idiag_intf :: Word32    -- ^Interface id
+  , idiag_cookie :: Word64  -- ^To specifically request an sockid
 
 } deriving (Eq, Show)
 
@@ -115,8 +115,8 @@ wordToEnums  _ = []
 rename to answer ? 
 -}
 data InetDiagMsg = InetDiagMsg {
-  idiag_family :: Word8
-  , idiag_state :: Word8
+  idiag_family :: Word8  -- ^
+  , idiag_state :: Word8 -- ^Bitfield
   , idiag_timer :: Word8
   , idiag_retrans :: Word8
   , idiag_sockid :: InetDiagSockId
