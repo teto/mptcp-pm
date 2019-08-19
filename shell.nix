@@ -24,6 +24,15 @@ let
           c2hsc = pkgs.haskell.lib.dontCheck hold.c2hsc;
           wide-word = pkgs.haskell.lib.doJailbreak (hold.wide-word);
 
+          # TODO change source
+          bitset = pkgs.haskell.lib.overrideSrc hold.bitset { src = pkgs.fetchFromGithub {
+              owner = "teto";
+              repository = "bitset";
+              rev = "upgrade";
+              sha256 = "0j0hrzr9b57ifwfhggpzm43zcf6wcsj8ffxv6rz7ni7ar1x96x2c";
+            };
+          };
+
           # ip = pkgs.haskell.packages.stackage.lts-1321.ip;
           # QuickCheck = haskellPackagesOld.QuickCheck_2_13_1;
           # ip_1_5_0 = haskellPackagesOld.ip_1_5_0.override { };

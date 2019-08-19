@@ -32,10 +32,13 @@ Flag Dev {
 -- brittany for formatting (does not work)
 -- use containers for Data.Set ?
 -- text is used to convert from string and in aeson
+-- http://hackage.haskell.org/package/bitset-1.4.8/docs/Data-BitSet-Word.html
 common shared-properties
     build-depends: base >= 4.12 && < 4.20, optparse-applicative,
       containers, bytestring, fast-logger, process, cereal, ip, aeson,
        netlink >= 1.1.1.0, bytestring-conversion, c2hsc, text
+       -- , bitset
+       -- haskus-binary
     default-language: Haskell2010
     -- -fno-warn-unused-imports 
     -- -fforce-recomp  makes it build twice

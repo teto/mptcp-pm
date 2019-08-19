@@ -49,6 +49,9 @@ import Net.Tcp.Constants
 import Net.SockDiag.Constants
 import Data.ByteString (ByteString, pack, )
 
+--
+-- import Data.BitSet.Word
+
 -- requires cabal as a dep
 -- import Distribution.Utils.ShortText (decodeStringUtf8)
 import GHC.Generics
@@ -115,8 +118,8 @@ wordToEnums  _ = []
 rename to answer ? 
 -}
 data InetDiagMsg = InetDiagMsg {
-  idiag_family :: Word8  -- ^
-  , idiag_state :: Word8 -- ^Bitfield
+  idiag_family :: AddressFamily  -- ^
+  , idiag_state :: Word8 -- ^Bitfield matching the request
   , idiag_timer :: Word8
   , idiag_retrans :: Word8
   , idiag_sockid :: InetDiagSockId
@@ -149,6 +152,7 @@ data SockDiagRequest = SockDiagRequest {
 -- It should be set to the appropriate IPPROTO_* constant for AF_INET and AF_INET6, and to 0 otherwise.
   , sdiag_protocol :: Word8 -- ^IPPROTO_XXX always TCP ?
   -- IPv4/v6 specific structure
+  -- Bitset
   , idiag_ext :: [IDiagExt] -- ^query extended info (word8 size)
   -- , req_pad :: Word8        -- ^ padding for backwards compatibility with v1
 
@@ -214,11 +218,11 @@ getInetDiagMsg  = do
     wqueue <- getWord32host
     uid <- getWord32host
     inode <- getWord32host
-    return$  InetDiagMsg family state timer retrans _sockid expires rqueue wqueue uid inode
+    return$  InetDiagMsg (fromIntegral family) state timer retrans _sockid expires rqueue wqueue uid inode
 
 putInetDiagMsg :: InetDiagMsg -> Put
 putInetDiagMsg msg = do
-  putWord8 $ idiag_family msg
+  putWord8 $ fromIntegral $ fromEnum $ idiag_family msg
   putWord8 $ idiag_state msg
   putWord8 $ idiag_timer msg
   putWord8 $ idiag_retrans msg
