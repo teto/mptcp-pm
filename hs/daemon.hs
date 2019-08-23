@@ -125,6 +125,8 @@ import Data.Aeson
 -- for getEnvDefault
 import System.Environment.Blank()
 
+-- trying hslogger
+import System.Log.Logger
 
 -- for writeUTF8File
 -- import Distribution.Simple.Utils
@@ -139,9 +141,9 @@ import System.Environment.Blank()
 globalMptcpSock :: MVar MptcpSocket
 globalMptcpSock = unsafePerformIO newEmptyMVar
 
-{-# NOINLINE globalMetricsSock  #-}
-globalMetricsSock :: MVar NetlinkSocket
-globalMetricsSock = unsafePerformIO newEmptyMVar
+-- TODO remove
+-- globalMetricsSock :: MVar NetlinkSocket
+-- globalMetricsSock = unsafePerformIO newEmptyMVar
 
 -- {-# NOINLINE globalInterfaces #-}
 -- globalInterfaces :: MVar AvailablePaths
@@ -337,23 +339,24 @@ sleepMs :: Int -> IO()
 sleepMs n = threadDelay (n * 1000)
 
 -- here we may want to run mptcpnumerics to get some results
-updateSubflowMetrics :: TcpConnection -> IO ()
-updateSubflowMetrics subflow = do
-    putStrLn "Reading metrics sock Mvar..."
-    sockMetrics <- readMVar globalMetricsSock
-
-    putStrLn "Reading mptcp sock Mvar..."
-    mptcpSock <- readMVar globalMptcpSock
-    putStrLn "Finished reading"
-    -- 
+updateSubflowMetrics :: NetlinkSocket -> TcpConnection -> SockDiagMetrics
+updateSubflowMetrics sockMetrics subflow = do
+    putStrLn "Updating subflow metrics"
+    -- putStrLn "Reading mptcp sock Mvar..."
+    -- mptcpSock <- readMVar globalMptcpSock
+    -- putStrLn "Finished reading"
     let queryPkt = genQueryPacket (Right subflow) [TcpListen, TcpEstablished]
          [InetDiagCong, InetDiagInfo, InetDiagMeminfo]
-    -- let (MptcpSocket testSock familyId ) = mptcpSock
     sendPacket sockMetrics queryPkt
     putStrLn "Sent the TCP SS request"
 
     -- exported from my own version !!
+    -- TODO display number of answers
+    --  SockDiagMetrics 
+    -- putStrLn "Starting inspecting answers"
     recvMulti sockMetrics >>= inspectIdiagAnswers
+    -- putStrLn "Finished inspecting answers"
+    -- [(TcpConnection, SockDiagExtension)]
 
 
 -- TODO
@@ -364,9 +367,12 @@ updateSubflowMetrics subflow = do
 -- daddr4 | daddr6, dport [, sport, backup, if_idx]]
 
 
+{- |
+  Starts monitoring a specific MPTCP connection
+-}
 -- Use a Mvar here to
-startMonitorConnection :: MptcpSocket -> MVar MptcpConnection -> IO ()
-startMonitorConnection mptcpSock mConn = do
+startMonitorConnection :: MptcpSocket -> NetlinkSocket -> MVar MptcpConnection -> IO ()
+startMonitorConnection mptcpSock sockMetrics mConn = do
     -- ++ show token
     let (MptcpSocket sock familyId) = mptcpSock
     myId <- myThreadId
@@ -380,9 +386,15 @@ startMonitorConnection mptcpSock mConn = do
     let token = connectionToken con
 
     -- TODO this is the issue
-    let masterSf = head $ subflows con
+    -- not sure it's the master with a set
+    let masterSf = Set.elemAt 0 (subflows con)
+
+    -- Get updated metrics
+    mapM_ (updateSubflowMetrics sockMetrics) (subflows con)
 
     putStrLn "Running mptcpnumerics"
+
+    -- Then refresh the cwnd objective
     cwnds_m <- getCapsForConnection con
     case cwnds_m of
         Nothing -> do
@@ -393,7 +405,7 @@ startMonitorConnection mptcpSock mConn = do
             putStrLn $ "Requesting to set cwnds..." ++ show cwnds
             -- TODO fix
             -- KISS for now (capCwndPkt mptcpSock )
-            let cwndPackets  = map (\(cwnd, sf) -> capCwndPkt mptcpSock con cwnd sf) (zip cwnds (subflows con))
+            let cwndPackets  = map (\(cwnd, sf) -> capCwndPkt mptcpSock con cwnd sf) (zip cwnds (Set.toList $ subflows con))
             -- >> map (capCwndPkt mptcpSock ) >>= putStrLn "toto"
 
             -- query returns IO [Packet a]
@@ -402,13 +414,13 @@ startMonitorConnection mptcpSock mConn = do
 
             -- then we should send a request for each cwnd
             -- for now disabled to clean up
-            mapM_ updateSubflowMetrics (subflows con)
+            -- TODO move up
 
             sleepMs onSuccessSleepingDelay
     putStrLn "Finished monitoring token "
 
     -- call ourself again
-    startMonitorConnection mptcpSock mConn
+    startMonitorConnection mptcpSock sockMetrics mConn
 
 
 -- | This should return a list of cwnd to respect a certain scenario
@@ -633,13 +645,15 @@ registerMptcpConnection oldState token subflow = let
                 mappedInterface <- mapSubflowToInterfaceIdx (srcIp subflow)
                 let fixedSubflow = subflow { subflowInterface = mappedInterface }
                 -- let newMptcpConn = (MptcpConnection token [] Set.empty Set.empty)
-                let newMptcpConn = mptcpConnAddSubflow (MptcpConnection token [] Set.empty Set.empty) fixedSubflow
+                let newMptcpConn = mptcpConnAddSubflow (MptcpConnection token Set.empty Set.empty Set.empty) fixedSubflow
 
                 newConn <- newMVar newMptcpConn
                 putStrLn $ "Connection established !!\n"
 
+                -- create a new
+                sockMetrics <- makeMetricsSocket
                 -- start monitoring connection
-                threadId <- forkOS (startMonitorConnection mptcpSock newConn)
+                threadId <- forkOS (startMonitorConnection mptcpSock sockMetrics newConn)
 
                 putStrLn $ "Inserting new MVar "
                 let newState = oldState {
@@ -840,32 +854,36 @@ createLogger = newStdoutLoggerSet defaultBufSize
 
 
 
-dumpExtensionAttribute :: Int -> ByteString -> String
+dumpExtensionAttribute :: Int -> ByteString -> SockDiagExtension
 dumpExtensionAttribute attrId value = let
-        eExtId = (toEnum attrId :: IDiagExt)
+        eExtId = (toEnum attrId :: SockDiagExtensionId)
         ext_m = loadExtension attrId value
     in
         case ext_m of
-            Nothing -> "Could not load " ++ show eExtId ++ " (unsupported)\n"
-            Just ext -> traceId (show eExtId) ++ " " ++ showExtension ext ++ " \n"
-    -- show $ (toEnum attrId :: IDiagExt)
+            Nothing -> error $ "Could not load " ++ show eExtId ++ " (unsupported)\n"
+            Just ext -> ext
+            -- traceId (show eExtId) ++ " " ++ showExtension ext ++ " \n"
 
-showExtensionAttributes :: Attributes -> String
-showExtensionAttributes attrs =
+loadExtensionsFromAttributes :: Attributes -> [SockDiagExtension]
+loadExtensionsFromAttributes attrs =
     let
         -- $ loadExtension
-        mapped = Map.foldrWithKey (\k v -> (dumpExtensionAttribute k v ++ )) "Dumping extensions:\n " attrs
+        mapped = Map.foldrWithKey (\k v -> ([dumpExtensionAttribute k v] ++ )) [] attrs
     in
         mapped
 
 
---
-inspectIDiagAnswer :: Packet InetDiagMsg -> IO ()
-inspectIDiagAnswer (Packet hdr cus attrs) =
-    putStrLn ("Idiag custom " ++ show cus) >>
-    putStrLn ("Idiag header " ++ show hdr) >>
-    putStrLn (showExtensionAttributes attrs)
-inspectIDiagAnswer p = putStrLn $ "test" ++ showPacket p
+{- Parses the requested informations
+-}
+inspectIDiagAnswer :: Packet InetDiagMsg -> Maybe (TcpConnection, [SockDiagExtension])
+inspectIDiagAnswer (Packet hdr cus attrs) = let
+    con = connectionFromDiag  cus
+  in
+    Just (con, loadExtensionsFromAttributes attrs)
+    -- putStrLn ("Idiag custom " ++ show cus) >>
+    -- putStrLn ("Idiag header " ++ show hdr) >>
+    -- putStrLn (showExtensionAttributes attrs)
+inspectIDiagAnswer p = Nothing
 
 -- inspectIDiagAnswer (DoneMsg err) = putStrLn "DONE MSG"
 -- (GenlData NoData)
@@ -877,10 +895,14 @@ inspectIDiagAnswer p = putStrLn $ "test" ++ showPacket p
 --             ++ "Supposing it's a mptcp command: " ++ dumpCommand ( toEnum $ fromIntegral cmd)
 
 
+-- |
+data SockDiagMetrics = SockDiagMetrics {
+  con :: TcpConnection
+  , metrics :: [SockDiagExtension]
+}
 
--- Updates the list of interfaces
+-- |Updates the list of interfaces
 -- should run in background
---
 trackSystemInterfaces :: IO()
 trackSystemInterfaces = do
   -- check routing information
@@ -892,11 +914,12 @@ trackSystemInterfaces = do
 
 
 -- la en fait c des reponses que j'obtiens ?
-inspectIdiagAnswers :: [Packet InetDiagMsg] -> IO ()
-inspectIdiagAnswers packets = do
-  putStrLn "Start inspecting IDIAG answers"
+inspectIdiagAnswers :: [Packet InetDiagMsg] -> SockDiagMetrics
+inspectIdiagAnswers packets =
+  -- putStrLn "Start inspecting IDIAG answers"
+  -- mapM_ inspectIDiagAnswer packets
   mapM_ inspectIDiagAnswer packets
-  putStrLn "Finished inspecting answers"
+  -- putStrLn "Finished inspecting answers"
 
 -- s'inspirer de
 -- https://github.com/vdorr/linux-live-netinfo/blob/24ead3dd84d6847483aed206ec4b0e001bfade02/System/Linux/NetInfo.hs
@@ -911,7 +934,7 @@ main = do
   -- globalState <- newEmptyMVar
   -- putStrLn $ "RESET" ++ show MPTCP_CMD_REMOVE
   -- putStrLn $ dumpMptcpCommands MPTCP_CMD_UNSPEC
-  putStrLn "Creating MPTCP netlink socket..."
+  debugM "main" "Creating MPTCP netlink socket..."
 
   -- add the socket too to an MVar ?
   (MptcpSocket sock  fid) <- makeMptcpSocket
@@ -919,10 +942,9 @@ main = do
   -- globalState <- newMVar $ MyState (MptcpSocket sock  fid) Map.empty
   putMVar globalMptcpSock (MptcpSocket sock  fid)
 
-  putStrLn "Creating metrics netlink socket..."
-  sockMetrics <- makeMetricsSocket
-  -- putMVar
-  putMVar globalMetricsSock sockMetrics
+  -- putStrLn "Creating metrics netlink socket..."
+  -- sockMetrics <- makeMetricsSocket
+  -- putMVar globalMetricsSock sockMetrics
 
   -- a threadid
   -- TODO put an empty map

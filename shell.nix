@@ -6,13 +6,10 @@
 # compiler ? pkgs.haskell.packages.ghc864
 # }:
 
-# with pkgs;
-# let
 let
-  config = {
-    packageOverrides = pkgs: rec {
-      haskellPackages = pkgs.haskellPackages.override {
-        overrides = hnew: hold: {
+  overlay = self: prev: {
+      haskell = prev.haskell // {
+        packageOverrides = hnew: hold: {
           # hspec = hold.hspec_2_7_1;
           # hspec-core = hold.hspec-core_2_7_1;
           # hspec-discover = hold.hspec-discover_2_7_1;
@@ -20,25 +17,38 @@ let
 
           # from nixpkgs-stackage overlay
           # ip = pkgs.haskell.lib.dontCheck hold.ip;
+          all-hies = import (fetchTarball "https://github.com/infinisil/all-hies/tarball/master") {};
 
           c2hsc = pkgs.haskell.lib.dontCheck hold.c2hsc;
           wide-word = pkgs.haskell.lib.doJailbreak (hold.wide-word);
 
-          # TODO change source
-          bitset = pkgs.haskell.lib.overrideSrc hold.bitset { src = pkgs.fetchFromGithub {
+          netlink = (pkgs.haskell.lib.overrideSrc hold.netlink {
+            # src = builtins.fetchGit {
+            #   # url = https://github.com/ongy/netlink-hs;
+            #   url = https://github.com/teto/netlink-hs;
+            # };
+            src = prev.fetchFromGitHub {
               owner = "teto";
-              repository = "bitset";
-              rev = "upgrade";
-              sha256 = "0j0hrzr9b57ifwfhggpzm43zcf6wcsj8ffxv6rz7ni7ar1x96x2c";
+              repo = "netlink-hs";
+              rev = "090a48ebdbc35171529c7db1bd420d227c19b76d";
+              sha256 = "sha256-qopa1ED4Bqk185b1AXZ32BG2s80SHDSkCODyoZfnft0=";
             };
-          };
+          });
+
+          # TODO change source
+          # bitset = pkgs.haskell.lib.overrideSrc hold.bitset { src = pkgs.fetchFromGithub {
+          #     owner = "teto";
+          #     repository = "bitset";
+          #     rev = "upgrade";
+          #     sha256 = "0j0hrzr9b57ifwfhggpzm43zcf6wcsj8ffxv6rz7ni7ar1x96x2c";
+          #   };
+          # };
 
           # ip = pkgs.haskell.packages.stackage.lts-1321.ip;
           # QuickCheck = haskellPackagesOld.QuickCheck_2_13_1;
           # ip_1_5_0 = haskellPackagesOld.ip_1_5_0.override { };
         };
       };
-    };
     allowBroken = true;
   };
 
@@ -60,17 +70,14 @@ let
   compiler = pkgs.haskell.packages."${compilerName}";
 
   # inherit config;
-  # pkgs = import <nixpkgs> {  inherit config; };
   # pkgs = import layer3-nixpkgs {};
   pkgs = localPkgs;
 
-  # localPkgs = import <nixpkgs> {  inherit config; };
-  localPkgs = import <nixpkgs> {};
+  localPkgs = import <nixpkgs> {  overlays = [ overlay]; };
+  # localPkgs = import <nixpkgs> {};
 
   # my_nvim = localPkgs.genNeovim  [ ] { withHaskell = true; };
-
 in
-  with pkgs;
 
   compiler.shellFor {
   # the dependencies of packages listed in `packages`, not the
@@ -82,17 +89,15 @@ in
   ]
   ;
   withHoogle = true;
-  nativeBuildInputs = [
-    all-hies.versions."${compilerName}"
+  nativeBuildInputs = with pkgs; [
+    haskellPackages.all-hies.versions."${compilerName}"
 
     haskellPackages.cabal-install
-    # haskellPackages.bytestring-conversion
-    # haskellPackages.gutenhasktags  # taken from my overlay
-    # haskellPackages.haskdogs # seems to build on hasktags/ recursively import things
     haskellPackages.hasktags
     haskellPackages.nvim-hs-ghcid # too old, won't support nvim-hs-contrib 2
 
-    # for https://hackage.haskell.org/package/bytestring-conversion-0.2/candidate/docs/Data-ByteString-Conversion-From.html
+    # haskellPackages.gutenhasktags  # taken from my overlay
+    # haskellPackages.haskdogs # seems to build on hasktags/ recursively import things
   ];
 
   # export HIE_HOOGLE_DATABASE=$NIX_GHC_DOCDIR as DOCDIR doesn't exist it won't work

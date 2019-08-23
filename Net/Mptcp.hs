@@ -12,7 +12,7 @@ OverloadedStrings allows Aeson to convert
 module Net.Mptcp
 where
 
-import Net.SockDiag (IDiagExtension)
+import Net.SockDiag (SockDiagExtension)
 import Control.Exception (assert)
 
 import Data.Word (Word8, Word16, Word32)
@@ -58,7 +58,7 @@ type MptcpPacket = GenlPacket NoData
 data SubflowWithMetrics = SubflowWithMetrics {
   subflowSubflow :: TcpConnection
     -- for now let's retain DiagTcpInfo  only
-  , metrics :: [IDiagExtension]
+  , metrics :: [SockDiagExtension]
 }
 
 -- |Data to hold MPTCP level information
@@ -66,7 +66,8 @@ data SubflowWithMetrics = SubflowWithMetrics {
 data MptcpConnection = MptcpConnection {
   connectionToken :: MptcpToken
   -- use SubflowWithMetrics instead ?!
-  , subflows :: [TcpConnection]
+  -- , subflows :: Set.Set [TcpConnection]
+  , subflows :: Set.Set TcpConnection
   -- TODO convert to Data.Set ?
   -- , localIds :: [Word8]  -- ^ Announced addresses
   -- , remoteIds :: [Word8]  -- ^ Announced addresses
@@ -107,7 +108,7 @@ instance ToJSON MptcpConnection where
   toJSON mptcpConn = object
     [ "name" .= toJSON (show $ connectionToken mptcpConn)
     , "sender" .= object [
-          -- TODO here we could read from sysctl ? or use another IDiagExtension
+          -- TODO here we could read from sysctl ? or use another SockDiagExtension
           "snd_buffer" .= toJSON (40 :: Int)
           , "capabilities" .= object []
         ]
@@ -140,9 +141,10 @@ instance ToJSON SubflowWithMetrics where
 mptcpConnAddSubflow :: MptcpConnection -> TcpConnection -> MptcpConnection
 mptcpConnAddSubflow mptcpConn sf =
   -- trace ("Adding subflow" ++ show sf)
-    mptcpConnAddLocalId 
+    mptcpConnAddLocalId
         (mptcpConnAddRemoteId
-            (mptcpConn { subflows = sf : subflows mptcpConn })
+            -- (mptcpConn { subflows = sf : subflows mptcpConn })
+            (mptcpConn { subflows = Set.insert sf (subflows mptcpConn) })
             (remoteId sf)
         )
         (localId sf)
@@ -168,7 +170,10 @@ mptcpConnAddRemoteId con remId = con { localIds = Set.insert (remId) (remoteIds 
 
 -- |Remove subflow from an MPTCP connection
 mptcpConnRemoveSubflow :: MptcpConnection -> TcpConnection -> MptcpConnection
-mptcpConnRemoveSubflow mptcpConn sf = undefined
+mptcpConnRemoveSubflow con sf = con {
+  subflows = Set.delete sf (subflows con)
+  -- TODO remove associated local/remote Id ?
+}
 
 
 getPort :: ByteString -> Word16

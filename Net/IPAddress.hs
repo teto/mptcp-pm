@@ -38,6 +38,7 @@ getIPv4FromByteString val =
   runGet (Net.IPv4.fromOctets <$> getWord8 <*> getWord8 <*> getWord8 <*> getWord8) val
 
 
+-- |
 getIPFromByteString :: NLC.AddressFamily -> ByteString -> Either String IP
 getIPFromByteString addrFamily ipBstr
   | addrFamily == eAF_INET = fromIPv4 <$> getIPv4FromByteString ipBstr

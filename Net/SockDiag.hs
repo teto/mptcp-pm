@@ -14,10 +14,11 @@ Portability : Linux
 {-# LANGUAGE DeriveAnyClass #-}
 module Net.SockDiag (
   InetDiagMsg (..)
-  , IDiagExtension (..)
+  , SockDiagExtension (..)
   , genQueryPacket
   , loadExtension
   , showExtension
+  , connectionFromDiag
 ) where
 
 -- import Generated
@@ -26,6 +27,7 @@ import Data.Word (Word8, Word16, Word32, Word64)
 import Prelude hiding (length, concat, init)
 
 import Data.Maybe (fromJust)
+import Data.Either (fromRight)
 
 import Data.Serialize
 import Data.Serialize.Get ()
@@ -95,7 +97,7 @@ instance Enum2Bits TcpState where
   -- toBits = enumsToWord
   shiftL state = B.shiftL 1 (fromEnum state)
 
-instance Enum2Bits IDiagExt where
+instance Enum2Bits SockDiagExtensionId where
   -- toBits = enumsToWord
   shiftL state = B.shiftL 1 ((fromEnum state) - 1)
 
@@ -153,7 +155,7 @@ data SockDiagRequest = SockDiagRequest {
   , sdiag_protocol :: Word8 -- ^IPPROTO_XXX always TCP ?
   -- IPv4/v6 specific structure
   -- Bitset
-  , idiag_ext :: [IDiagExt] -- ^query extended info (word8 size)
+  , idiag_ext :: [SockDiagExtensionId] -- ^query extended info (word8 size)
   -- , req_pad :: Word8        -- ^ padding for backwards compatibility with v1
 
   -- in principle, any kind of state, but for now we only deal with TcpStates
@@ -187,7 +189,7 @@ getSockDiagRequestHeader = do
     _sockid <- getInetDiagSockid
     -- TODO reestablish states
     return $ SockDiagRequest addressFamily protocol 
-      (wordToEnums extended :: [IDiagExt]) (wordToEnums states :: [TcpState])  _sockid
+      (wordToEnums extended :: [SockDiagExtensionId]) (wordToEnums states :: [TcpState])  _sockid
 
 -- |'Put' function for 'GenlHeader'
 putSockDiagRequestHeader :: SockDiagRequest -> Put
@@ -203,7 +205,22 @@ putSockDiagRequestHeader request = do
   putStates $ idiag_states request
   putInetDiagSockid $ diag_sockid request
 
--- | 
+-- |Converts
+connectionFromDiag :: InetDiagMsg -> TcpConnection
+connectionFromDiag msg =
+  let sockid = idiag_sockid msg in
+  TcpConnection {
+    srcIp = fromRight (error "no default") (getIPFromByteString (idiag_family msg) (idiag_src sockid))
+    , dstIp = fromRight (error "no default") (getIPFromByteString (idiag_family msg) (idiag_dst sockid))
+    , srcPort = idiag_sport sockid
+    , dstPort = idiag_dport sockid
+    , priority = Nothing
+    , localId = 0
+    , remoteId = 0
+    , subflowInterface = Nothing
+  }
+
+-- | Serialize InetDiagMsg
 -- Usually accompanied with attributes ?
 getInetDiagMsg :: Get InetDiagMsg
 getInetDiagMsg  = do
@@ -284,7 +301,7 @@ putInetDiagSockid cust = do
 -- putDiagVegasInfo info = error "should not be needed"
 
 
-getDiagVegasInfo :: Get IDiagExtension
+getDiagVegasInfo :: Get SockDiagExtension
 getDiagVegasInfo =
   TcpVegasInfo <$> getWord32host <*> getWord32host <*> getWord32host <*> getWord32host
 
@@ -293,14 +310,18 @@ eIPPROTO_TCP :: Word8
 eIPPROTO_TCP = 6
 
 
--- getTcpInfo :: Get IDiagExtension
+-- getTcpInfo :: Get SockDiagExtension
 -- getTcpInfo =
 --   DiagTcpInfo <$> getWord8
 --   Word8 Word8 Word8 Word8 Word8 Word8 Word8 Word32 Word32 Word32 Word32 Word32 Word32 Word32 Word32 Word32 Word32 Word32 Word32 Word32 Word32 Word32 Word32 Word32 Word32 Word32 Word32 Word32 Word32 Word32 Word32
 
--- TODO generate with c2hsc ?
--- include/uapi/linux/inet_diag.h
-data IDiagExtension =  DiagTcpInfo {
+{-|
+  TODO generate with c2hsc ?
+include/uapi/linux/inet_diag.h
+-}
+data SockDiagExtension =
+-- | Lots of good information
+  DiagTcpInfo {
   tcpi_state :: Word8,
   tcpi_ca_state :: Word8,
   tcpi_retransmits :: Word8,
@@ -346,6 +367,7 @@ data IDiagExtension =  DiagTcpInfo {
 , idiag_wmem :: Word32
 , idiag_fmem :: Word32
 , idiag_tmem :: Word32
+-- | Not exclusive to Vegas unlike the name indicates
 } | TcpVegasInfo {
 -- tcpvegas_info 
   -- TODO hide ?
@@ -359,24 +381,24 @@ data IDiagExtension =  DiagTcpInfo {
 
 -- ideally we should be able to , Serialize
 -- encode
--- instance Convertable IDiagExtension where
+-- instance Convertable SockDiagExtension where
 --   getGet _ = get
 --   getPut = put
 
 -- not sure what it is
 -- INET_DIAG_MARK,		/* only with CAP_NET_ADMIN */
 
-getTcpVegasInfo :: Get IDiagExtension
+getTcpVegasInfo :: Get SockDiagExtension
 getTcpVegasInfo = TcpVegasInfo <$> getWord32host <*> getWord32host <*> getWord32host <*> getWord32host
 
-getMemInfo :: Get IDiagExtension
+getMemInfo :: Get SockDiagExtension
 getMemInfo = Meminfo <$> getWord32host <*> getWord32host <*> getWord32host <*> getWord32host
 
-getShutdown :: Get IDiagExtension
+getShutdown :: Get SockDiagExtension
 getShutdown = Shutdown <$> getWord8
 
 -- |
-getCongInfo :: Get IDiagExtension
+getCongInfo :: Get SockDiagExtension
 getCongInfo = do
     -- bytes = getListOf getWord8
     left <- remaining
@@ -385,7 +407,7 @@ getCongInfo = do
 
 -- Meminfo <$> getWord32host <*> getWord32host <*> getWord32host <*> getWord32host
 
-getDiagTcpInfo :: Get IDiagExtension
+getDiagTcpInfo :: Get SockDiagExtension
 getDiagTcpInfo =
    DiagTcpInfo <$> getWord8 <*> getWord8 <*> getWord8 <*> getWord8 <*> getWord8 <*> getWord8 <*> getWord8
   <*> getWord32host <*>getWord32host <*>getWord32host <*>getWord32host <*>getWord32host <*>getWord32host <*>getWord32host <*>getWord32host <*>getWord32host <*>getWord32host <*>getWord32host <*>getWord32host <*>getWord32host <*>getWord32host <*>getWord32host <*>getWord32host <*>getWord32host <*>getWord32host <*>getWord32host <*>getWord32host <*>getWord32host <*>getWord32host <*>getWord32host <*>getWord32host
@@ -405,7 +427,7 @@ getDiagTcpInfo =
 -- TODO if we have a cookie ignore the rest ?!
 -- requestedInfo = InetDiagNone
 
-showExtension :: IDiagExtension -> String
+showExtension :: SockDiagExtension -> String
 showExtension (CongInfo cc) = "Using CC " ++ (show cc)
 showExtension (TcpVegasInfo _ _ rtt minRtt) = "RTT=" ++ (show rtt) ++ " minRTT=" ++ show minRtt
 --   tcpi_state :: Word8,
@@ -414,12 +436,16 @@ showExtension (arg@DiagTcpInfo{}) = "TcpInfo: rtt/rttvar=" ++ show ( tcpi_rtt ar
 showExtension rest = show rest
 -- "RTT=" ++ (show rtt) ++ " minRTT=" ++ show minRtt
 
--- | TODO use either ?
-genQueryPacket :: (Either Word64 TcpConnection) -> [TcpState] -> [IDiagExt] -> Packet SockDiagRequest
+{- Generate
+  Check man sock_diag
+-}
+genQueryPacket :: (Either Word64 TcpConnection)
+        -> [TcpState] -- ^Ignored when querying a single connection
+        -> [SockDiagExtensionId] -- ^Queried values
+        -> Packet SockDiagRequest
 genQueryPacket selector tcpStatesFilter requestedInfo = let
   -- Mesge type / flags /seqNum /pid
   flags = (fNLM_F_REQUEST .|. fNLM_F_MATCH .|. fNLM_F_ROOT)
-
 
   -- might be a trick with seqnum
   hdr = Header msgTypeSockDiag flags magicSeq 0
@@ -448,7 +474,7 @@ queryPacketFromCookie :: Word64 -> Packet SockDiagRequest
 queryPacketFromCookie cookie =  genQueryPacket (Left cookie) [] []
 
 
-loadExtension :: Int -> ByteString -> Maybe IDiagExtension
+loadExtension :: Int -> ByteString -> Maybe SockDiagExtension
 loadExtension key value = let
   fn = case toEnum key of
     -- MessageType shouldn't matter anyway ?!

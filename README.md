@@ -49,15 +49,6 @@ In another:
 `$ nix run nixpkgs.iperf -c iperf -c localhost -b 1KiB -t 4 --cport 5500 -4`
 
 
-TODO:
-ss package sends by default
--- #define SS_ALL ((1 << SS_MAX) - 1)
--- #define SS_CONN (SS_ALL & ~((1<<SS_LISTEN)|(1<<SS_CLOSE)|(1<<SS_TIME_WAIT)|(1<<SS_SYN_RECV)))
--- #define TIPC_SS_CONN ((1<<SS_ESTABLISHED)|(1<<SS_LISTEN)|(1<<SS_CLOSE))
-- [ ] write wordToEnums function, especially to fix getSockDiagRequestHeader
-(with bitset package once it's fixed)
-
-
 Script to reload module
 
 
@@ -89,14 +80,25 @@ reload_mod() {
 # Testsuite
 
 # BUGS
-- conversion of IDiagExt is bad everywhere ? req.r.idiag_ext |= (1<<(INET_DIAG_INFO-1));
+- conversion of SockDiagExtensionId is bad everywhere ? req.r.idiag_ext |= (1<<(INET_DIAG_INFO-1));
 - we need to request more states
 
-# TODO 
+# TODO
 - remove the need for MptcpSocket everywhere: it's just needed to write the
 header, which could be added/modifier later instead ! (to increase purity in the
     library)
+- replace Enum2Bits wordToEnums function, especially to fix getSockDiagRequestHeader
+(with bitset package once it's fixed)
 - we need to better keep track of subflow status (established vs WIP) ?
 - pass local/server IPs as commands to the PM ?
 - generate completion scripts via --zsh-completion-script
+
+
+Note:
+ss package sends by default
+-- #define SS_ALL ((1 << SS_MAX) - 1)
+-- #define SS_CONN (SS_ALL & ~((1<<SS_LISTEN)|(1<<SS_CLOSE)|(1<<SS_TIME_WAIT)|(1<<SS_SYN_RECV)))
+-- #define TIPC_SS_CONN ((1<<SS_ESTABLISHED)|(1<<SS_LISTEN)|(1<<SS_CLOSE))
+
+
 

@@ -20,7 +20,7 @@ import Data.Bits ()
 
 -- let it use Bits as well as fNLM_F_REQUEST so that I can chain them with .|.
 -- , Bits TODO rename to eDiagExt ?
-{#enum INET_DIAG_NONE as IDiagExt {underscoreToCase} deriving (Eq, Show)#}
+{#enum INET_DIAG_NONE as SockDiagExtensionId {underscoreToCase} deriving (Eq, Show)#}
 
 #include <linux/sock_diag.h>
 

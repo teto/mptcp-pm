@@ -19,6 +19,10 @@ import Data.Aeson
 import Data.Word (Word8, Word16, Word32)
 import GHC.Generics
 
+{-
+  Hold 
+  The equality implementation ignores several fields
+-}
 data TcpConnection = TcpConnection {
   -- TODO use libraries to deal with that ? filter from the command line for instance ?
   srcIp :: IP -- ^Source ip
@@ -32,7 +36,7 @@ data TcpConnection = TcpConnection {
   , subflowInterface :: Maybe Word32 -- ^Interface of Maybe ? why a maybe ?
   -- add TcpMetrics member
 
-} deriving (Show, Generic)
+} deriving (Show, Generic, Ord)
 
 
 nameFromTcpConnection :: TcpConnection -> String

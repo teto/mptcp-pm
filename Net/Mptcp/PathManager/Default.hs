@@ -8,6 +8,7 @@ import Net.Tcp
 import Net.Mptcp
 import Net.Mptcp.PathManager
 import Data.Maybe (fromJust)
+import qualified Data.Set as Set
 import Debug.Trace
 
 ndiffports :: PathManager
@@ -46,7 +47,7 @@ meshGenPkt mptcpSock mptcpCon intf pkts =
           , subflowInterface = Just $ interfaceId intf
         }
 
-        masterSf = head $ subflows mptcpCon
+        masterSf = Set.elemAt 0 (subflows mptcpCon)
 
 
 {-
