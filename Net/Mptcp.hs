@@ -55,11 +55,12 @@ instance Show MptcpSocket where
 
 type MptcpPacket = GenlPacket NoData
 
-data SubflowWithMetrics = SubflowWithMetrics {
-  subflowSubflow :: TcpConnection
-    -- for now let's retain DiagTcpInfo  only
-  , metrics :: [SockDiagExtension]
-}
+-- |Same as SockDiagMetrics
+-- data SubflowWithMetrics = SubflowWithMetrics {
+--   subflowSubflow :: TcpConnection
+--     -- for now let's retain DiagTcpInfo  only
+--   , metrics :: [SockDiagExtension]
+-- }
 
 -- |Data to hold MPTCP level information
 -- TODO use Data.Set
@@ -71,9 +72,11 @@ data MptcpConnection = MptcpConnection {
   -- TODO convert to Data.Set ?
   -- , localIds :: [Word8]  -- ^ Announced addresses
   -- , remoteIds :: [Word8]  -- ^ Announced addresses
-
   , localIds :: Set.Set Word8  -- ^ Announced addresses
   , remoteIds :: Set.Set Word8   -- ^ Announced addresses
+
+  -- Might be reworked afterwards
+  -- , tcpMetrics :: Maybe [SockDiagExtension]  -- ^Metrics retrieved from kernel
 } deriving (Show, Generic)
 
 
@@ -101,7 +104,7 @@ remoteIdFromAttributes attrs = let
 -- we don't really care
 instance FromJSON MptcpConnection
 
--- export to the format expected by mptcpnumerics
+-- | export to the format expected by mptcpnumerics
 --
 -- toJSON :: MptcpConnection -> Value
 instance ToJSON MptcpConnection where
@@ -113,26 +116,27 @@ instance ToJSON MptcpConnection where
           , "capabilities" .= object []
         ]
     , "capabilities" .= object ([])
+    -- TODO export with metrics
     , "subflows" .= object ([])
     ]
 
 
 --
-instance ToJSON SubflowWithMetrics where
-  toJSON sf = object [
-    (pack (nameFromTcpConnection $ subflowSubflow sf) .= object [
+-- instance ToJSON SubflowWithMetrics where
+--   toJSON sf = object [
+--     (pack (nameFromTcpConnection $ subflowSubflow sf) .= object [
 
-      "cwnd" .= toJSON (20 :: Int),
-      -- for now hardcode mss ? we could set it to one to make
-      "mss" .= toJSON (1500 :: Int),
-      "var" .= toJSON (10 :: Int),
-      "fowd" .= toJSON (10 :: Int),
-      "bowd" .= toJSON (10 :: Int),
-      "loss" .= toJSON (0.5 :: Float)
-      -- This is an user preference, that should be pushed when calling mptcpnumerics
-      -- , "contribution": 0.5
-    ])
-    ]
+--       "cwnd" .= toJSON (20 :: Int),
+--       -- for now hardcode mss ? we could set it to one to make
+--       "mss" .= toJSON (1500 :: Int),
+--       "var" .= toJSON (10 :: Int),
+--       "fowd" .= toJSON (10 :: Int),
+--       "bowd" .= toJSON (10 :: Int),
+--       "loss" .= toJSON (0.5 :: Float)
+--       -- This is an user preference, that should be pushed when calling mptcpnumerics
+--       -- , "contribution": 0.5
+--     ])
+--     ]
 
 
 -- |Adds a subflow to the connection

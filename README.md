@@ -78,10 +78,11 @@ reload_mod() {
 
 
 # Testsuite
+`$ ss -t -4 -i`
+       ss -o state established '( dport = :ssh or sport = :ssh )'
 
 # BUGS
 - conversion of SockDiagExtensionId is bad everywhere ? req.r.idiag_ext |= (1<<(INET_DIAG_INFO-1));
-- we need to request more states
 
 # TODO
 - remove the need for MptcpSocket everywhere: it's just needed to write the

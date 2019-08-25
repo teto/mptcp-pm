@@ -20,7 +20,7 @@ import Data.Word (Word8, Word16, Word32)
 import GHC.Generics
 
 {-
-  Hold 
+  Hold informations
   The equality implementation ignores several fields
 -}
 data TcpConnection = TcpConnection {
@@ -35,6 +35,7 @@ data TcpConnection = TcpConnection {
   -- TODO remove could be deduced from srcIp / dstIp ?
   , subflowInterface :: Maybe Word32 -- ^Interface of Maybe ? why a maybe ?
   -- add TcpMetrics member
+  -- , tcpMetrics :: Maybe [SockDiagExtension]  -- ^Metrics retrieved from kernel
 
 } deriving (Show, Generic, Ord)
 

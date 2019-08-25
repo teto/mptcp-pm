@@ -44,9 +44,9 @@ Aeson tutorials:
 Useful functions in Map
 - member / elemes / keys / assocs / keysSet / toList
 -}
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE OverloadedStrings #-}
 
--- !/usr/bin/env nix-shell
--- !nix-shell ../shell-haskell.nix -i ghc
 module Main where
 
 import Prelude hiding (concat, init)
@@ -71,10 +71,12 @@ import Net.Mptcp.Constants
 
 -- for readList
 import Text.Read
+import Data.Text (pack)
 
 -- for replicateM
-import Control.Monad (foldM)
--- import Data.Maybe (fromMaybe)
+import Control.Monad (foldM, sequence)
+-- fromMaybe, 
+import Data.Maybe (catMaybes)
 -- import Data.Foldable (concat)
 import Foreign.C.Types (CInt)
 -- for eOK, ePERM
@@ -121,6 +123,8 @@ import Control.Concurrent
 -- import Control.Concurrent.Async
 import System.IO.Unsafe
 import Data.Aeson
+
+import GHC.Generics
 
 -- for getEnvDefault
 import System.Environment.Blank()
@@ -271,6 +275,7 @@ sample = Sample
       <$> argument str
           ( metavar "CMD"
          <> help "What to do" )
+      -- TODO should accept hostname etc
       <*> argument (eitherReader $ \x -> case (Net.IPv4.decodeString x) of
                                             Nothing -> Left "could not parse"
                                             Just ip -> Right ip)
@@ -338,8 +343,8 @@ startMonitorExternalProcess token =
 sleepMs :: Int -> IO()
 sleepMs n = threadDelay (n * 1000)
 
--- here we may want to run mptcpnumerics to get some results
-updateSubflowMetrics :: NetlinkSocket -> TcpConnection -> SockDiagMetrics
+-- | here we may want to run mptcpnumerics to get some results
+updateSubflowMetrics :: NetlinkSocket -> TcpConnection -> IO SockDiagMetrics
 updateSubflowMetrics sockMetrics subflow = do
     putStrLn "Updating subflow metrics"
     -- putStrLn "Reading mptcp sock Mvar..."
@@ -353,10 +358,15 @@ updateSubflowMetrics sockMetrics subflow = do
     -- exported from my own version !!
     -- TODO display number of answers
     --  SockDiagMetrics 
-    -- putStrLn "Starting inspecting answers"
-    recvMulti sockMetrics >>= inspectIdiagAnswers
+    putStrLn "Starting inspecting answers"
+    answers <- recvMulti sockMetrics 
+    let metrics_m = inspectIdiagAnswers answers
+    -- >>= inspectIdiagAnswers >>= return
+    -- return only the first ?
+    -- filter ? keep only valud ones ?
+    -- 
+    return $ head (catMaybes metrics_m)
     -- putStrLn "Finished inspecting answers"
-    -- [(TcpConnection, SockDiagExtension)]
 
 
 -- TODO
@@ -390,12 +400,15 @@ startMonitorConnection mptcpSock sockMetrics mConn = do
     let masterSf = Set.elemAt 0 (subflows con)
 
     -- Get updated metrics
-    mapM_ (updateSubflowMetrics sockMetrics) (subflows con)
+    -- lastMetrics 
+    -- let listOfIOSockMetrics = mapM (updateSubflowMetrics sockMetrics) (Set.toList $ subflows con)
+    lastMetrics <- mapM (updateSubflowMetrics sockMetrics) (Set.toList $ subflows con)
+    -- lastMetrics <- Control.Monad.sequence listOfIOSockMetrics
 
     putStrLn "Running mptcpnumerics"
 
     -- Then refresh the cwnd objective
-    cwnds_m <- getCapsForConnection con
+    cwnds_m <- getCapsForConnection (MptcpConnectionWithMetrics con lastMetrics)
     case cwnds_m of
         Nothing -> do
             putStrLn "Couldn't fetch the values"
@@ -406,15 +419,8 @@ startMonitorConnection mptcpSock sockMetrics mConn = do
             -- TODO fix
             -- KISS for now (capCwndPkt mptcpSock )
             let cwndPackets  = map (\(cwnd, sf) -> capCwndPkt mptcpSock con cwnd sf) (zip cwnds (Set.toList $ subflows con))
-            -- >> map (capCwndPkt mptcpSock ) >>= putStrLn "toto"
 
-            -- query returns IO [Packet a]
-            -- answers <- mapM (query sock) cwndPackets
             mapM_ (sendPacket sock) cwndPackets
-
-            -- then we should send a request for each cwnd
-            -- for now disabled to clean up
-            -- TODO move up
 
             sleepMs onSuccessSleepingDelay
     putStrLn "Finished monitoring token "
@@ -423,19 +429,24 @@ startMonitorConnection mptcpSock sockMetrics mConn = do
     startMonitorConnection mptcpSock sockMetrics mConn
 
 
--- | This should return a list of cwnd to respect a certain scenario
--- invoke
--- 1. save the connection to a JSON file and pass it to mptcpnumerics
--- 2.
--- 3.
--- Maybe ?
-getCapsForConnection :: MptcpConnection -> IO (Maybe [Word32])
-getCapsForConnection con = do
+
+-- Hack to quickly be able to encode results with aeson
+data MptcpConnectionWithMetrics = MptcpConnectionWithMetrics MptcpConnection [SockDiagMetrics] deriving (Generic)
+
+-- instance ToJSON SubflowWithMetrics where
+
+{-
+  | This should return a list of cwnd to respect a certain scenario
+ 1. save the connection to a JSON file and pass it to mptcpnumerics
+-}
+getCapsForConnection :: MptcpConnectionWithMetrics -> IO (Maybe [Word32])
+getCapsForConnection conWithMetrics = do
     -- returns a bytestring
-    let bs = Data.Aeson.encode con
-    let subflowCount = length $ subflows con
+    let (MptcpConnectionWithMetrics  mptcpConn metrics) = conWithMetrics
+    let bs = Data.Aeson.encode conWithMetrics
+    let subflowCount = length $ subflows mptcpConn
     let tmpdir = "/tmp"
-    let filename = tmpdir ++ "/" ++ "mptcp_" ++ (show $ subflowCount)  ++ "_" ++ (show $ connectionToken con) ++ ".json"
+    let filename = tmpdir ++ "/" ++ "mptcp_" ++ (show $ subflowCount)  ++ "_" ++ (show $ connectionToken mptcpConn) ++ ".json"
     -- let tmpdir = getEnvDefault "TMPDIR" "/tmp"
 
     -- throws upon error
@@ -875,11 +886,12 @@ loadExtensionsFromAttributes attrs =
 
 {- Parses the requested informations
 -}
-inspectIDiagAnswer :: Packet InetDiagMsg -> Maybe (TcpConnection, [SockDiagExtension])
+-- (TcpConnection, [SockDiagExtension])
+inspectIDiagAnswer :: Packet InetDiagMsg -> Maybe SockDiagMetrics
 inspectIDiagAnswer (Packet hdr cus attrs) = let
     con = connectionFromDiag  cus
   in
-    Just (con, loadExtensionsFromAttributes attrs)
+    Just $ SockDiagMetrics con (loadExtensionsFromAttributes attrs)
     -- putStrLn ("Idiag custom " ++ show cus) >>
     -- putStrLn ("Idiag header " ++ show hdr) >>
     -- putStrLn (showExtensionAttributes attrs)
@@ -897,9 +909,25 @@ inspectIDiagAnswer p = Nothing
 
 -- |
 data SockDiagMetrics = SockDiagMetrics {
-  con :: TcpConnection
+  subflowSubflow :: TcpConnection
   , metrics :: [SockDiagExtension]
 }
+
+instance ToJSON SockDiagMetrics where
+  toJSON sf = object [
+    (pack (nameFromTcpConnection $ subflowSubflow sf) .= object [
+
+      "cwnd" .= toJSON (20 :: Int),
+      -- for now hardcode mss ? we could set it to one to make
+      "mss" .= toJSON (1500 :: Int),
+      "var" .= toJSON (10 :: Int),
+      "fowd" .= toJSON (10 :: Int),
+      "bowd" .= toJSON (10 :: Int),
+      "loss" .= toJSON (0.5 :: Float)
+      -- This is an user preference, that should be pushed when calling mptcpnumerics
+      -- , "contribution": 0.5
+    ])
+    ]
 
 -- |Updates the list of interfaces
 -- should run in background
@@ -914,11 +942,11 @@ trackSystemInterfaces = do
 
 
 -- la en fait c des reponses que j'obtiens ?
-inspectIdiagAnswers :: [Packet InetDiagMsg] -> SockDiagMetrics
+inspectIdiagAnswers :: [Packet InetDiagMsg] -> [Maybe SockDiagMetrics]
 inspectIdiagAnswers packets =
   -- putStrLn "Start inspecting IDIAG answers"
   -- mapM_ inspectIDiagAnswer packets
-  mapM_ inspectIDiagAnswer packets
+  map inspectIDiagAnswer packets
   -- putStrLn "Finished inspecting answers"
 
 -- s'inspirer de
