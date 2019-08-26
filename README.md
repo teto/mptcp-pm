@@ -80,6 +80,7 @@ reload_mod() {
 # Testsuite
 `$ ss -t -4 -i`
        ss -o state established '( dport = :ssh or sport = :ssh )'
+https://unix.stackexchange.com/questions/499190/where-is-the-official-documentation-debian-package-iproute-doc
 
 # BUGS
 - conversion of SockDiagExtensionId is bad everywhere ? req.r.idiag_ext |= (1<<(INET_DIAG_INFO-1));
