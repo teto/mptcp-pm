@@ -74,7 +74,7 @@ import Text.Read
 import Data.Text (pack)
 
 -- for replicateM
-import Control.Monad (foldM, sequence)
+import Control.Monad (foldM)
 -- fromMaybe, 
 import Data.Maybe (catMaybes)
 -- import Data.Foldable (concat)
@@ -123,8 +123,10 @@ import Control.Concurrent
 -- import Control.Concurrent.Async
 import System.IO.Unsafe
 import Data.Aeson
+-- to merge MptcpConnection export and Metrics
+-- import Data.Aeson.Extra.Merge  (merge)
 
-import GHC.Generics
+-- import GHC.Generics
 
 -- for getEnvDefault
 import System.Environment.Blank()
@@ -144,6 +146,7 @@ import System.Log.Logger
 {-# NOINLINE globalMptcpSock #-}
 globalMptcpSock :: MVar MptcpSocket
 globalMptcpSock = unsafePerformIO newEmptyMVar
+-- du coup cette socket n'aurait meme plus besoin d'etre globale en fait ?
 
 -- TODO remove
 -- globalMetricsSock :: MVar NetlinkSocket
@@ -408,7 +411,8 @@ startMonitorConnection mptcpSock sockMetrics mConn = do
     putStrLn "Running mptcpnumerics"
 
     -- Then refresh the cwnd objective
-    cwnds_m <- getCapsForConnection (MptcpConnectionWithMetrics con lastMetrics)
+    --MptcpConnectionWithMetrics 
+    cwnds_m <- getCapsForConnection con lastMetrics
     case cwnds_m of
         Nothing -> do
             putStrLn "Couldn't fetch the values"
@@ -431,19 +435,36 @@ startMonitorConnection mptcpSock sockMetrics mConn = do
 
 
 -- Hack to quickly be able to encode results with aeson
-data MptcpConnectionWithMetrics = MptcpConnectionWithMetrics MptcpConnection [SockDiagMetrics] deriving (Generic)
+-- data MptcpConnectionWithMetrics = MptcpConnectionWithMetrics MptcpConnection [SockDiagMetrics] deriving (Generic)
+
+-- instance FromJSON MptcpConnectionWithMetrics
 
 -- instance ToJSON SubflowWithMetrics where
+-- instance ToJSON (MptcpConnection, [SockDiagMetrics])  where
+  -- toJSON MptcpConnectionWithMetrics mptcpConn metrics = object
+  --   [ "name" .= toJSON (show $ connectionToken mptcpConn)
+  --   , "sender" .= object [
+  --         -- TODO here we could read from sysctl ? or use another SockDiagExtension
+  --         "snd_buffer" .= toJSON (40 :: Int)
+  --         , "capabilities" .= object []
+  --       ]
+  --   , "capabilities" .= object ([])
+  --   -- TODO export with metrics
+  --   , "subflows" .= object ([])
+  --   ]
+
 
 {-
   | This should return a list of cwnd to respect a certain scenario
  1. save the connection to a JSON file and pass it to mptcpnumerics
 -}
-getCapsForConnection :: MptcpConnectionWithMetrics -> IO (Maybe [Word32])
-getCapsForConnection conWithMetrics = do
+getCapsForConnection :: MptcpConnection -> [SockDiagMetrics] -> IO (Maybe [Word32])
+getCapsForConnection mptcpConn metrics = do
     -- returns a bytestring
-    let (MptcpConnectionWithMetrics  mptcpConn metrics) = conWithMetrics
-    let bs = Data.Aeson.encode conWithMetrics
+    -- let (MptcpConnectionWithMetrics  mptcpConn metrics) = conWithMetrics
+    let jsonConn = (toJSON mptcpConn)
+    -- let merged = merge jsonConn (toJSON metrics)
+    let bs = Data.Aeson.encode [ jsonConn , (toJSON metrics)]
     let subflowCount = length $ subflows mptcpConn
     let tmpdir = "/tmp"
     let filename = tmpdir ++ "/" ++ "mptcp_" ++ (show $ subflowCount)  ++ "_" ++ (show $ connectionToken mptcpConn) ++ ".json"
@@ -907,16 +928,15 @@ inspectIDiagAnswer p = Nothing
 --             ++ "Supposing it's a mptcp command: " ++ dumpCommand ( toEnum $ fromIntegral cmd)
 
 
--- |
+-- |Convenience wrapper
 data SockDiagMetrics = SockDiagMetrics {
   subflowSubflow :: TcpConnection
-  , metrics :: [SockDiagExtension]
+  , sockdiagMetrics :: [SockDiagExtension]
 }
 
 instance ToJSON SockDiagMetrics where
   toJSON sf = object [
     (pack (nameFromTcpConnection $ subflowSubflow sf) .= object [
-
       "cwnd" .= toJSON (20 :: Int),
       -- for now hardcode mss ? we could set it to one to make
       "mss" .= toJSON (1500 :: Int),
