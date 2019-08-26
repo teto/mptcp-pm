@@ -122,6 +122,7 @@ import Control.Concurrent
 -- import Data.IORef
 -- import Control.Concurrent.Async
 import System.IO.Unsafe
+import System.IO (stderr, Handle)
 import Data.Aeson
 -- to merge MptcpConnection export and Metrics
 -- import Data.Aeson.Extra.Merge  (merge)
@@ -132,11 +133,12 @@ import Data.Aeson
 import System.Environment.Blank()
 
 -- trying hslogger
-import System.Log.Logger
-
+import System.Log.Logger (rootLoggerName, infoM, debugM, Priority(DEBUG), Priority(INFO), setLevel, updateGlobalLogger)
+import System.Log.Handler.Simple (streamHandler, GenericHandler)
 -- for writeUTF8File
 -- import Distribution.Simple.Utils
 -- import Distribution.Utils.Generic
+import System.Log.Handler (setFormatter)
 
 -- STM = State Thread Monad ST monad
 -- import Data.IORef
@@ -254,6 +256,8 @@ data Sample = Sample {
 -- TODO use 3rd party library levels
 -- data Verbosity = Normal | Debug
 
+loggerName :: String
+loggerName = "main"
 
 dumpSystemInterfaces :: IO()
 dumpSystemInterfaces = do
@@ -469,6 +473,7 @@ getCapsForConnection mptcpConn metrics = do
     let tmpdir = "/tmp"
     let filename = tmpdir ++ "/" ++ "mptcp_" ++ (show $ subflowCount)  ++ "_" ++ (show $ connectionToken mptcpConn) ++ ".json"
     -- let tmpdir = getEnvDefault "TMPDIR" "/tmp"
+    infoM "main" $ "SAving to " ++ filename
 
     -- throws upon error
     Data.ByteString.Lazy.writeFile filename bs
@@ -476,7 +481,7 @@ getCapsForConnection mptcpConn metrics = do
 
     -- TODO to keep it simple it should return a list of CWNDs to apply
     -- readProcessWithExitCode  binary / args / stdin
-    (exitCode, stdout, stderr) <- readProcessWithExitCode "./hs/fake_solver" [filename, show subflowCount] ""
+    (exitCode, stdout, stderrContent) <- readProcessWithExitCode "./hs/fake_solver" [filename, show subflowCount] ""
 
     putStrLn $ "exitCode: " ++ show exitCode
     putStrLn $ "stdout:\n" ++ stdout
@@ -484,7 +489,7 @@ getCapsForConnection mptcpConn metrics = do
     let values = (case exitCode of
         -- for now simple, we might read json afterwards
                       ExitSuccess -> (readMaybe stdout) :: Maybe [Word32]
-                      ExitFailure val -> error $ "stdout:" ++ stdout ++ " stderr: " ++ stderr
+                      ExitFailure val -> error $ "stdout:" ++ stdout ++ " stderr: " ++ stderrContent
                       )
     return values
 
@@ -961,18 +966,28 @@ trackSystemInterfaces = do
   dumpSystemInterfaces
 
 
--- la en fait c des reponses que j'obtiens ?
+-- | Remove ?
 inspectIdiagAnswers :: [Packet InetDiagMsg] -> [Maybe SockDiagMetrics]
 inspectIdiagAnswers packets =
-  -- putStrLn "Start inspecting IDIAG answers"
-  -- mapM_ inspectIDiagAnswer packets
   map inspectIDiagAnswer packets
-  -- putStrLn "Finished inspecting answers"
+
+-- withFormatter :: GenericHandler Handle -> GenericHandler Handle
+-- withFormatter handler = setFormatter handler formatter
+--     -- http://hackage.haskell.org/packages/archive/hslogger/1.1.4/doc/html/System-Log-Formatter.html
+--     where formatter = simpleLogFormatter "[$time $loggername $prio] $msg"
 
 -- s'inspirer de
 -- https://github.com/vdorr/linux-live-netinfo/blob/24ead3dd84d6847483aed206ec4b0e001bfade02/System/Linux/NetInfo.hs
 main :: IO ()
 main = do
+
+  -- SETUP LOGGING (https://gist.github.com/ijt/1052896)
+  myStreamHandler <- streamHandler stderr INFO
+  -- let myStreamHandler' = withFormatter myStreamHandler
+  -- let rootLog = rootLoggerName
+  -- updateGlobalLogger rootLog (setLevel INFO)
+  updateGlobalLogger "main" (setLevel DEBUG)
+
   options <- execParser opts
 
   -- crashes when threaded
@@ -982,7 +997,7 @@ main = do
   -- globalState <- newEmptyMVar
   -- putStrLn $ "RESET" ++ show MPTCP_CMD_REMOVE
   -- putStrLn $ dumpMptcpCommands MPTCP_CMD_UNSPEC
-  debugM "main" "Creating MPTCP netlink socket..."
+  infoM "main" "Creating MPTCP netlink socket..."
 
   -- add the socket too to an MVar ?
   (MptcpSocket sock  fid) <- makeMptcpSocket
@@ -990,13 +1005,9 @@ main = do
   -- globalState <- newMVar $ MyState (MptcpSocket sock  fid) Map.empty
   putMVar globalMptcpSock (MptcpSocket sock  fid)
 
-  -- putStrLn "Creating metrics netlink socket..."
-  -- sockMetrics <- makeMetricsSocket
-  -- putMVar globalMetricsSock sockMetrics
-
   -- a threadid
   -- TODO put an empty map
-  putStrLn "Now Tracking system interfaces..."
+  infoM "main" "Now Tracking system interfaces..."
   putMVar globalInterfaces Map.empty
   routeNl <- forkIO trackSystemInterfaces
 
@@ -1013,11 +1024,9 @@ main = do
   -- That's what I should use in fact !! (Word16, [CtrlAttrMcastGroup])
   -- (mid, mcastGroup ) <- getFamilyWithMulticasts sock mptcpGenlEvGrpName
   -- Each netlink family has a set of 32 multicast groups
-  -- mcastMetricGroups <- getMulticastGroups sockMetrics fidMetrics
   mcastMptcpGroups <- getMulticastGroups sock fid
   mapM_ Prelude.print mcastMptcpGroups
 
-  -- mapM_ (listenToMetricEvents sockMetrics) mcastMetricGroups
   mapM_ (listenToEvents (MptcpSocket sock fid)) mcastMptcpGroups
   -- putStrLn $ " Groups: " ++ unwords ( map grpName mcastMptcpGroups )
   putStrLn "finished"
