@@ -108,6 +108,7 @@ import Data.ByteString.Lazy (writeFile)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 
+import qualified Data.Text
 import Data.Bits (Bits(..))
 
 -- https://hackage.haskell.org/package/bytestring-conversion-0.1/candidate/docs/Data-ByteString-Conversion.html#t:ToByteString
@@ -125,7 +126,7 @@ import System.IO.Unsafe
 import System.IO (stderr, Handle)
 import Data.Aeson
 -- to merge MptcpConnection export and Metrics
-import Data.Aeson.Extra.Merge  (merge, lodashMerge)
+import Data.Aeson.Extra.Merge  (lodashMerge)
 
 -- import GHC.Generics
 
@@ -138,12 +139,15 @@ import System.Log.Handler.Simple (streamHandler, GenericHandler)
 -- for writeUTF8File
 -- import Distribution.Simple.Utils
 -- import Distribution.Utils.Generic
-import System.Log.Handler (setFormatter)
+-- import System.Log.Handler (setFormatter)
 
 -- STM = State Thread Monad ST monad
 -- import Data.IORef
 -- MVar can be empty contrary to IORef !
 -- globalMptcpSock :: IORef MptcpSocket
+-- from unordered containers
+-- import qualified Data.HashMap.Lazy as HML
+import qualified Data.HashMap.Strict as HM
 
 {-# NOINLINE globalMptcpSock #-}
 globalMptcpSock :: MVar MptcpSocket
@@ -196,7 +200,10 @@ data MyState = MyState {
 }
 -- deriving Show
 
-
+-- https://stackoverflow.com/questions/51407547/how-to-update-a-field-of-a-json-object
+addJsonKey :: Data.Text.Text -> Value -> Value -> Value
+addJsonKey key val (Object xs) = Object $ HM.insert key val xs
+addJsonKey _ _ xs = xs
 
 -- , dstIp = fromIPv4 localhost
 authorizedCon1 :: TcpConnection
@@ -467,14 +474,16 @@ getCapsForConnection mptcpConn metrics = do
     -- returns a bytestring
     -- let (MptcpConnectionWithMetrics  mptcpConn metrics) = conWithMetrics
     let jsonConn = (toJSON mptcpConn)
-    let merged = lodashMerge jsonConn (toJSON metrics)
+    let merged = lodashMerge jsonConn (object [ "subflows" .= metrics ])
   -- (toJSON jsonConn) ++ (toJSON metrics)
-    let bs = Data.Aeson.encode $ merged
+
+    let bs = Data.Aeson.encode merged
+    -- let bs = Data.Aeson.encode jsonConn
     let subflowCount = length $ subflows mptcpConn
     let tmpdir = "/tmp"
     let filename = tmpdir ++ "/" ++ "mptcp_" ++ (show $ subflowCount)  ++ "_" ++ (show $ connectionToken mptcpConn) ++ ".json"
     -- let tmpdir = getEnvDefault "TMPDIR" "/tmp"
-    infoM "main" $ "SAving to " ++ filename
+    infoM "main" $ "Saving to " ++ filename
 
     -- throws upon error
     Data.ByteString.Lazy.writeFile filename bs
@@ -941,6 +950,7 @@ data SockDiagMetrics = SockDiagMetrics {
 }
 
 instance ToJSON SockDiagMetrics where
+  -- attributes of array
   toJSON sf = object [
     (pack (nameFromTcpConnection $ subflowSubflow sf) .= object [
       "cwnd" .= toJSON (20 :: Int),
@@ -972,6 +982,8 @@ inspectIdiagAnswers :: [Packet InetDiagMsg] -> [Maybe SockDiagMetrics]
 inspectIdiagAnswers packets =
   map inspectIDiagAnswer packets
 
+{-| The MptcpSocket doesn't need to be global
+-}
 -- withFormatter :: GenericHandler Handle -> GenericHandler Handle
 -- withFormatter handler = setFormatter handler formatter
 --     -- http://hackage.haskell.org/packages/archive/hslogger/1.1.4/doc/html/System-Log-Formatter.html
@@ -989,36 +1001,25 @@ main = do
   -- updateGlobalLogger rootLog (setLevel INFO)
   updateGlobalLogger "main" (setLevel DEBUG)
 
+  infoM "main" "Parsing command line..."
   options <- execParser opts
 
-  -- crashes when threaded
-  -- logger <- createLogger
-  -- pushLogStr logger (toLogStr "ok")
-
-  -- globalState <- newEmptyMVar
-  -- putStrLn $ "RESET" ++ show MPTCP_CMD_REMOVE
-  -- putStrLn $ dumpMptcpCommands MPTCP_CMD_UNSPEC
   infoM "main" "Creating MPTCP netlink socket..."
+
+
+  -- let jsonConn = toJSON $ MptcpConnection 32 Set.empty Set.empty Set.empty
+  -- let objToMerge = object [ "toto" .= toJSON ("value" :: Value) ]
+  -- let merged = lodashMerge jsonConn objToMerge
+  -- let bs = Data.Aeson.encode $ merged
+  -- putStrLn $ show bs
 
   -- add the socket too to an MVar ?
   (MptcpSocket sock  fid) <- makeMptcpSocket
-  -- putMVar instead !
-  -- globalState <- newMVar $ MyState (MptcpSocket sock  fid) Map.empty
   putMVar globalMptcpSock (MptcpSocket sock  fid)
 
-  -- a threadid
-  -- TODO put an empty map
   infoM "main" "Now Tracking system interfaces..."
   putMVar globalInterfaces Map.empty
   routeNl <- forkIO trackSystemInterfaces
-
-  -- dumpSystemInterfaces
-
-  -- check routing information
-  -- routingSock <- NLS.makeNLHandle (const $ pure ()) =<< NL.makeSocket
-  -- let cb = NLS.NLCallback (pure ()) (handleAddr . runGet getGenPacket)
-  -- NLS.nlPostMessage routingSock queryAddrs cb
-  -- NLS.nlWaitCurrent routingSock
 
   putStr "socket created. MPTCP Family id " >> Prelude.print fid
   -- putStr "socket created. tcp_metrics Family id " >> print fidMetrics

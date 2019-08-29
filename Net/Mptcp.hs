@@ -105,7 +105,7 @@ remoteIdFromAttributes attrs = let
 instance FromJSON MptcpConnection
 
 -- | export to the format expected by mptcpnumerics
---
+-- could be automatically generated ?
 -- toJSON :: MptcpConnection -> Value
 instance ToJSON MptcpConnection where
   toJSON mptcpConn = object
@@ -116,8 +116,8 @@ instance ToJSON MptcpConnection where
           , "capabilities" .= object []
         ]
     , "capabilities" .= object ([])
-    -- TODO export with metrics
-    , "subflows" .= object ([])
+    -- TODO generated somewhere else
+    -- , "subflows" .= object ([])
     ]
 
 

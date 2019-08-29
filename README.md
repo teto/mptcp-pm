@@ -46,7 +46,8 @@ In a shell:
 `$ nix run nixpkgs.iperf -c iperf -s`
 
 In another:
-`$ nix run nixpkgs.iperf -c iperf -c localhost -b 1KiB -t 4 --cport 5500 -4`
+`$ nix run nixpkgs.iperf -c iperf -c localhost -b 1KiB -t 4 --cport 5500 -4 -C
+cubic`
 
 
 Script to reload module
@@ -81,6 +82,8 @@ reload_mod() {
 `$ ss -t -4 -i`
        ss -o state established '( dport = :ssh or sport = :ssh )'
 https://unix.stackexchange.com/questions/499190/where-is-the-official-documentation-debian-package-iproute-doc
+
+sudo insmod ~/mptcp/build/net/ipv4/tcp_cubic.ko
 
 # BUGS
 - conversion of SockDiagExtensionId is bad everywhere ? req.r.idiag_ext |= (1<<(INET_DIAG_INFO-1));
