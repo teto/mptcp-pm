@@ -125,7 +125,7 @@ import System.IO.Unsafe
 import System.IO (stderr, Handle)
 import Data.Aeson
 -- to merge MptcpConnection export and Metrics
--- import Data.Aeson.Extra.Merge  (merge)
+import Data.Aeson.Extra.Merge  (merge, lodashMerge)
 
 -- import GHC.Generics
 
@@ -467,8 +467,9 @@ getCapsForConnection mptcpConn metrics = do
     -- returns a bytestring
     -- let (MptcpConnectionWithMetrics  mptcpConn metrics) = conWithMetrics
     let jsonConn = (toJSON mptcpConn)
-    -- let merged = merge jsonConn (toJSON metrics)
-    let bs = Data.Aeson.encode [ jsonConn , (toJSON metrics)]
+    let merged = lodashMerge jsonConn (toJSON metrics)
+  -- (toJSON jsonConn) ++ (toJSON metrics)
+    let bs = Data.Aeson.encode $ merged
     let subflowCount = length $ subflows mptcpConn
     let tmpdir = "/tmp"
     let filename = tmpdir ++ "/" ++ "mptcp_" ++ (show $ subflowCount)  ++ "_" ++ (show $ connectionToken mptcpConn) ++ ".json"
