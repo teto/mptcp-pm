@@ -11,8 +11,8 @@ fi
 val="error"
 
 
-SUBFLOW_0_CAP=18
-SUBFLOW_1_CAP=18
+SUBFLOW_0_CAP=30
+SUBFLOW_1_CAP=30
 SUBFLOW_COUNT="$2"
 case $SUBFLOW_COUNT in
   0) val="passed 0 subflow"; exit 0;;

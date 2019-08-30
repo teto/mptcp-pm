@@ -949,10 +949,33 @@ data SockDiagMetrics = SockDiagMetrics {
   , sockdiagMetrics :: [SockDiagExtension]
 }
 
+
+instance ToJSON SockDiagExtension where
+  -- tcpi_rtt / tcpi_rttvar / tcpi_snd_ssthresh / tcpi_snd_cwnd 
+  -- tcpi_state , tcpi_rto
+  toJSON (arg@DiagTcpInfo {} )  =  object [
+      "rttvar" .= tcpi_rtt_var arg,
+
+      "rtt" .= tcpi_rtt arg,
+      "snd_cwnd" .= tcpi_snd_cwnd arg
+      "tcpi_total_retrans"  .= tcpi_snd_cwnd arg
+
+      ]
+  toJSON (TcpVegasInfo _ _ rtt minRtt) = object [ "rtt" .= toJSON (rtt :: Word32) ]
+  toJSON (CongInfo cc) = object [ "cc" .= toJSON (cc) ]
+  toJSON (Meminfo wmem rmem _ _) = object [
+      "wmem" .= "wmem"
+      ]
+
+-- TODO merge
+--
 instance ToJSON SockDiagMetrics where
   -- attributes of array
-  toJSON sf = object [
-    (pack (nameFromTcpConnection $ subflowSubflow sf) .= object [
+  -- foldr over array of extensions
+  toJSON (SockDiagMetrics sf metrics) =
+
+    object [
+    (pack (nameFromTcpConnection $ sf) .= object [
       "cwnd" .= toJSON (20 :: Int),
       -- for now hardcode mss ? we could set it to one to make
       "mss" .= toJSON (1500 :: Int),
@@ -960,6 +983,7 @@ instance ToJSON SockDiagMetrics where
       "fowd" .= toJSON (10 :: Int),
       "bowd" .= toJSON (10 :: Int),
       "loss" .= toJSON (0.5 :: Float)
+      "rto" .= toJSON (0.5 :: Float)
       -- This is an user preference, that should be pushed when calling mptcpnumerics
       -- , "contribution": 0.5
     ])
