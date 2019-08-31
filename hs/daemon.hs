@@ -46,6 +46,7 @@ Useful functions in Map
 -}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module Main where
 
@@ -71,7 +72,8 @@ import Net.Mptcp.Constants
 
 -- for readList
 import Text.Read
-import Data.Text (pack)
+-- pack
+import Data.Text ()
 
 -- for replicateM
 import Control.Monad (foldM)
@@ -123,7 +125,8 @@ import Control.Concurrent
 -- import Data.IORef
 -- import Control.Concurrent.Async
 import System.IO.Unsafe
-import System.IO (stderr, Handle)
+-- , Handle
+import System.IO (stderr)
 import Data.Aeson
 -- to merge MptcpConnection export and Metrics
 import Data.Aeson.Extra.Merge  (lodashMerge)
@@ -134,8 +137,18 @@ import Data.Aeson.Extra.Merge  (lodashMerge)
 import System.Environment.Blank()
 
 -- trying hslogger
-import System.Log.Logger (rootLoggerName, infoM, debugM, Priority(DEBUG), Priority(INFO), setLevel, updateGlobalLogger)
-import System.Log.Handler.Simple (streamHandler, GenericHandler)
+import System.Log.Logger (
+    -- rootLoggerName
+    infoM
+    , debugM
+    , Priority(DEBUG)
+    , Priority(INFO)
+    , setLevel, updateGlobalLogger
+    )
+import System.Log.Handler.Simple (
+    streamHandler
+    -- , GenericHandler
+    )
 -- for writeUTF8File
 -- import Distribution.Simple.Utils
 -- import Distribution.Utils.Generic
@@ -949,45 +962,58 @@ data SockDiagMetrics = SockDiagMetrics {
   , sockdiagMetrics :: [SockDiagExtension]
 }
 
-
+-- type SockDiagExtension2 = SockDiagExtension 
 instance ToJSON SockDiagExtension where
   -- tcpi_rtt / tcpi_rttvar / tcpi_snd_ssthresh / tcpi_snd_cwnd 
   -- tcpi_state , tcpi_rto
   toJSON (arg@DiagTcpInfo {} )  =  object [
-      "rttvar" .= tcpi_rtt_var arg,
-
-      "rtt" .= tcpi_rtt arg,
-      "snd_cwnd" .= tcpi_snd_cwnd arg
-      "tcpi_total_retrans"  .= tcpi_snd_cwnd arg
+      "rttvar" .= tcpi_rttvar arg
+      , "rtt" .= tcpi_rtt arg
+      , "snd_cwnd" .= tcpi_snd_cwnd arg
+      , "tcpi_total_retrans"  .= tcpi_snd_cwnd arg
 
       ]
   toJSON (TcpVegasInfo _ _ rtt minRtt) = object [ "rtt" .= toJSON (rtt :: Word32) ]
   toJSON (CongInfo cc) = object [ "cc" .= toJSON (cc) ]
-  toJSON (Meminfo wmem rmem _ _) = object [
-      "wmem" .= "wmem"
+  toJSON (DiagExtensionMemInfo wmem rmem _ _) = object [
+      "wmem" .= toJSON ( wmem :: Word32 )
+      , "rmem" .= toJSON ( rmem :: Word32 )
       ]
+  toJSON _ = object []
 
 -- TODO merge
 --
 instance ToJSON SockDiagMetrics where
   -- attributes of array
   -- foldr over array of extensions
-  toJSON (SockDiagMetrics sf metrics) =
+  toJSON (SockDiagMetrics sf metrics) = let
+        initialValue = object [
+            "srcIp" .= toJSON (srcIp sf),
+            "dstIp" .= toJSON (dstIp sf)
+            ]
+        fn x y = lodashMerge (toJSON x) y
 
-    object [
-    (pack (nameFromTcpConnection $ sf) .= object [
-      "cwnd" .= toJSON (20 :: Int),
-      -- for now hardcode mss ? we could set it to one to make
-      "mss" .= toJSON (1500 :: Int),
-      "var" .= toJSON (10 :: Int),
-      "fowd" .= toJSON (10 :: Int),
-      "bowd" .= toJSON (10 :: Int),
-      "loss" .= toJSON (0.5 :: Float)
-      "rto" .= toJSON (0.5 :: Float)
+      in
+-- (a -> b -> b) -> b -> t a -> b
+      foldr fn initialValue metrics
+
+    -- object [
+    -- (pack (nameFromTcpConnection $ sf) .= object [
+    --   "srcIp" .= toJSON (srcIp sf),
+    --   "dstIp" .= toJSON (dstIp sf),
+
+      -- "cwnd" .= toJSON (20 :: Int),
+      -- -- for now hardcode mss ? we could set it to one to make
+      -- "mss" .= toJSON (1500 :: Int),
+      -- "var" .= toJSON (10 :: Int),
+      -- "fowd" .= toJSON (10 :: Int),
+      -- "bowd" .= toJSON (10 :: Int),
+      -- "loss" .= toJSON (0.5 :: Float)
+      -- , "rto" .= toJSON (0.5 :: Float)
       -- This is an user preference, that should be pushed when calling mptcpnumerics
       -- , "contribution": 0.5
-    ])
-    ]
+    -- ])
+    -- ]
 
 -- |Updates the list of interfaces
 -- should run in background
@@ -1045,7 +1071,8 @@ main = do
   putMVar globalInterfaces Map.empty
   routeNl <- forkIO trackSystemInterfaces
 
-  putStr "socket created. MPTCP Family id " >> Prelude.print fid
+  debugM "main" "socket created. MPTCP Family id "
+  -- >> Prelude.print fid
   -- putStr "socket created. tcp_metrics Family id " >> print fidMetrics
   -- That's what I should use in fact !! (Word16, [CtrlAttrMcastGroup])
   -- (mid, mcastGroup ) <- getFamilyWithMulticasts sock mptcpGenlEvGrpName

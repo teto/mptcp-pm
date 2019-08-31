@@ -362,7 +362,7 @@ data SockDiagExtension =
   tcpi_rcv_space :: Word32,
   tcpi_total_retrans :: Word32
 
-} | Meminfo {
+} | DiagExtensionMemInfo {
   idiag_rmem :: Word32
 , idiag_wmem :: Word32
 , idiag_fmem :: Word32
@@ -392,7 +392,7 @@ getTcpVegasInfo :: Get SockDiagExtension
 getTcpVegasInfo = TcpVegasInfo <$> getWord32host <*> getWord32host <*> getWord32host <*> getWord32host
 
 getMemInfo :: Get SockDiagExtension
-getMemInfo = Meminfo <$> getWord32host <*> getWord32host <*> getWord32host <*> getWord32host
+getMemInfo = DiagExtensionMemInfo <$> getWord32host <*> getWord32host <*> getWord32host <*> getWord32host
 
 getShutdown :: Get SockDiagExtension
 getShutdown = Shutdown <$> getWord8
@@ -405,7 +405,7 @@ getCongInfo = do
     bs <- getByteString left
     return (CongInfo $ unpack $ init bs)
 
--- Meminfo <$> getWord32host <*> getWord32host <*> getWord32host <*> getWord32host
+-- DiagExtensionMemInfo <$> getWord32host <*> getWord32host <*> getWord32host <*> getWord32host
 
 getDiagTcpInfo :: Get SockDiagExtension
 getDiagTcpInfo =
