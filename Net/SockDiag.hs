@@ -256,7 +256,6 @@ putInetDiagMsg msg = do
 -- TODO add support for OWDs
 getInetDiagSockid :: Get InetDiagSockId
 getInetDiagSockid  = do
--- getWord32host
     sport <- getWord16host
     dport <- getWord16host
     -- iterate/ grow
@@ -266,6 +265,7 @@ getInetDiagSockid  = do
     cookie <- getWord64host
     return $ InetDiagSockId sport dport _src _dst _intf cookie
 
+-- | put addresses as bytestring since the family is not known yet
 putInetDiagSockid :: InetDiagSockId -> Put
 putInetDiagSockid cust = do
   -- we might need to clean up this a bit
@@ -273,24 +273,9 @@ putInetDiagSockid cust = do
   putWord16be $ idiag_dport cust
   putByteString (idiag_src cust)
   putByteString (idiag_dst cust)
-  -- putIPAddress (src cust)
-  -- putIPAddress (dst cust)
   putWord32host $ idiag_intf cust
   putWord64host $ idiag_cookie cust
 
--- struct tcpvegas_info {
--- 	__u32	tcpv_enabled;
--- 	__u32	tcpv_rttcnt;
--- 	__u32	tcpv_rtt;
--- 	__u32	tcpv_minrtt;
--- };
--- data DiagVegasInfo = TcpVegasInfo {
---   -- TODO hide ?
---   tcpInfoVegasEnabled :: Word32
---   , tcpInfoRttCount :: Word32
---   , tcpInfoRtt :: Word32
---   , tcpInfoMinrtt :: Word32
--- }
 
 -- instance Convertable DiagVegasInfo where
 --   getPut  = putDiagVegasInfo
@@ -309,11 +294,6 @@ getDiagVegasInfo =
 eIPPROTO_TCP :: Word8
 eIPPROTO_TCP = 6
 
-
--- getTcpInfo :: Get SockDiagExtension
--- getTcpInfo =
---   DiagTcpInfo <$> getWord8
---   Word8 Word8 Word8 Word8 Word8 Word8 Word8 Word32 Word32 Word32 Word32 Word32 Word32 Word32 Word32 Word32 Word32 Word32 Word32 Word32 Word32 Word32 Word32 Word32 Word32 Word32 Word32 Word32 Word32 Word32 Word32
 
 {-|
   TODO generate with c2hsc ?
@@ -369,7 +349,7 @@ data SockDiagExtension =
 , idiag_tmem :: Word32
 -- | Not exclusive to Vegas unlike the name indicates
 } | TcpVegasInfo {
--- tcpvegas_info 
+-- tcpvegas_info
   -- TODO hide ?
   tcpInfoVegasEnabled :: Word32
   , tcpInfoRttCount :: Word32

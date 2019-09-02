@@ -966,11 +966,26 @@ data SockDiagMetrics = SockDiagMetrics {
 instance ToJSON SockDiagExtension where
   -- tcpi_rtt / tcpi_rttvar / tcpi_snd_ssthresh / tcpi_snd_cwnd 
   -- tcpi_state , tcpi_rto
-  toJSON (arg@DiagTcpInfo {} )  =  object [
+  toJSON (arg@DiagTcpInfo {} )  = let
+      rtt = tcpi_rtt arg
+    in
+      object [
       "rttvar" .= tcpi_rttvar arg
-      , "rtt" .= tcpi_rtt arg
+      , "rtt" .= rtt
+      , "rto" .= tcpi_rto arg
       , "snd_cwnd" .= tcpi_snd_cwnd arg
-      , "tcpi_total_retrans"  .= tcpi_snd_cwnd arg
+      , "snd_ssthresh" .= tcpi_snd_ssthresh arg
+      , "reordering"  .= tcpi_reordering arg
+
+      -- TODO convert to string
+      -- , "state" .=
+
+      -- needs kernel patching
+      , "fowd"  .= toJSON ( (fromIntegral rtt/2) :: Float)
+      , "bowd"  .= toJSON ( (fromIntegral rtt/2) :: Float)
+
+
+      -- , "total_retrans"  .= tcpi_total_retrans arg
 
       ]
   toJSON (TcpVegasInfo _ _ rtt minRtt) = object [ "rtt" .= toJSON (rtt :: Word32) ]
@@ -994,13 +1009,11 @@ instance ToJSON SockDiagMetrics where
         fn x y = lodashMerge (toJSON x) y
 
       in
--- (a -> b -> b) -> b -> t a -> b
+      -- (a -> b -> b) -> b -> t a -> b
       foldr fn initialValue metrics
 
     -- object [
     -- (pack (nameFromTcpConnection $ sf) .= object [
-    --   "srcIp" .= toJSON (srcIp sf),
-    --   "dstIp" .= toJSON (dstIp sf),
 
       -- "cwnd" .= toJSON (20 :: Int),
       -- -- for now hardcode mss ? we could set it to one to make
