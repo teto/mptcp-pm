@@ -41,6 +41,8 @@ common shared-properties
        , aeson-extra
        -- to help with merging json content
        , unordered-containers
+       -- to create temp folder/files
+       , temporary
        -- haddocset lookds kinda unmaintained, won't work with ghc 8.5
        -- , haddocset
        -- , bitset

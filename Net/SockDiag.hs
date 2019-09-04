@@ -206,7 +206,8 @@ putSockDiagRequestHeader request = do
   putInetDiagSockid $ diag_sockid request
 
 -- |Converts
-connectionFromDiag :: InetDiagMsg -> TcpConnection
+connectionFromDiag :: InetDiagMsg
+              -> TcpConnection
 connectionFromDiag msg =
   let sockid = idiag_sockid msg in
   TcpConnection {

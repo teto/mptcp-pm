@@ -125,6 +125,9 @@ import Control.Concurrent
 -- import Data.IORef
 -- import Control.Concurrent.Async
 import System.IO.Unsafe
+import System.IO.Temp
+import System.FilePath.Posix
+
 -- , Handle
 import System.IO (stderr)
 import Data.Aeson
@@ -458,25 +461,6 @@ startMonitorConnection mptcpSock sockMetrics mConn = do
 
 
 
--- Hack to quickly be able to encode results with aeson
--- data MptcpConnectionWithMetrics = MptcpConnectionWithMetrics MptcpConnection [SockDiagMetrics] deriving (Generic)
-
--- instance FromJSON MptcpConnectionWithMetrics
-
--- instance ToJSON SubflowWithMetrics where
--- instance ToJSON (MptcpConnection, [SockDiagMetrics])  where
-  -- toJSON MptcpConnectionWithMetrics mptcpConn metrics = object
-  --   [ "name" .= toJSON (show $ connectionToken mptcpConn)
-  --   , "sender" .= object [
-  --         -- TODO here we could read from sysctl ? or use another SockDiagExtension
-  --         "snd_buffer" .= toJSON (40 :: Int)
-  --         , "capabilities" .= object []
-  --       ]
-  --   , "capabilities" .= object ([])
-  --   -- TODO export with metrics
-  --   , "subflows" .= object ([])
-  --   ]
-
 
 {-
   | This should return a list of cwnd to respect a certain scenario
@@ -498,8 +482,17 @@ getCapsForConnection mptcpConn metrics = do
     -- let tmpdir = getEnvDefault "TMPDIR" "/tmp"
     infoM "main" $ "Saving to " ++ filename
 
+    tempdir <- getCanonicalTemporaryDirectory
+    -- see https://github.com/feuerbach/temporary/blob/2ebee43b92b878f0093b3ce66d613d553f82152f/tests/test.hs#L63
+    -- for an example
+    fp <- withSystemTempDirectory tempdir "toto" $ \fp do
+        let fn = takeFilename fp
+        Data.ByteString.Lazy.writeFile fn
+-- (\x -> Data.ByteString.Lazy.writeFile x)
+
     -- throws upon error
-    Data.ByteString.Lazy.writeFile filename bs
+    -- Data.ByteString.Lazy.writeFile filename bs
+    cmd bs
 
 
     -- TODO to keep it simple it should return a list of CWNDs to apply
@@ -568,30 +561,6 @@ queryAddrs = NL.Packet
     (NL.Header NLC.eRTM_GETADDR (NLC.fNLM_F_ROOT .|. NLC.fNLM_F_MATCH .|. NLC.fNLM_F_REQUEST) 0 0)
     (NLR.NAddrMsg 0 0 0 0 0)
     mempty
-
-
--- TODO show host interfaces
--- dumpInterfaces
-
--- TODO we should store this
--- really only interested in NAddrMsg
--- handleMessage :: NLR.Message -> IO ()
--- handleMessage (NLR.NLinkMsg _ _ _ ) = putStrLn "Ignoring NLinkMsg"
--- handleMessage (NLR.NNeighMsg _ _ _ _ _ ) = putStrLn $ "Ignoring NNeighMsg"
--- lol here we need to update the list of interfaces
--- handleMessage (NLR.NAddrMsg family maskLen flags scope addrIntf) = do
---   infs <- takeMVar globalInterfaces
---   -- TODO update w
---   -- newInfs = infs
-
---   -- decode/getIFAddr
---   let newInf = NetworkInterface (IP ) addrIntf
---   let newInfs = Map.insert addrIntf infs
---   putMVar globalInterfaces newInfs
-
-
-
-
 
 
 -- |Deal with events for already registered connections
