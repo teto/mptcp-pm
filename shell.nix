@@ -9,7 +9,7 @@
 let
   overlay = self: prev: {
       haskell = prev.haskell // {
-        packageOverrides = hnew: hold: {
+        packageOverrides = hnew: hold: with prev.haskell.lib;{
           # hspec = hold.hspec_2_7_1;
           # hspec-core = hold.hspec-core_2_7_1;
           # hspec-discover = hold.hspec-discover_2_7_1;
@@ -18,7 +18,7 @@ let
           # from nixpkgs-stackage overlay
           # ip = pkgs.haskell.lib.dontCheck hold.ip;
           all-hies = import (fetchTarball "https://github.com/infinisil/all-hies/tarball/master") {};
-
+          ip = dontCheck hold.ip;
           c2hsc = pkgs.haskell.lib.dontCheck hold.c2hsc;
           wide-word = pkgs.haskell.lib.doJailbreak (hold.wide-word);
 

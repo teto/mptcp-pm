@@ -43,6 +43,7 @@ common shared-properties
        , unordered-containers
        -- to create temp folder/files
        , temporary
+       , filepath
        -- haddocset lookds kinda unmaintained, won't work with ghc 8.5
        -- , haddocset
        -- , bitset

@@ -126,7 +126,8 @@ import Control.Concurrent
 -- import Control.Concurrent.Async
 import System.IO.Unsafe
 import System.IO.Temp
-import System.FilePath.Posix
+-- for takeFilename
+import System.FilePath
 
 -- , Handle
 import System.IO (stderr)
@@ -465,6 +466,8 @@ startMonitorConnection mptcpSock sockMetrics mConn = do
 {-
   | This should return a list of cwnd to respect a certain scenario
  1. save the connection to a JSON file and pass it to mptcpnumerics
+
+TODO i would like 
 -}
 getCapsForConnection :: MptcpConnection -> [SockDiagMetrics] -> IO (Maybe [Word32])
 getCapsForConnection mptcpConn metrics = do
@@ -474,25 +477,29 @@ getCapsForConnection mptcpConn metrics = do
     let merged = lodashMerge jsonConn (object [ "subflows" .= metrics ])
   -- (toJSON jsonConn) ++ (toJSON metrics)
 
-    let bs = Data.Aeson.encode merged
+    let jsonBs = Data.Aeson.encode merged
     -- let bs = Data.Aeson.encode jsonConn
     let subflowCount = length $ subflows mptcpConn
     let tmpdir = "/tmp"
-    let filename = tmpdir ++ "/" ++ "mptcp_" ++ (show $ subflowCount)  ++ "_" ++ (show $ connectionToken mptcpConn) ++ ".json"
+
+    let filename = tmpdir ++ "/" ++ "mptcp_" ++ (show $ connectionToken mptcpConn) ++ "_" ++ (show $ subflowCount)  ++ ".json"
     -- let tmpdir = getEnvDefault "TMPDIR" "/tmp"
     infoM "main" $ "Saving to " ++ filename
 
-    tempdir <- getCanonicalTemporaryDirectory
+    -- tempdir <- getCanonicalTemporaryDirectory
     -- see https://github.com/feuerbach/temporary/blob/2ebee43b92b878f0093b3ce66d613d553f82152f/tests/test.hs#L63
     -- for an example
-    fp <- withSystemTempDirectory tempdir "toto" $ \fp do
-        let fn = takeFilename fp
-        Data.ByteString.Lazy.writeFile fn
--- (\x -> Data.ByteString.Lazy.writeFile x)
+    -- takeDirectory fp `equalFilePath` sys_tmp_dir
+    -- fp <- withSystemTempDirectory tempdir "toto" $ \fp -> do
+    --     let fn = takeFileName fp
+        -- Data.ByteString.Lazy.writeFile fn
+
+    Data.ByteString.Lazy.writeFile filename jsonBs
+
 
     -- throws upon error
     -- Data.ByteString.Lazy.writeFile filename bs
-    cmd bs
+    -- cmd bs
 
 
     -- TODO to keep it simple it should return a list of CWNDs to apply
