@@ -1,24 +1,14 @@
 # from https://github.com/NixOS/nixpkgs/blob/master/doc/languages-frameworks/haskell.section.md
-# can be called via
-# https://github.com/Gabriel439/haskell-nix/blob/master/project4/README.md
 {
-  nixpkgs ? import (builtins.fetchTarball {
-    name = "unstable-before-cabal-3";
-    url = "https://github.com/nixos/nixpkgs/archive/b8f9e09ad17eac2fb4c13105638a86d98281f546.tar.gz";
-    sha256 = "16pd2fr0l446yjfyqkp492fpkd810lv0lddfziwpw2av31ha7srf";
-})
 
-  # ./pinned_nixpkgs.nix
-  # pkgs ? import <nixpkgs> {}
+  nixpkgs ? import ./pinned_nixpkgs.nix
+  # nixpkgs ? import <nixpkgs> {}
   , compilerName ? "ghc865"
 }:
-  # localPkgs = import <nixpkgs> {  overlays = [ overlay]; };
-  # my_nvim = localPkgs.genNeovim  [ ] { withHaskell = true; };
-# in
 
   let
     compiler = pkgs.haskell.packages."${compilerName}";
-    pkgs = (nixpkgs {}).pkgs;
+    pkgs = nixpkgs.pkgs;
   in
 
   compiler.shellFor {
@@ -55,10 +45,11 @@
     # export runghc=" "
     source ./run_daemon
 
+    # --package-db /home/teto/netlink-hs/dist/package.conf.inplace 
     echo "to regenerate C bindings"
     echo "make headers_install in the linux kernel"
     echo "cabal clean"
-    echo "cabal configure --package-db /home/teto/netlink-hs/dist/package.conf.inplace --extra-include-dirs=/home/teto/mptcp/build/usr/include -v3"
+    echo "cabal configure --extra-include-dirs=/home/teto/mptcp/build/usr/include -v3"
 
     echo "to run the daemon "
     echo "buildNrun"
