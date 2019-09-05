@@ -100,27 +100,25 @@ executable daemon
 --     include-dirs: . , headers
 
 
-Test-Suite test
-  -- 2 types supported, exitcode is based on ... exit codes ....
-  type:               exitcode-stdio-1.0
-  main-is:            test/Main.hs
-  -- test-module:       Detailed
-  hs-source-dirs:     .
-  default-language: Haskell2010
-  -- import: shared-properties
-  Build-tools:       hsc2hs, c2hs
-  Includes:          tcp_states.h, linux/sock_diag.h, linux/inet_diag.h
-  Other-modules:     Net.SockDiag, Net.Mptcp, Net.IPAddress, Net.Mptcp.Constants, Net.SockDiag.Constants, 
-                    Net.SockDiag.Constants
-  autogen-modules: Net.Mptcp.Constants, Net.SockDiag.Constants
-  include-dirs:      headers
-  build-depends:      base >=4.12 && <4.20
-                     , HUnit
-                     , netlink
-                     , cereal
-                     , ip
-                     , bytestring
-                     , containers
-                     , aeson
-                     -- , test-framework
-                     -- , test-framework-hunit
+-- Test-Suite test
+--   -- 2 types supported, exitcode is based on ... exit codes ....
+--   type:               exitcode-stdio-1.0
+--   main-is:            test/Main.hs
+--   -- test-module:       Detailed
+--   hs-source-dirs:     .
+--   default-language: Haskell2010
+--   -- import: shared-properties
+--   Build-tools:       hsc2hs, c2hs
+--   Includes:          tcp_states.h, linux/sock_diag.h, linux/inet_diag.h
+--   Other-modules:     Net.SockDiag, Net.Mptcp, Net.IPAddress, Net.Mptcp.Constants, Net.SockDiag.Constants, 
+--                     Net.SockDiag.Constants, Net.Tcp.Constants
+--   autogen-modules: Net.Mptcp.Constants, Net.SockDiag.Constants
+--   include-dirs:      headers
+--   build-depends:      base >=4.12 && <4.20
+--                      , HUnit
+--                      , netlink
+--                      , cereal
+--                      , ip
+--                      , bytestring
+--                      , containers
+--                      , aeson

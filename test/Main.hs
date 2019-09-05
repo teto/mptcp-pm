@@ -5,8 +5,7 @@ module Main where
 
 import System.Exit
 import Test.HUnit
-import Generated
-import IDiag
+import Net.SockDiag
 import Net.Mptcp
 import Net.IP
 import Net.IPv4 (localhost)
