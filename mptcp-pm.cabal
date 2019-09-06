@@ -35,9 +35,11 @@ Flag Dev {
 -- http://hackage.haskell.org/package/bitset-1.4.8/docs/Data-BitSet-Word.html
 common shared-properties
     build-depends: base >= 4.12 && < 4.20, optparse-applicative,
-      containers, bytestring, fast-logger, process, cereal, ip, aeson,
+      containers, bytestring, fast-logger, process, cereal, ip,
        netlink >= 1.1.1.0, bytestring-conversion, c2hsc, text, hslogger
        -- for merge
+       , aeson
+       , aeson-pretty
        , aeson-extra
        -- to help with merging json content
        , unordered-containers

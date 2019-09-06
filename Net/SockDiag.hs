@@ -378,15 +378,13 @@ getMemInfo = DiagExtensionMemInfo <$> getWord32host <*> getWord32host <*> getWor
 getShutdown :: Get SockDiagExtension
 getShutdown = SockDiagShutdown <$> getWord8
 
--- |
+-- | Get congestion control name
 getCongInfo :: Get SockDiagExtension
 getCongInfo = do
-    -- bytes = getListOf getWord8
     left <- remaining
     bs <- getByteString left
     return (CongInfo $ unpack $ init bs)
 
--- DiagExtensionMemInfo <$> getWord32host <*> getWord32host <*> getWord32host <*> getWord32host
 
 getDiagTcpInfo :: Get SockDiagExtension
 getDiagTcpInfo =
@@ -471,6 +469,7 @@ loadExtension key value = let
     -- InetDiagTclass -> Nothing
     -- InetDiagSkmeminfo -> Nothing
     InetDiagShutdown -> Just getShutdown
+    InetDiagMeminfo  -> Just getMemInfo
     -- InetDiagDctcpinfo -> Nothing
     -- InetDiagProtocol -> Nothing
     -- InetDiagSkv6only -> Nothing

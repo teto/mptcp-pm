@@ -135,6 +135,7 @@ import Data.Aeson
 -- to merge MptcpConnection export and Metrics
 import Data.Aeson.Extra.Merge  (lodashMerge)
 
+import Data.Aeson.Encode.Pretty (encodePretty)
 -- import GHC.Generics
 
 -- for getEnvDefault
@@ -477,7 +478,8 @@ getCapsForConnection mptcpConn metrics = do
     let merged = lodashMerge jsonConn (object [ "subflows" .= metrics ])
   -- (toJSON jsonConn) ++ (toJSON metrics)
 
-    let jsonBs = Data.Aeson.encode merged
+    -- let jsonBs = Data.Aeson.encode merged
+    let jsonBs = encodePretty merged
     -- let bs = Data.Aeson.encode jsonConn
     let subflowCount = length $ subflows mptcpConn
     let tmpdir = "/tmp"
