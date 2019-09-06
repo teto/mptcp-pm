@@ -357,7 +357,7 @@ data SockDiagExtension =
   , tcpInfoRtt :: Word32
   , tcpInfoMinrtt :: Word32
 } | CongInfo String
-  | Shutdown Word8
+  | SockDiagShutdown Word8
   deriving (Show, Generic)
 
 -- ideally we should be able to , Serialize
@@ -376,7 +376,7 @@ getMemInfo :: Get SockDiagExtension
 getMemInfo = DiagExtensionMemInfo <$> getWord32host <*> getWord32host <*> getWord32host <*> getWord32host
 
 getShutdown :: Get SockDiagExtension
-getShutdown = Shutdown <$> getWord8
+getShutdown = SockDiagShutdown <$> getWord8
 
 -- |
 getCongInfo :: Get SockDiagExtension
@@ -470,7 +470,7 @@ loadExtension key value = let
     -- InetDiagTos -> Nothing
     -- InetDiagTclass -> Nothing
     -- InetDiagSkmeminfo -> Nothing
-    InetDiagShutdown -> Nothing
+    InetDiagShutdown -> Just getShutdown
     -- InetDiagDctcpinfo -> Nothing
     -- InetDiagProtocol -> Nothing
     -- InetDiagSkv6only -> Nothing

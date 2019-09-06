@@ -45,7 +45,7 @@
     # export runghc=" "
     source ./run_daemon
 
-    # --package-db /home/teto/netlink-hs/dist/package.conf.inplace 
+    # --package-db /home/teto/netlink-hs/dist/package.conf.inplace
     echo "to regenerate C bindings"
     echo "make headers_install in the linux kernel"
     echo "cabal clean"
