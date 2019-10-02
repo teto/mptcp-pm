@@ -75,10 +75,10 @@ data MptcpConnection = MptcpConnection {
   , localIds :: Set.Set Word8  -- ^ Announced addresses
   , remoteIds :: Set.Set Word8   -- ^ Announced addresses
 
-  -- Might be reworked afterwards
+  -- Might be reworked/moved in an Enriched/Tracker structure afterwards
   -- , tcpMetrics :: Maybe [SockDiagExtension]  -- ^Metrics retrieved from kernel
+  , get_caps_prog :: FilePath
 } deriving (Show, Generic)
-
 
 -- | Remote port
 data RemoteId = RemoteId {

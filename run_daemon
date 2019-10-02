@@ -1,9 +1,9 @@
 #!/bin/sh
 function buildNrun() {
-	cabal build -v daemon
+	cabal build -v mptcp-pm
 	if [ $? -eq 0 ]; then
     # with our changes sudo should not be necessaery anymore
-    cabal run daemon daemon $@
+    cabal run mptcp-pm daemon $@
 		# ./daemon daemon $@
 	fi
 }

@@ -105,6 +105,7 @@ import Data.Serialize.Put
 import Data.ByteString (ByteString)
 import Data.ByteString.Lazy (writeFile)
 -- import Data.ByteString.Char8 (unpack, init)
+-- import System.Posix.
 
 -- import qualified Data.ByteString.Char8 as BSC
 import qualified Data.Map as Map
@@ -215,6 +216,7 @@ data MyState = MyState {
   socket :: MptcpSocket -- ^Socket
   -- ThreadId/MVar
   , connections :: Map.Map MptcpToken (ThreadId, MVar MptcpConnection)
+  , cliArguments :: CLIArguments -- ^Arguments passed
 }
 -- deriving Show
 
@@ -269,9 +271,10 @@ dumpMptcpCommands x = dumpCommand x ++ "\n" ++ dumpMptcpCommands (succ x)
 
 
 -- todo use it as a filter
-data Sample = Sample {
+data CLIArguments = CLIArguments {
   command    :: String
   , serverIP     :: IPv4
+  , optimizer    :: String
   -- , clientIP      :: IPv4
   , quiet      :: Bool
   , enthusiasm :: Int
@@ -302,8 +305,8 @@ dumpSystemInterfaces = do
  -- <> command "commit" (info commitOptions ( progDesc "Record changes to the repository" ))
 -- can use several constructors depending on the PM ?
 -- ByteString
-sample :: Parser Sample
-sample = Sample
+sample :: Parser CLIArguments
+sample = CLIArguments
       <$> argument str
           ( metavar "CMD"
          <> help "What to do" )
@@ -313,6 +316,13 @@ sample = Sample
                                             Just ip -> Right ip)
         ( metavar "ServerIP"
          <> help "ServerIP to let through (e.g.: 202.214.86.51 )" )
+      <*> strOption
+          ( long "optimizer"
+          <> short 'o'
+         <> help "How enthusiastically to greet"
+         <> showDefault
+         <> Options.Applicative.value "fake_solver"
+         <> metavar "PROGRAM" )
       <*> switch
           ( long "verbose"
          <> short 'v'
@@ -325,7 +335,7 @@ sample = Sample
          <> metavar "INT" )
 
 
-opts :: ParserInfo Sample
+opts :: ParserInfo CLIArguments
 opts = info (sample <**> helper)
   ( fullDesc
   <> progDesc "Print a greeting for TARGET"
@@ -411,9 +421,11 @@ updateSubflowMetrics sockMetrics subflow = do
 
 {- |
   Starts monitoring a specific MPTCP connection
+  Maybe should expect a pathManager instance (and logger
+FilePath -- ^Path towards the program to get cwnd limits
 -}
--- Use a Mvar here to
-startMonitorConnection :: MptcpSocket -> NetlinkSocket -> MVar MptcpConnection -> IO ()
+startMonitorConnection :: MptcpSocket
+                          -> NetlinkSocket -> MVar MptcpConnection -> IO ()
 startMonitorConnection mptcpSock sockMetrics mConn = do
     -- ++ show token
     let (MptcpSocket sock familyId) = mptcpSock
@@ -506,7 +518,7 @@ getCapsForConnection mptcpConn metrics = do
 
     -- TODO to keep it simple it should return a list of CWNDs to apply
     -- readProcessWithExitCode  binary / args / stdin
-    (exitCode, stdout, stderrContent) <- readProcessWithExitCode "./hs/fake_solver" [filename, show subflowCount] ""
+    (exitCode, stdout, stderrContent) <- readProcessWithExitCode (get_caps_prog mptcpConn) [filename, show subflowCount] ""
 
     putStrLn $ "exitCode: " ++ show exitCode
     putStrLn $ "stdout:\n" ++ stdout
@@ -586,6 +598,8 @@ queryAddrs = NL.Packet
     -- putStrLn "List of requests made on new master:"
     -- mapM_ (sendPacket $ mptcpSockRaw) pkts
 
+
+-- TODO maybe the path manager should be part of the MptcpConnection
 dispatchPacketForKnownConnection :: MptcpSocket
                                     -> MptcpConnection
                                     -> MptcpGenlEvent
@@ -672,7 +686,7 @@ mapSubflowToInterfaceIdx ip = do
 -- Maybe
 registerMptcpConnection :: MyState -> MptcpToken -> TcpConnection -> IO MyState
 registerMptcpConnection oldState token subflow = let
-        (MyState mptcpSock conns) = oldState
+        (MyState mptcpSock conns cliArgs) = oldState
     in
     if acceptConnection subflow == False
         then do
@@ -683,7 +697,9 @@ registerMptcpConnection oldState token subflow = let
                 mappedInterface <- mapSubflowToInterfaceIdx (srcIp subflow)
                 let fixedSubflow = subflow { subflowInterface = mappedInterface }
                 -- let newMptcpConn = (MptcpConnection token [] Set.empty Set.empty)
-                let newMptcpConn = mptcpConnAddSubflow (MptcpConnection token Set.empty Set.empty Set.empty) fixedSubflow
+                let newMptcpConn = mptcpConnAddSubflow (
+                      MptcpConnection token Set.empty Set.empty Set.empty (optimizer cliArgs)
+                      ) fixedSubflow
 
                 newConn <- newMVar newMptcpConn
                 putStrLn $ "Connection established !!\n"
@@ -704,7 +720,7 @@ registerMptcpConnection oldState token subflow = let
 dispatchPacket :: MyState -> MptcpPacket -> IO MyState
 dispatchPacket oldState (Packet hdr (GenlData genlHeader NoData) attributes) = let
         cmd = toEnum $ fromIntegral $ genlCmd genlHeader
-        (MyState mptcpSock conns) = oldState
+        (MyState mptcpSock conns _) = oldState
         (MptcpSocket mptcpSockRaw fid) = mptcpSock
 
         -- i suppose token is always available right ?
@@ -847,18 +863,16 @@ doDumpLoop myState = do
     doDumpLoop modifiedState
 
 -- regarder dans query/joinMulticastGroup/recvOne
-listenToEvents :: MptcpSocket -> CtrlAttrMcastGroup -> IO ()
-listenToEvents (MptcpSocket sock fid) my_group = do
+listenToEvents :: MyState -> CtrlAttrMcastGroup -> IO ()
+listenToEvents state my_group = do
   -- joinMulticastGroup  returns IO ()
   -- TODO should check it works correctly !
   joinMulticastGroup sock (grpId my_group)
   putStrLn $ "Joined grp " ++ grpName my_group
-  let globalState = MyState mptcpSocket Map.empty
-  _ <- doDumpLoop globalState
+  _ <- doDumpLoop state
   putStrLn "end of listenToEvents"
   where
-    mptcpSocket = MptcpSocket sock fid
-    -- globalState = MyState mptcpSocket Map.empty
+    (MptcpSocket sock fid) = socket state
 
 
 -- testing
@@ -1071,7 +1085,10 @@ main = do
   mcastMptcpGroups <- getMulticastGroups sock fid
   mapM_ Prelude.print mcastMptcpGroups
 
-  mapM_ (listenToEvents (MptcpSocket sock fid)) mcastMptcpGroups
+  let mptcpSocket = (MptcpSocket sock fid)
+  let globalState = MyState mptcpSocket Map.empty options
+
+  mapM_ (listenToEvents globalState) mcastMptcpGroups
   -- putStrLn $ " Groups: " ++ unwords ( map grpName mcastMptcpGroups )
   putStrLn "finished"
 

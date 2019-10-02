@@ -32,6 +32,6 @@ msgTypeSockDiag  = {#const SOCK_DIAG_BY_FAMILY #}
 -- TODO generate AF_INET (6) from include/linux/socket.h
 -- IPPROTO_TCP defined in include/uapi/linux/in.h
 
--- Convert struct ?
+-- TODO Convert struct ?
 -- inet_diag_req_v2 
 

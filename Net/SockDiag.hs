@@ -358,6 +358,8 @@ data SockDiagExtension =
   , tcpInfoMinrtt :: Word32
 } | CongInfo String
   | SockDiagShutdown Word8
+  -- Apparently used to pass BBR data
+  | SockDiagMark Word32
   deriving (Show, Generic)
 
 -- ideally we should be able to , Serialize
@@ -374,6 +376,10 @@ getTcpVegasInfo = TcpVegasInfo <$> getWord32host <*> getWord32host <*> getWord32
 
 getMemInfo :: Get SockDiagExtension
 getMemInfo = DiagExtensionMemInfo <$> getWord32host <*> getWord32host <*> getWord32host <*> getWord32host
+
+getDiagMark :: Get SockDiagExtension
+getDiagMark = SockDiagMark <$> getWord32host
+
 
 getShutdown :: Get SockDiagExtension
 getShutdown = SockDiagShutdown <$> getWord8
@@ -455,9 +461,9 @@ queryPacketFromCookie cookie =  genQueryPacket (Left cookie) [] []
 
 loadExtension :: Int -> ByteString -> Maybe SockDiagExtension
 loadExtension key value = let
+  eExtId = (toEnum key :: SockDiagExtensionId)
   fn = case toEnum key of
     -- MessageType shouldn't matter anyway ?!
-    -- DiagCong error too few bytes
     InetDiagCong -> Just getCongInfo
     -- InetDiagNone -> Nothing
     InetDiagInfo -> Just getDiagTcpInfo
@@ -476,7 +482,8 @@ loadExtension key value = let
     -- InetDiagLocals -> Nothing
     -- InetDiagPeers -> Nothing
     -- InetDiagPad -> Nothing
-    -- InetDiagMark -> Nothing
+    -- requires CAP_NET_ADMIN
+    InetDiagMark -> Just getDiagMark
     -- InetDiagBbrinfo -> Nothing
     -- InetDiagClassId -> Nothing
     -- InetDiagMd5sig -> Nothing
@@ -491,5 +498,6 @@ loadExtension key value = let
       Nothing -> Nothing
       Just getFn -> case runGet getFn  value of
           Right x -> Just $ x
-          Left err -> error $ "Decoding error " ++ err
+          Left err -> error $ "error decoding " ++ show eExtId ++ ":\n" ++ err
+
 

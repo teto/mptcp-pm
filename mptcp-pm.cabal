@@ -72,25 +72,11 @@ common shared-properties
 
 -- monitor new mptcp connections
 -- and delegate the behavior to a monitor
-executable daemon
+executable mptcp-pm
     import: shared-properties
-    -- build-depends: MyCustomLibrary
-    -- ghc-options: -i/home/teto/netlink-hs
-    -- see https://wiki.haskell.org/FAQ#How_can_I_get_a_stack_backtrace_when_my_program_throws_an_exception.3F
     ghc-options: -prof
     main-is: hs/daemon.hs
-    -- extra-packages: netlink
     hs-source-dirs: .
-
--- will monitor a specific mptcp connection
--- executable monitor
---     import: shared-properties
---     main-is: hs/monitor.hs
-
--- for short tests
--- executable short
---     import: shared-properties
---     main-is: hs/test.hs
 
 --  MyCustomLibrary
 -- library
