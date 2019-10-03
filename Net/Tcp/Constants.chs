@@ -16,8 +16,13 @@ where
 
 import Data.Bits ()
 
--- copy from include/net/tcp_states
+-- copy from include/net/tcp_states since it's not part of the user API
 #include <tcp_states.h>
 
 -- For anonymous C enums, we can use , Bits
 {#enum TCP_ESTABLISHED as TcpState {underscoreToCase} deriving (Eq, Show)#}
+
+
+-- to get tcp_info
+-- #include <linux/tcp.h>
+-- tcp_info

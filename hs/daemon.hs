@@ -126,9 +126,9 @@ import Control.Concurrent
 -- import Data.IORef
 -- import Control.Concurrent.Async
 import System.IO.Unsafe
-import System.IO.Temp
+import System.IO.Temp ()
 -- for takeFilename
-import System.FilePath
+import System.FilePath ()
 
 -- , Handle
 import System.IO (stderr)
@@ -139,8 +139,9 @@ import Data.Aeson.Extra.Merge  (lodashMerge)
 import Data.Aeson.Encode.Pretty (encodePretty)
 -- import GHC.Generics
 
--- for getEnvDefault
-import System.Environment.Blank()
+-- for getEnvDefault, to get TMPDIR value.
+-- we could pass it as an argument
+-- import System.Environment.Blank(getEnvDefault)
 
 -- trying hslogger
 import System.Log.Logger (
@@ -216,16 +217,15 @@ data MyState = MyState {
   socket :: MptcpSocket -- ^Socket
   -- ThreadId/MVar
   , connections :: Map.Map MptcpToken (ThreadId, MVar MptcpConnection)
-  , cliArguments :: CLIArguments -- ^Arguments passed
+  -- |Arguments passed to the program
+  , cliArguments :: CLIArguments
 }
--- deriving Show
 
 -- https://stackoverflow.com/questions/51407547/how-to-update-a-field-of-a-json-object
 addJsonKey :: Data.Text.Text -> Value -> Value -> Value
 addJsonKey key val (Object xs) = Object $ HM.insert key val xs
 addJsonKey _ _ xs = xs
 
--- , dstIp = fromIPv4 localhost
 authorizedCon1 :: TcpConnection
 authorizedCon1 = TcpConnection {
         srcIp = fromIPv4 $ Net.IPv4.ipv4 192 168 0 128
@@ -272,9 +272,19 @@ dumpMptcpCommands x = dumpCommand x ++ "\n" ++ dumpMptcpCommands (succ x)
 
 -- todo use it as a filter
 data CLIArguments = CLIArguments {
+  -- | useless
   command    :: String
   , serverIP     :: IPv4
-  , optimizer    :: String
+
+  -- | Path to a program in charge of generating congestion window limits on a 
+  -- per path basis
+  -- The program will be called with a json file as input and must echo on stdout
+  -- an array of the form [ 10, 30, 40]
+  , optimizer    :: FilePath
+
+  -- | Folder where to log files
+  , out    :: FilePath
+
   -- , clientIP      :: IPv4
   , quiet      :: Bool
   , enthusiasm :: Int
@@ -318,10 +328,17 @@ sample = CLIArguments
          <> help "ServerIP to let through (e.g.: 202.214.86.51 )" )
       <*> strOption
           ( long "optimizer"
-          <> short 'o'
-         <> help "How enthusiastically to greet"
+          <> short 'p'
+         <> help "Path to the userspace program"
          <> showDefault
          <> Options.Applicative.value "fake_solver"
+         <> metavar "PROGRAM" )
+      <*> strOption
+          ( long "out"
+          <> short 'o'
+         <> help "Where to store the files"
+         <> showDefault
+         <> Options.Applicative.value "/tmp"
          <> metavar "PROGRAM" )
       <*> switch
           ( long "verbose"
@@ -389,9 +406,6 @@ sleepMs n = threadDelay (n * 1000)
 updateSubflowMetrics :: NetlinkSocket -> TcpConnection -> IO SockDiagMetrics
 updateSubflowMetrics sockMetrics subflow = do
     putStrLn "Updating subflow metrics"
-    -- putStrLn "Reading mptcp sock Mvar..."
-    -- mptcpSock <- readMVar globalMptcpSock
-    -- putStrLn "Finished reading"
     let queryPkt = genQueryPacket (Right subflow) [TcpListen, TcpEstablished]
          [InetDiagCong, InetDiagInfo, InetDiagMeminfo]
     sendPacket sockMetrics queryPkt
@@ -399,24 +413,12 @@ updateSubflowMetrics sockMetrics subflow = do
 
     -- exported from my own version !!
     -- TODO display number of answers
-    --  SockDiagMetrics 
     putStrLn "Starting inspecting answers"
-    answers <- recvMulti sockMetrics 
+    answers <- recvMulti sockMetrics
     let metrics_m = inspectIdiagAnswers answers
-    -- >>= inspectIdiagAnswers >>= return
-    -- return only the first ?
     -- filter ? keep only valud ones ?
-    -- 
     return $ head (catMaybes metrics_m)
     -- putStrLn "Finished inspecting answers"
-
-
--- TODO
--- clude child configs in grub menu #45345
--- send MPTCP_CMD_SND_CLAMP_WINDOW
--- TODO we need the token to generate the command ?
---token, family, loc_id, rem_id, [saddr4 | saddr6,
--- daddr4 | daddr6, dport [, sport, backup, if_idx]]
 
 
 {- |
@@ -424,10 +426,11 @@ updateSubflowMetrics sockMetrics subflow = do
   Maybe should expect a pathManager instance (and logger
 FilePath -- ^Path towards the program to get cwnd limits
 -}
-startMonitorConnection :: MptcpSocket
-                          -> NetlinkSocket -> MVar MptcpConnection -> IO ()
-startMonitorConnection mptcpSock sockMetrics mConn = do
-    -- ++ show token
+startMonitorConnection :: FilePath   -- ^ Where to write files
+                          -> MptcpSocket
+                          -> NetlinkSocket
+                          -> MVar MptcpConnection -> IO ()
+startMonitorConnection tmpdir mptcpSock sockMetrics mConn = do
     let (MptcpSocket sock familyId) = mptcpSock
     myId <- myThreadId
     putStr $ show myId ++ "Start monitoring connection..."
@@ -444,16 +447,12 @@ startMonitorConnection mptcpSock sockMetrics mConn = do
     let masterSf = Set.elemAt 0 (subflows con)
 
     -- Get updated metrics
-    -- lastMetrics 
-    -- let listOfIOSockMetrics = mapM (updateSubflowMetrics sockMetrics) (Set.toList $ subflows con)
     lastMetrics <- mapM (updateSubflowMetrics sockMetrics) (Set.toList $ subflows con)
-    -- lastMetrics <- Control.Monad.sequence listOfIOSockMetrics
 
     putStrLn "Running mptcpnumerics"
 
     -- Then refresh the cwnd objective
-    --MptcpConnectionWithMetrics 
-    cwnds_m <- getCapsForConnection con lastMetrics
+    cwnds_m <- getCapsForConnection tmpdir con lastMetrics
     case cwnds_m of
         Nothing -> do
             putStrLn "Couldn't fetch the values"
@@ -471,7 +470,7 @@ startMonitorConnection mptcpSock sockMetrics mConn = do
     putStrLn "Finished monitoring token "
 
     -- call ourself again
-    startMonitorConnection mptcpSock sockMetrics mConn
+    startMonitorConnection tmpdir mptcpSock sockMetrics mConn
 
 
 
@@ -480,10 +479,12 @@ startMonitorConnection mptcpSock sockMetrics mConn = do
   | This should return a list of cwnd to respect a certain scenario
  1. save the connection to a JSON file and pass it to mptcpnumerics
 
-TODO i would like 
 -}
-getCapsForConnection :: MptcpConnection -> [SockDiagMetrics] -> IO (Maybe [Word32])
-getCapsForConnection mptcpConn metrics = do
+getCapsForConnection :: FilePath
+                        -> MptcpConnection
+                        -> [SockDiagMetrics]
+                        -> IO (Maybe [Word32])
+getCapsForConnection tmpdir mptcpConn metrics = do
     -- returns a bytestring
     -- let (MptcpConnectionWithMetrics  mptcpConn metrics) = conWithMetrics
     let jsonConn = (toJSON mptcpConn)
@@ -494,10 +495,12 @@ getCapsForConnection mptcpConn metrics = do
     let jsonBs = encodePretty merged
     -- let bs = Data.Aeson.encode jsonConn
     let subflowCount = length $ subflows mptcpConn
-    let tmpdir = "/tmp"
+
+    -- TODO either pass it via env or via args
+    -- let tmpdir = "/tmp"
+    -- let tmpdir = getEnvDefault "TMPDIR" "/tmp"
 
     let filename = tmpdir ++ "/" ++ "mptcp_" ++ (show $ connectionToken mptcpConn) ++ "_" ++ (show $ subflowCount)  ++ ".json"
-    -- let tmpdir = getEnvDefault "TMPDIR" "/tmp"
     infoM "main" $ "Saving to " ++ filename
 
     -- tempdir <- getCanonicalTemporaryDirectory
@@ -509,12 +512,6 @@ getCapsForConnection mptcpConn metrics = do
         -- Data.ByteString.Lazy.writeFile fn
 
     Data.ByteString.Lazy.writeFile filename jsonBs
-
-
-    -- throws upon error
-    -- Data.ByteString.Lazy.writeFile filename bs
-    -- cmd bs
-
 
     -- TODO to keep it simple it should return a list of CWNDs to apply
     -- readProcessWithExitCode  binary / args / stdin
@@ -707,7 +704,7 @@ registerMptcpConnection oldState token subflow = let
                 -- create a new
                 sockMetrics <- makeMetricsSocket
                 -- start monitoring connection
-                threadId <- forkOS (startMonitorConnection mptcpSock sockMetrics newConn)
+                threadId <- forkOS (startMonitorConnection (out cliArgs) mptcpSock sockMetrics newConn)
 
                 putStrLn $ "Inserting new MVar "
                 let newState = oldState {
@@ -927,15 +924,10 @@ loadExtensionsFromAttributes attrs =
 
 {- Parses the requested informations
 -}
--- (TcpConnection, [SockDiagExtension])
-inspectIDiagAnswer :: Packet InetDiagMsg -> Maybe SockDiagMetrics
-inspectIDiagAnswer (Packet hdr cus attrs) = let
-    con = connectionFromDiag  cus
-  in
-    Just $ SockDiagMetrics con (loadExtensionsFromAttributes attrs)
-    -- putStrLn ("Idiag custom " ++ show cus) >>
-    -- putStrLn ("Idiag header " ++ show hdr) >>
-    -- putStrLn (showExtensionAttributes attrs)
+inspectIDiagAnswer :: Packet SockDiagMsg -> Maybe SockDiagMetrics
+inspectIDiagAnswer (Packet hdr cus attrs) =
+  Just $ SockDiagMetrics cus (loadExtensionsFromAttributes attrs)
+  -- Just cus
 inspectIDiagAnswer p = Nothing
 
 -- inspectIDiagAnswer (DoneMsg err) = putStrLn "DONE MSG"
@@ -950,7 +942,8 @@ inspectIDiagAnswer p = Nothing
 
 -- |Convenience wrapper
 data SockDiagMetrics = SockDiagMetrics {
-  subflowSubflow :: TcpConnection
+  sockDiagMsg :: SockDiagMsg
+  -- subflowSubflow :: TcpConnection
   , sockdiagMetrics :: [SockDiagExtension]
 }
 
@@ -958,23 +951,24 @@ data SockDiagMetrics = SockDiagMetrics {
 instance ToJSON SockDiagExtension where
   -- tcpi_rtt / tcpi_rttvar / tcpi_snd_ssthresh / tcpi_snd_cwnd 
   -- tcpi_state , tcpi_rto
-  toJSON (arg@DiagTcpInfo {} )  = let
-      rtt = tcpi_rtt arg
+  -- rename arg to tcp_info
+  toJSON (tcp_info@DiagTcpInfo {} )  = let
+      rtt = tcpi_rtt tcp_info
     in
       object [
-      "rttvar" .= tcpi_rttvar arg
+      "rttvar" .= tcpi_rttvar tcp_info
       , "rtt" .= rtt
-      , "rto" .= tcpi_rto arg
-      , "snd_cwnd" .= tcpi_snd_cwnd arg
-      , "snd_ssthresh" .= tcpi_snd_ssthresh arg
-      , "reordering"  .= tcpi_reordering arg
-
-      -- TODO convert to string
-      -- , "state" .=
+      , "rto" .= tcpi_rto tcp_info
+      , "snd_cwnd" .= tcpi_snd_cwnd tcp_info
+      , "snd_ssthresh" .= tcpi_snd_ssthresh tcp_info
+      , "reordering"  .= tcpi_reordering tcp_info
 
       -- needs kernel patching
-      , "fowd"  .= toJSON ( (fromIntegral rtt/2) :: Float)
-      , "bowd"  .= toJSON ( (fromIntegral rtt/2) :: Float)
+      -- , "fowd"  .= toJSON ( (fromIntegral rtt/2) :: Float)
+      -- , "bowd"  .= toJSON ( (fromIntegral rtt/2) :: Float)
+
+      , "fowd"  .= tcpi_fowd tcp_info
+      , "bowd"  .= tcpi_bowd tcp_info
 
 
       -- , "total_retrans"  .= tcpi_total_retrans arg
@@ -993,32 +987,22 @@ instance ToJSON SockDiagExtension where
 instance ToJSON SockDiagMetrics where
   -- attributes of array
   -- foldr over array of extensions
-  toJSON (SockDiagMetrics sf metrics) = let
-        initialValue = object [
-            "srcIp" .= toJSON (srcIp sf),
-            "dstIp" .= toJSON (dstIp sf)
-            ]
-        fn x y = lodashMerge (toJSON x) y
+  toJSON (SockDiagMetrics msg metrics) = let
 
-      in
-      -- (a -> b -> b) -> b -> t a -> b
-      foldr fn initialValue metrics
+      sf = connectionFromDiag msg
+      tcpState = toEnum $ fromIntegral ( idiag_state msg) :: TcpState
+      -- extensions = loadExtensionsFromAttributes attrs
+      initialValue = object [
+          "srcIp" .= toJSON (srcIp sf),
+          "dstIp" .= toJSON (dstIp sf),
+          "state" .= show tcpState
+          ]
+      fn x y = lodashMerge (toJSON x) y
 
-    -- object [
-    -- (pack (nameFromTcpConnection $ sf) .= object [
+    in
+    -- (a -> b -> b) -> b -> t a -> b
+    foldr fn initialValue metrics
 
-      -- "cwnd" .= toJSON (20 :: Int),
-      -- -- for now hardcode mss ? we could set it to one to make
-      -- "mss" .= toJSON (1500 :: Int),
-      -- "var" .= toJSON (10 :: Int),
-      -- "fowd" .= toJSON (10 :: Int),
-      -- "bowd" .= toJSON (10 :: Int),
-      -- "loss" .= toJSON (0.5 :: Float)
-      -- , "rto" .= toJSON (0.5 :: Float)
-      -- This is an user preference, that should be pushed when calling mptcpnumerics
-      -- , "contribution": 0.5
-    -- ])
-    -- ]
 
 -- |Updates the list of interfaces
 -- should run in background
@@ -1033,7 +1017,7 @@ trackSystemInterfaces = do
 
 
 -- | Remove ?
-inspectIdiagAnswers :: [Packet InetDiagMsg] -> [Maybe SockDiagMetrics]
+inspectIdiagAnswers :: [Packet SockDiagMsg] -> [Maybe SockDiagMetrics]
 inspectIdiagAnswers packets =
   map inspectIDiagAnswer packets
 

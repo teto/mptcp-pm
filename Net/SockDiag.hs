@@ -13,7 +13,7 @@ Portability : Linux
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DeriveAnyClass #-}
 module Net.SockDiag (
-  InetDiagMsg (..)
+  SockDiagMsg (..)
   , SockDiagExtension (..)
   , genQueryPacket
   , loadExtension
@@ -94,32 +94,24 @@ class Enum2Bits a where
   shiftL :: a -> Word32
 
 instance Enum2Bits TcpState where
-  -- toBits = enumsToWord
   shiftL state = B.shiftL 1 (fromEnum state)
 
 instance Enum2Bits SockDiagExtensionId where
-  -- toBits = enumsToWord
   shiftL state = B.shiftL 1 ((fromEnum state) - 1)
 
--- instance Enum2Bits INetDiag where
---   toBits = enumsToWord
 
 
 enumsToWord :: Enum2Bits a => [a] -> Word32
 enumsToWord [] = 0
 enumsToWord (x:xs) = (shiftL x) .|. (enumsToWord xs)
 
--- TODO use bitset package ? but broken on nixos
+-- TODO use bitset package ? but broken
 wordToEnums :: Enum2Bits a =>  Word32 -> [a]
 wordToEnums  _ = []
 
--- defined in include/uapi/linux/inet_diag.h
--- data InetDiagReq = InetDiagMsg {
-
 {- | This generates a response of inet_diag_msg
-rename to answer ? 
 -}
-data InetDiagMsg = InetDiagMsg {
+data SockDiagMsg = SockDiagMsg {
   idiag_family :: AddressFamily  -- ^
   , idiag_state :: Word8 -- ^Bitfield matching the request
   , idiag_timer :: Word8
@@ -144,9 +136,9 @@ putStates :: [TcpState] -> Put
 putStates states = putWord32host $ enumsToWord states
 
 
-instance Convertable InetDiagMsg where
-  getPut = putInetDiagMsg
-  getGet _ = getInetDiagMsg
+instance Convertable SockDiagMsg where
+  getPut = putSockDiagMsg
+  getGet _ = getSockDiagMsg
 
 -- TODO rename to a TCP one ? SockDiagRequest
 data SockDiagRequest = SockDiagRequest {
@@ -205,8 +197,8 @@ putSockDiagRequestHeader request = do
   putStates $ idiag_states request
   putInetDiagSockid $ diag_sockid request
 
--- |Converts
-connectionFromDiag :: InetDiagMsg
+-- |Converts a generic SockDiagMsg into a TCP connection
+connectionFromDiag :: SockDiagMsg
               -> TcpConnection
 connectionFromDiag msg =
   let sockid = idiag_sockid msg in
@@ -221,10 +213,10 @@ connectionFromDiag msg =
     , subflowInterface = Nothing
   }
 
--- | Serialize InetDiagMsg
+-- | Serialize SockDiagMsg
 -- Usually accompanied with attributes ?
-getInetDiagMsg :: Get InetDiagMsg
-getInetDiagMsg  = do
+getSockDiagMsg :: Get SockDiagMsg
+getSockDiagMsg  = do
     family <- getWord8
     state <- getWord8
     timer <- getWord8
@@ -236,10 +228,10 @@ getInetDiagMsg  = do
     wqueue <- getWord32host
     uid <- getWord32host
     inode <- getWord32host
-    return$  InetDiagMsg (fromIntegral family) state timer retrans _sockid expires rqueue wqueue uid inode
+    return$  SockDiagMsg (fromIntegral family) state timer retrans _sockid expires rqueue wqueue uid inode
 
-putInetDiagMsg :: InetDiagMsg -> Put
-putInetDiagMsg msg = do
+putSockDiagMsg :: SockDiagMsg -> Put
+putSockDiagMsg msg = do
   putWord8 $ fromIntegral $ fromEnum $ idiag_family msg
   putWord8 $ idiag_state msg
   putWord8 $ idiag_timer msg
@@ -278,15 +270,6 @@ putInetDiagSockid cust = do
   putWord64host $ idiag_cookie cust
 
 
--- instance Convertable DiagVegasInfo where
---   getPut  = putDiagVegasInfo
---   getGet _  = getDiagVegasInfo
-
-
--- putDiagVegasInfo ::  -> Put
--- putDiagVegasInfo info = error "should not be needed"
-
-
 getDiagVegasInfo :: Get SockDiagExtension
 getDiagVegasInfo =
   TcpVegasInfo <$> getWord32host <*> getWord32host <*> getWord32host <*> getWord32host
@@ -297,11 +280,10 @@ eIPPROTO_TCP = 6
 
 
 {-|
-  TODO generate with c2hsc ?
-include/uapi/linux/inet_diag.h
+Different answers described in include/uapi/linux/inet_diag.h
 -}
 data SockDiagExtension =
--- | Lots of good information
+  -- | Exact copy of kernel's struct tcp_info
   DiagTcpInfo {
   tcpi_state :: Word8,
   tcpi_ca_state :: Word8,
@@ -341,17 +323,20 @@ data SockDiagExtension =
   tcpi_reordering :: Word32,
   tcpi_rcv_rtt :: Word32,
   tcpi_rcv_space :: Word32,
-  tcpi_total_retrans :: Word32
+  tcpi_total_retrans :: Word32,
+
+  -- Extended version, hoping it doesn't break too much stuff
+  tcpi_fowd :: Word32,
+  tcpi_bowd :: Word32
 
 } | DiagExtensionMemInfo {
   idiag_rmem :: Word32
 , idiag_wmem :: Word32
 , idiag_fmem :: Word32
 , idiag_tmem :: Word32
--- | Not exclusive to Vegas unlike the name indicates
-} | TcpVegasInfo {
--- tcpvegas_info
-  -- TODO hide ?
+} |
+  -- | Not exclusive to Vegas unlike the name indicates, mirrors tcpvegas_info
+  TcpVegasInfo {
   tcpInfoVegasEnabled :: Word32
   , tcpInfoRttCount :: Word32
   , tcpInfoRtt :: Word32
@@ -363,13 +348,10 @@ data SockDiagExtension =
   deriving (Show, Generic)
 
 -- ideally we should be able to , Serialize
--- encode
 -- instance Convertable SockDiagExtension where
 --   getGet _ = get
 --   getPut = put
 
--- not sure what it is
--- INET_DIAG_MARK,		/* only with CAP_NET_ADMIN */
 
 getTcpVegasInfo :: Get SockDiagExtension
 getTcpVegasInfo = TcpVegasInfo <$> getWord32host <*> getWord32host <*> getWord32host <*> getWord32host
@@ -396,6 +378,8 @@ getDiagTcpInfo :: Get SockDiagExtension
 getDiagTcpInfo =
    DiagTcpInfo <$> getWord8 <*> getWord8 <*> getWord8 <*> getWord8 <*> getWord8 <*> getWord8 <*> getWord8
   <*> getWord32host <*>getWord32host <*>getWord32host <*>getWord32host <*>getWord32host <*>getWord32host <*>getWord32host <*>getWord32host <*>getWord32host <*>getWord32host <*>getWord32host <*>getWord32host <*>getWord32host <*>getWord32host <*>getWord32host <*>getWord32host <*>getWord32host <*>getWord32host <*>getWord32host <*>getWord32host <*>getWord32host <*>getWord32host <*>getWord32host <*>getWord32host
+  -- these 2 are to read the owds, it's an extra that can be removed depending on the kernel
+  <*>getWord32host<*>getWord32host
 
 -- Sends a SockDiagRequest
 -- expects INetDiag
@@ -415,11 +399,9 @@ getDiagTcpInfo =
 showExtension :: SockDiagExtension -> String
 showExtension (CongInfo cc) = "Using CC " ++ (show cc)
 showExtension (TcpVegasInfo _ _ rtt minRtt) = "RTT=" ++ (show rtt) ++ " minRTT=" ++ show minRtt
---   tcpi_state :: Word8,
 showExtension (arg@DiagTcpInfo{}) = "TcpInfo: rtt/rttvar=" ++ show ( tcpi_rtt arg) ++ "/" ++ show ( tcpi_rttvar arg)
         ++ " snd_cwnd/ssthresh=" ++ show (tcpi_snd_cwnd arg) ++ "/" ++ show (tcpi_snd_ssthresh arg)
 showExtension rest = show rest
--- "RTT=" ++ (show rtt) ++ " minRTT=" ++ show minRtt
 
 {- Generate
   Check man sock_diag
