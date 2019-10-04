@@ -129,6 +129,7 @@ import System.IO.Unsafe
 import System.IO.Temp ()
 -- for takeFilename
 import System.FilePath ()
+import Numeric.Natural
 
 -- , Handle
 import System.IO (stderr)
@@ -188,13 +189,13 @@ iperfClientPort = 5500
 iperfServerPort :: Word16
 iperfServerPort = 5201
 
--- | 
-onSuccessSleepingDelayMs :: Int
+-- |Delay between 2 successful
+onSuccessSleepingDelayMs :: Natural
 onSuccessSleepingDelayMs = 300
 
 
 -- | When it couldn't set the correct value
-onFailureSleepingDelay :: Int
+onFailureSleepingDelay :: Natural
 onFailureSleepingDelay = 100
 
 -- should be able to ignore based on regex
@@ -384,8 +385,8 @@ makeMetricsSocket = do
 
 
 -- A utility function - threadDelay takes microseconds, which is slightly annoying.
-sleepMs :: Int -> IO()
-sleepMs n = threadDelay (n * 1000)
+sleepMs :: Natural -> IO()
+sleepMs n = threadDelay $ (fromIntegral n :: Int) * 1000
 
 
 -- | here we may want to run mptcpnumerics to get some results
@@ -402,7 +403,6 @@ updateSubflowMetrics sockMetrics subflow = do
     let metrics_m = inspectIdiagAnswers answers
     -- filter ? keep only valud ones ?
     return $ head (catMaybes metrics_m)
-    -- putStrLn "Finished inspecting answers"
 
 
 {- |
@@ -411,50 +411,56 @@ updateSubflowMetrics sockMetrics subflow = do
 FilePath -- ^Path towards the program to get cwnd limits
 -}
 startMonitorConnection :: FilePath   -- ^ Where to write files
+                          -- |elapsed time since starting the thread
+                          -- (very coarse approximation)
+                          -> Natural
                           -> MptcpSocket
                           -> NetlinkSocket
                           -> MVar MptcpConnection -> IO ()
-startMonitorConnection tmpdir mptcpSock sockMetrics mConn = do
+startMonitorConnection tmpdir elapsed mptcpSock sockMetrics mConn = do
     let (MptcpSocket sock familyId) = mptcpSock
     myId <- myThreadId
-    putStr $ show myId ++ "Start monitoring connection..."
+    putStr $ show myId ++ ": monitoring connection at *time* " ++ (show elapsed) ++ " ..."
     -- as long as conn is not empty we keep going ?
     -- for this connection
     -- query metrics for the whole MPTCP connection
-    con <- readMVar mConn
+    mptcpConn <- readMVar mConn
     putStrLn "Showing MPTCP connection"
-    putStrLn $ show con ++ "..."
-    let token = connectionToken con
+    putStrLn $ show mptcpConn ++ "..."
+    let token = connectionToken mptcpConn
 
     -- TODO this is the issue
     -- not sure it's the master with a set
-    let masterSf = Set.elemAt 0 (subflows con)
+    let masterSf = Set.elemAt 0 (subflows mptcpConn)
 
     -- Get updated metrics
-    lastMetrics <- mapM (updateSubflowMetrics sockMetrics) (Set.toList $ subflows con)
+    lastMetrics <- mapM (updateSubflowMetrics sockMetrics) (Set.toList $ subflows mptcpConn)
 
     putStrLn "Running mptcpnumerics"
 
-    -- Then refresh the cwnd objective
-    cwnds_m <- getCapsForConnection tmpdir con lastMetrics
-    case cwnds_m of
+    let filename = tmpdir ++ "/" ++ "mptcp_" ++ (show $ connectionToken mptcpConn) ++ "_" ++ (show elapsed) ++ ".json"
+
+    cwnds_m <- getCapsForConnection filename mptcpConn lastMetrics
+    -- rename to waitingTime ? delay
+    duration <- case cwnds_m of
         Nothing -> do
             putStrLn "Couldn't fetch the values"
-            sleepMs onFailureSleepingDelay
+            return onFailureSleepingDelay
         Just cwnds -> do
 
             putStrLn $ "Requesting to set cwnds..." ++ show cwnds
             -- TODO fix
             -- KISS for now (capCwndPkt mptcpSock )
-            let cwndPackets  = map (\(cwnd, sf) -> capCwndPkt mptcpSock con cwnd sf) (zip cwnds (Set.toList $ subflows con))
+            let cwndPackets  = map (\(cwnd, sf) -> capCwndPkt mptcpSock mptcpConn cwnd sf) (zip cwnds (Set.toList $ subflows mptcpConn))
 
             mapM_ (sendPacket sock) cwndPackets
 
-            sleepMs onSuccessSleepingDelayMs
-    putStrLn "Finished monitoring token "
+            return onSuccessSleepingDelayMs
+    putStrLn $ "Finished monitoring token. Waiting " ++ show duration
+    sleepMs duration
 
     -- call ourself again
-    startMonitorConnection tmpdir mptcpSock sockMetrics mConn
+    startMonitorConnection tmpdir (elapsed + duration) mptcpSock sockMetrics mConn
 
 
 
@@ -466,25 +472,23 @@ startMonitorConnection tmpdir mptcpSock sockMetrics mConn = do
 -}
 getCapsForConnection :: FilePath
                         -> MptcpConnection
+                        -- |Test
                         -> [SockDiagMetrics]
                         -> IO (Maybe [Word32])
-getCapsForConnection tmpdir mptcpConn metrics = do
+getCapsForConnection filename mptcpConn metrics = do
     -- returns a bytestring
     -- let (MptcpConnectionWithMetrics  mptcpConn metrics) = conWithMetrics
     let jsonConn = (toJSON mptcpConn)
     let merged = lodashMerge jsonConn (object [ "subflows" .= metrics ])
-  -- (toJSON jsonConn) ++ (toJSON metrics)
 
-    -- let jsonBs = Data.Aeson.encode merged
     let jsonBs = encodePretty merged
-    -- let bs = Data.Aeson.encode jsonConn
     let subflowCount = length $ subflows mptcpConn
 
     -- TODO either pass it via env or via args
     -- let tmpdir = "/tmp"
     -- let tmpdir = getEnvDefault "TMPDIR" "/tmp"
 
-    let filename = tmpdir ++ "/" ++ "mptcp_" ++ (show $ connectionToken mptcpConn) ++ "_" ++ (show $ subflowCount)  ++ ".json"
+    -- let filename = tmpdir ++ "/" ++ "mptcp_" ++ (show $ connectionToken mptcpConn) ++ "_" ++ (show $ subflowCount)  ++ ".json"
     infoM "main" $ "Saving to " ++ filename
 
     -- tempdir <- getCanonicalTemporaryDirectory
@@ -688,7 +692,9 @@ registerMptcpConnection oldState token subflow = let
                 -- create a new
                 sockMetrics <- makeMetricsSocket
                 -- start monitoring connection
-                threadId <- forkOS (startMonitorConnection (out cliArgs) mptcpSock sockMetrics newConn)
+                threadId <- forkOS (
+                    startMonitorConnection (out cliArgs) 0 mptcpSock sockMetrics newConn
+                    )
 
                 putStrLn $ "Inserting new MVar "
                 let newState = oldState {
@@ -951,6 +957,7 @@ instance ToJSON SockDiagExtension where
       , "reordering"  .= tcpi_reordering tcpInfo
       , "state" .= show tcpState
       , "pacing" .= tcpi_pacing_rate tcpInfo
+      , "delivery_rate" .= tcpi_delivery_rate tcpInfo
       , "min_rtt" .= tcpi_min_rtt tcpInfo
 
       -- needs kernel patching
@@ -972,8 +979,7 @@ instance ToJSON SockDiagExtension where
       ]
   toJSON _ = object []
 
--- TODO merge
---
+
 instance ToJSON SockDiagMetrics where
   -- attributes of array
   -- foldr over array of extensions
@@ -981,11 +987,9 @@ instance ToJSON SockDiagMetrics where
 
       sf = connectionFromDiag msg
       tcpState = toEnum $ fromIntegral ( idiag_state msg) :: TcpState
-      -- extensions = loadExtensionsFromAttributes attrs
       initialValue = object [
           "srcIp" .= toJSON (srcIp sf),
           "dstIp" .= toJSON (dstIp sf)
-          --, "state" .= show tcpState
           ]
       fn x y = lodashMerge (toJSON x) y
 
