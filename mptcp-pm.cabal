@@ -1,6 +1,6 @@
 cabal-version: 2.2
 name: mptcp-pm
-version: 0.0.1
+version: 0.0.2
 license: GPL-3.0-only
 license-file: LICENSE
 build-type: Simple
@@ -74,7 +74,7 @@ common shared-properties
 -- and delegate the behavior to a monitor
 executable mptcp-pm
     import: shared-properties
-    ghc-options: -prof
+    -- ghc-options: -prof
     main-is: hs/daemon.hs
     hs-source-dirs: .
 

@@ -284,6 +284,7 @@ Different answers described in include/uapi/linux/inet_diag.h
 -}
 data SockDiagExtension =
   -- | Exact copy of kernel's struct tcp_info
+  -- tcp_diag_get_info
   DiagTcpInfo {
   tcpi_state :: Word8,
   tcpi_ca_state :: Word8,

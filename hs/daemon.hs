@@ -188,12 +188,12 @@ iperfClientPort = 5500
 iperfServerPort :: Word16
 iperfServerPort = 5201
 
--- |
-onSuccessSleepingDelay :: Int
-onSuccessSleepingDelay = 300
+-- | 
+onSuccessSleepingDelayMs :: Int
+onSuccessSleepingDelayMs = 300
 
 
--- When it couldn't set the correct value
+-- | When it couldn't set the correct value
 onFailureSleepingDelay :: Int
 onFailureSleepingDelay = 100
 
@@ -382,25 +382,11 @@ makeMetricsSocket = do
   sock <- makeSocketGeneric eNETLINK_SOCK_DIAG
   return sock
 
--- used in tests
-startMonitorExternalProcess :: MptcpToken -> CreateProcess
-startMonitorExternalProcess token =
-  let
-    params = proc "daemon" [ show token ]
-    -- todo pass the token via the environment
-    newParams = params {
-        -- cmdspec = RawCommand "monitor" [ show token ]
-        new_session = True
-        -- cwd
-        -- env
-    }
-  in
-    -- return "toto"
-    newParams
 
 -- A utility function - threadDelay takes microseconds, which is slightly annoying.
 sleepMs :: Int -> IO()
 sleepMs n = threadDelay (n * 1000)
+
 
 -- | here we may want to run mptcpnumerics to get some results
 updateSubflowMetrics :: NetlinkSocket -> TcpConnection -> IO SockDiagMetrics
@@ -411,8 +397,6 @@ updateSubflowMetrics sockMetrics subflow = do
     sendPacket sockMetrics queryPkt
     putStrLn "Sent the TCP SS request"
 
-    -- exported from my own version !!
-    -- TODO display number of answers
     putStrLn "Starting inspecting answers"
     answers <- recvMulti sockMetrics
     let metrics_m = inspectIdiagAnswers answers
@@ -466,7 +450,7 @@ startMonitorConnection tmpdir mptcpSock sockMetrics mConn = do
 
             mapM_ (sendPacket sock) cwndPackets
 
-            sleepMs onSuccessSleepingDelay
+            sleepMs onSuccessSleepingDelayMs
     putStrLn "Finished monitoring token "
 
     -- call ourself again
@@ -952,23 +936,29 @@ instance ToJSON SockDiagExtension where
   -- tcpi_rtt / tcpi_rttvar / tcpi_snd_ssthresh / tcpi_snd_cwnd 
   -- tcpi_state , tcpi_rto
   -- rename arg to tcp_info
-  toJSON (tcp_info@DiagTcpInfo {} )  = let
-      rtt = tcpi_rtt tcp_info
+  toJSON (tcpInfo@DiagTcpInfo {} )  = let
+      -- rtt = tcpi_rtt tcpInfo
+      tcpState = toEnum $ fromIntegral ( tcpi_state tcpInfo) :: TcpState
+      -- TODO could log ca_state ?
+
     in
       object [
-      "rttvar" .= tcpi_rttvar tcp_info
-      , "rtt" .= rtt
-      , "rto" .= tcpi_rto tcp_info
-      , "snd_cwnd" .= tcpi_snd_cwnd tcp_info
-      , "snd_ssthresh" .= tcpi_snd_ssthresh tcp_info
-      , "reordering"  .= tcpi_reordering tcp_info
+      "rttvar" .= tcpi_rttvar tcpInfo
+      , "rtt" .= tcpi_rtt tcpInfo
+      , "rto" .= tcpi_rto tcpInfo
+      , "snd_cwnd" .= tcpi_snd_cwnd tcpInfo
+      , "snd_ssthresh" .= tcpi_snd_ssthresh tcpInfo
+      , "reordering"  .= tcpi_reordering tcpInfo
+      , "state" .= show tcpState
+      , "pacing" .= tcpi_pacing tcpInfo
+      , "min_rtt" .= tcpi_min_rtt tcpInfo
 
       -- needs kernel patching
       -- , "fowd"  .= toJSON ( (fromIntegral rtt/2) :: Float)
       -- , "bowd"  .= toJSON ( (fromIntegral rtt/2) :: Float)
 
-      , "fowd"  .= tcpi_fowd tcp_info
-      , "bowd"  .= tcpi_bowd tcp_info
+      , "fowd"  .= tcpi_fowd tcpInfo
+      , "bowd"  .= tcpi_bowd tcpInfo
 
 
       -- , "total_retrans"  .= tcpi_total_retrans arg
@@ -994,8 +984,8 @@ instance ToJSON SockDiagMetrics where
       -- extensions = loadExtensionsFromAttributes attrs
       initialValue = object [
           "srcIp" .= toJSON (srcIp sf),
-          "dstIp" .= toJSON (dstIp sf),
-          "state" .= show tcpState
+          "dstIp" .= toJSON (dstIp sf)
+          --, "state" .= show tcpState
           ]
       fn x y = lodashMerge (toJSON x) y
 
