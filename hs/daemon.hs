@@ -950,7 +950,7 @@ instance ToJSON SockDiagExtension where
       , "snd_ssthresh" .= tcpi_snd_ssthresh tcpInfo
       , "reordering"  .= tcpi_reordering tcpInfo
       , "state" .= show tcpState
-      , "pacing" .= tcpi_pacing tcpInfo
+      , "pacing" .= tcpi_pacing_rate tcpInfo
       , "min_rtt" .= tcpi_min_rtt tcpInfo
 
       -- needs kernel patching

@@ -281,6 +281,7 @@ eIPPROTO_TCP = 6
 
 {-|
 Different answers described in include/uapi/linux/inet_diag.h
+Please keep the spacing the same as 
 -}
 data SockDiagExtension =
   -- | Exact copy of kernel's struct tcp_info
@@ -292,10 +293,10 @@ data SockDiagExtension =
   tcpi_probes :: Word8,
   tcpi_backoff :: Word8,
   tcpi_options :: Word8,
-  tcpi_wscales :: Word8,
-  -- tcpi_snd_wscale : 4, tcpi_rcv_wscale : 4 :: Word8,
+  tcpi_wscales :: Word8  -- ^both sender and receiver on 4 bits
+  , tcpi_delivery_rate_app_limited :: Word8 -- ^but only first bit used
 
-  tcpi_rto :: Word32,
+  , tcpi_rto :: Word32,
   tcpi_ato :: Word32,
   tcpi_snd_mss :: Word32,
   tcpi_rcv_mss :: Word32,
@@ -308,12 +309,11 @@ data SockDiagExtension =
 
   -- Time
   tcpi_last_data_sent :: Word32,
-  -- Not remembered, sorr
   tcpi_last_ack_sent :: Word32,
   tcpi_last_data_recv :: Word32,
   tcpi_last_ack_recv :: Word32,
 
-   -- Metric
+  -- Metric
   tcpi_pmtu :: Word32,
   tcpi_rcv_ssthresh :: Word32,
   tcpi_rtt :: Word32,
@@ -322,13 +322,41 @@ data SockDiagExtension =
   tcpi_snd_cwnd :: Word32,
   tcpi_advmss :: Word32,
   tcpi_reordering :: Word32,
+
   tcpi_rcv_rtt :: Word32,
-  tcpi_rcv_space :: Word32,
-  tcpi_total_retrans :: Word32,
+  tcpi_rcv_space :: Word32
+
+  , tcpi_total_retrans :: Word32
+
+  , tcpi_pacing_rate :: Word64
+  , tcpi_max_pacing_rate :: Word64
+  , tcpi_bytes_acked :: Word64
+  , tcpi_bytes_received :: Word64
+  , tcpi_segs_out :: Word32
+  , tcpi_segs_in :: Word32
+
+  , tcpi_notsent_bytes :: Word32
+  , tcpi_min_rtt :: Word32
+  , tcpi_data_segs_in :: Word32
+  , tcpi_data_segs_out :: Word32
+
+  , tcpi_delivery_rate :: Word64
+
+  , tcpi_busy_time :: Word64
+  , tcpi_rwnd_limited :: Word64
+  , tcpi_sndbuf_limited :: Word64
+
+  , tcpi_delivered :: Word32
+  , tcpi_delivered_ce :: Word32
+
+  , tcpi_bytes_sent :: Word64
+  , tcpi_bytes_retrans :: Word64
+  , tcpi_dsack_dups :: Word32
+  , tcpi_reord_seen :: Word32
 
   -- Extended version, hoping it doesn't break too much stuff
-  tcpi_fowd :: Word32,
-  tcpi_bowd :: Word32
+  , tcpi_fowd :: Word32
+  , tcpi_bowd :: Word32
 
 } | DiagExtensionMemInfo {
   idiag_rmem :: Word32
@@ -376,11 +404,42 @@ getCongInfo = do
 
 
 getDiagTcpInfo :: Get SockDiagExtension
-getDiagTcpInfo =
-   DiagTcpInfo <$> getWord8 <*> getWord8 <*> getWord8 <*> getWord8 <*> getWord8 <*> getWord8 <*> getWord8
-  <*> getWord32host <*>getWord32host <*>getWord32host <*>getWord32host <*>getWord32host <*>getWord32host <*>getWord32host <*>getWord32host <*>getWord32host <*>getWord32host <*>getWord32host <*>getWord32host <*>getWord32host <*>getWord32host <*>getWord32host <*>getWord32host <*>getWord32host <*>getWord32host <*>getWord32host <*>getWord32host <*>getWord32host <*>getWord32host <*>getWord32host <*>getWord32host
-  -- these 2 are to read the owds, it's an extra that can be removed depending on the kernel
-  <*>getWord32host<*>getWord32host
+getDiagTcpInfo = DiagTcpInfo <$> getWord8 <*> getWord8 <*> getWord8 <*> getWord8 <*> getWord8 <*> getWord8 <*> getWord8 <*> getWord8
+  <*> getWord32host <*> getWord32host <*> getWord32host <*> getWord32host
+  <*> getWord32host <*> getWord32host <*> getWord32host <*> getWord32host <*> getWord32host
+  -- times
+  <*> getWord32host <*> getWord32host <*> getWord32host <*> getWord32host
+  -- metrics
+  <*> getWord32host <*> getWord32host <*> getWord32host <*> getWord32host
+  <*> getWord32host <*> getWord32host <*> getWord32host <*> getWord32host
+
+
+  <*> getWord32host <*> getWord32host
+
+  -- tcpi_total_retrans
+  <*> getWord32host
+
+  -- starts at tcpi_pacing_rate
+  <*> getWord64host <*> getWord64host <*> getWord64host <*> getWord64host
+  <*> getWord32host <*> getWord32host
+
+  -- starts at tcpi_notsent_bytes
+  <*> getWord32host <*> getWord32host <*> getWord32host <*> getWord32host
+
+  -- tpci_delivery_rate
+  <*> getWord64host
+
+  <*> getWord64host <*> getWord64host<*> getWord64host
+
+  -- tcpi_delivered
+  <*> getWord32host <*> getWord32host
+
+  -- tcpi_bytes_sent
+  <*> getWord64host<*> getWord64host <*> getWord32host <*> getWord32host
+
+  -- My custom addition to read the owds, it's an extra that should be removed 
+  -- for a vanilla kernel
+  <*> getWord32host <*> getWord32host
 
 -- Sends a SockDiagRequest
 -- expects INetDiag
@@ -450,9 +509,6 @@ loadExtension key value = let
     InetDiagCong -> Just getCongInfo
     -- InetDiagNone -> Nothing
     InetDiagInfo -> Just getDiagTcpInfo
-    -- InetDiagInfo ->  case runGet (getGet 42) value of
-    --                     Right x -> Just x
-    --                     _ -> Nothing
     InetDiagVegasinfo -> Just getTcpVegasInfo
     -- InetDiagTos -> Nothing
     -- InetDiagTclass -> Nothing

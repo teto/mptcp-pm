@@ -62,16 +62,12 @@ type MptcpPacket = GenlPacket NoData
 --   , metrics :: [SockDiagExtension]
 -- }
 
--- |Data to hold MPTCP level information
--- TODO use Data.Set
+-- |Holds MPTCP level information
 data MptcpConnection = MptcpConnection {
   connectionToken :: MptcpToken
   -- use SubflowWithMetrics instead ?!
   -- , subflows :: Set.Set [TcpConnection]
   , subflows :: Set.Set TcpConnection
-  -- TODO convert to Data.Set ?
-  -- , localIds :: [Word8]  -- ^ Announced addresses
-  -- , remoteIds :: [Word8]  -- ^ Announced addresses
   , localIds :: Set.Set Word8  -- ^ Announced addresses
   , remoteIds :: Set.Set Word8   -- ^ Announced addresses
 
