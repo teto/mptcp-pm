@@ -648,9 +648,11 @@ dispatchPacketForKnownConnection mptcpSock con event attributes availablePaths =
       _ -> error $ "should not happen " ++ show event
 
 
+-- |Filter connections
+-- This should be configurable in some way
 acceptConnection :: TcpConnection -> Bool
--- acceptConnection subflow = subflow `notElem` filteredConnections
-acceptConnection subflow = True
+acceptConnection subflow = subflow `notElem` filteredConnections
+-- acceptConnection subflow = True
 
 -- |
 mapSubflowToInterfaceIdx :: IP -> IO (Maybe Word32)
@@ -967,6 +969,7 @@ instance ToJSON SockDiagExtension where
       , "delivery_rate" .= tcpi_delivery_rate tcpInfo
       , "min_rtt" .= tcpi_min_rtt tcpInfo
 
+      -- bytes_sent
       -- needs kernel patching
       -- , "fowd"  .= toJSON ( (fromIntegral rtt/2) :: Float)
       -- , "bowd"  .= toJSON ( (fromIntegral rtt/2) :: Float)
@@ -997,7 +1000,10 @@ instance ToJSON SockDiagMetrics where
       initialValue = object [
           "srcIp" .= toJSON (srcIp sf)
           , "dstIp" .= toJSON (dstIp sf)
-          , "subflow_id" .= idiag_uid msg
+          , "srcPort" .= toJSON (srcPort sf)
+          , "dstPort" .= toJSON (dstPort sf)
+          -- doesnt work as subflow id
+          -- , "subflow_id" .= idiag_uid msg
           ]
       fn x y = lodashMerge (toJSON x) y
 
