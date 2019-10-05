@@ -274,6 +274,7 @@ dumpMptcpCommands x = dumpCommand x ++ "\n" ++ dumpMptcpCommands (succ x)
 -- todo use it as a filter
 data CLIArguments = CLIArguments {
   -- | useless
+  -- TODO we should be able to filter
   command    :: String
   , serverIP     :: IPv4
 
@@ -281,7 +282,7 @@ data CLIArguments = CLIArguments {
   -- per path basis
   -- The program will be called with a json file as input and must echo on stdout
   -- an array of the form [ 10, 30, 40]
-  , optimizer    :: FilePath
+  , optimizer    :: Maybe FilePath
 
   -- | Folder where to log files
   , out    :: FilePath
@@ -327,13 +328,13 @@ sample = CLIArguments
                                             Just ip -> Right ip)
         ( metavar "ServerIP"
          <> help "ServerIP to let through (e.g.: 202.214.86.51 )" )
-      <*> strOption
+      <*> (optional $ strOption
           ( long "optimizer"
           <> short 'p'
          <> help "Path to the userspace program"
          <> showDefault
          <> Options.Applicative.value "fake_solver"
-         <> metavar "PROGRAM" )
+         <> metavar "PROGRAM" ))
       <*> strOption
           ( long "out"
           <> short 'o'
@@ -410,14 +411,14 @@ updateSubflowMetrics sockMetrics subflow = do
   Maybe should expect a pathManager instance (and logger
 FilePath -- ^Path towards the program to get cwnd limits
 -}
-startMonitorConnection :: FilePath   -- ^ Where to write files
+startMonitorConnection :: CLIArguments
                           -- |elapsed time since starting the thread
                           -- (very coarse approximation)
                           -> Natural
                           -> MptcpSocket
                           -> NetlinkSocket
                           -> MVar MptcpConnection -> IO ()
-startMonitorConnection tmpdir elapsed mptcpSock sockMetrics mConn = do
+startMonitorConnection cliArgs elapsed mptcpSock sockMetrics mConn = do
     let (MptcpSocket sock familyId) = mptcpSock
     myId <- myThreadId
     putStr $ show myId ++ ": monitoring connection at *time* " ++ (show elapsed) ++ " ..."
@@ -428,6 +429,7 @@ startMonitorConnection tmpdir elapsed mptcpSock sockMetrics mConn = do
     putStrLn "Showing MPTCP connection"
     putStrLn $ show mptcpConn ++ "..."
     let token = connectionToken mptcpConn
+    let tmpdir = out cliArgs
 
     -- TODO this is the issue
     -- not sure it's the master with a set
@@ -438,72 +440,77 @@ startMonitorConnection tmpdir elapsed mptcpSock sockMetrics mConn = do
 
     putStrLn "Running mptcpnumerics"
 
-    let filename = tmpdir ++ "/" ++ "mptcp_" ++ (show $ connectionToken mptcpConn) ++ "_" ++ (show elapsed) ++ ".json"
+    duration <- case optimizer cliArgs of
+      Nothing -> return onSuccessSleepingDelayMs
+      Just program -> do
+          let filename = tmpdir ++ "/" ++ "mptcp_" ++ (show $ connectionToken mptcpConn) ++ "_" ++ (show elapsed) ++ ".json"
 
-    cwnds_m <- getCapsForConnection filename mptcpConn lastMetrics
-    -- rename to waitingTime ? delay
-    duration <- case cwnds_m of
-        Nothing -> do
-            putStrLn "Couldn't fetch the values"
-            return onFailureSleepingDelay
-        Just cwnds -> do
+          logStatistics filename mptcpConn lastMetrics
+          cwnds_m <- getCapsForConnection filename program mptcpConn lastMetrics
+          -- rename to waitingTime ? delay
+          case cwnds_m of
+              Nothing -> do
+                  putStrLn "Couldn't fetch the values"
+                  return onFailureSleepingDelay
+              Just cwnds -> do
 
-            putStrLn $ "Requesting to set cwnds..." ++ show cwnds
-            -- TODO fix
-            -- KISS for now (capCwndPkt mptcpSock )
-            let cwndPackets  = map (\(cwnd, sf) -> capCwndPkt mptcpSock mptcpConn cwnd sf) (zip cwnds (Set.toList $ subflows mptcpConn))
+                  putStrLn $ "Requesting to set cwnds..." ++ show cwnds
+                  -- TODO fix
+                  -- KISS for now (capCwndPkt mptcpSock )
+                  let cwndPackets  = map (\(cwnd, sf) -> capCwndPkt mptcpSock mptcpConn cwnd sf) (zip cwnds (Set.toList $ subflows mptcpConn))
 
-            mapM_ (sendPacket sock) cwndPackets
+                  mapM_ (sendPacket sock) cwndPackets
 
-            return onSuccessSleepingDelayMs
+                  return onSuccessSleepingDelayMs
     putStrLn $ "Finished monitoring token. Waiting " ++ show duration
     sleepMs duration
 
     -- call ourself again
-    startMonitorConnection tmpdir (elapsed + duration) mptcpSock sockMetrics mConn
+    startMonitorConnection cliArgs (elapsed + duration) mptcpSock sockMetrics mConn
 
 
 
+{- Logs to a json file the results of sockDiag
+  -}
+logStatistics :: FilePath
+              -> MptcpConnection
+              -- |Test
+              -> [SockDiagMetrics]
+              -> IO ()
+logStatistics filename mptcpConn metrics = do
+    let jsonConn = (toJSON mptcpConn)
+    let merged = lodashMerge jsonConn (object [ "subflows" .= metrics ])
+
+    let jsonBs = encodePretty merged
+    let subflowCount = length $ subflows mptcpConn
+    infoM "main" $ "Saving to " ++ filename
+
+    -- throws i ncase of error
+    Data.ByteString.Lazy.writeFile filename jsonBs
 
 {-
   | This should return a list of cwnd to respect a certain scenario
  1. save the connection to a JSON file and pass it to mptcpnumerics
 
 -}
-getCapsForConnection :: FilePath
+getCapsForConnection :: FilePath     -- ^Statistics file
+                        -> FilePath  -- ^Path towards the PM optimizer
                         -> MptcpConnection
                         -- |Test
                         -> [SockDiagMetrics]
                         -> IO (Maybe [Word32])
-getCapsForConnection filename mptcpConn metrics = do
-    -- returns a bytestring
-    -- let (MptcpConnectionWithMetrics  mptcpConn metrics) = conWithMetrics
-    let jsonConn = (toJSON mptcpConn)
-    let merged = lodashMerge jsonConn (object [ "subflows" .= metrics ])
+getCapsForConnection filename program mptcpConn metrics = do
+    -- let jsonConn = (toJSON mptcpConn)
+    -- let merged = lodashMerge jsonConn (object [ "subflows" .= metrics ])
 
-    let jsonBs = encodePretty merged
+    -- let jsonBs = encodePretty merged
     let subflowCount = length $ subflows mptcpConn
 
-    -- TODO either pass it via env or via args
-    -- let tmpdir = "/tmp"
-    -- let tmpdir = getEnvDefault "TMPDIR" "/tmp"
-
-    -- let filename = tmpdir ++ "/" ++ "mptcp_" ++ (show $ connectionToken mptcpConn) ++ "_" ++ (show $ subflowCount)  ++ ".json"
-    infoM "main" $ "Saving to " ++ filename
-
-    -- tempdir <- getCanonicalTemporaryDirectory
-    -- see https://github.com/feuerbach/temporary/blob/2ebee43b92b878f0093b3ce66d613d553f82152f/tests/test.hs#L63
-    -- for an example
-    -- takeDirectory fp `equalFilePath` sys_tmp_dir
-    -- fp <- withSystemTempDirectory tempdir "toto" $ \fp -> do
-    --     let fn = takeFileName fp
-        -- Data.ByteString.Lazy.writeFile fn
-
-    Data.ByteString.Lazy.writeFile filename jsonBs
+    -- Data.ByteString.Lazy.writeFile filename jsonBs
 
     -- TODO to keep it simple it should return a list of CWNDs to apply
     -- readProcessWithExitCode  binary / args / stdin
-    (exitCode, stdout, stderrContent) <- readProcessWithExitCode (get_caps_prog mptcpConn) [filename, show subflowCount] ""
+    (exitCode, stdout, stderrContent) <- readProcessWithExitCode program [filename, show subflowCount] ""
 
     putStrLn $ "exitCode: " ++ show exitCode
     putStrLn $ "stdout:\n" ++ stdout
@@ -693,7 +700,7 @@ registerMptcpConnection oldState token subflow = let
                 sockMetrics <- makeMetricsSocket
                 -- start monitoring connection
                 threadId <- forkOS (
-                    startMonitorConnection (out cliArgs) 0 mptcpSock sockMetrics newConn
+                    startMonitorConnection cliArgs 0 mptcpSock sockMetrics newConn
                     )
 
                 putStrLn $ "Inserting new MVar "
@@ -949,9 +956,9 @@ instance ToJSON SockDiagExtension where
 
     in
       object [
-      "rttvar" .= tcpi_rttvar tcpInfo
-      , "rtt" .= tcpi_rtt tcpInfo
-      , "rto" .= tcpi_rto tcpInfo
+      "rttvar_ms" .= tcpi_rttvar tcpInfo
+      , "rtt_ms" .= tcpi_rtt tcpInfo
+      , "rto_ms" .= tcpi_rto tcpInfo
       , "snd_cwnd" .= tcpi_snd_cwnd tcpInfo
       , "snd_ssthresh" .= tcpi_snd_ssthresh tcpInfo
       , "reordering"  .= tcpi_reordering tcpInfo
@@ -988,8 +995,9 @@ instance ToJSON SockDiagMetrics where
       sf = connectionFromDiag msg
       tcpState = toEnum $ fromIntegral ( idiag_state msg) :: TcpState
       initialValue = object [
-          "srcIp" .= toJSON (srcIp sf),
-          "dstIp" .= toJSON (dstIp sf)
+          "srcIp" .= toJSON (srcIp sf)
+          , "dstIp" .= toJSON (dstIp sf)
+          , "subflow_id" .= idiag_uid msg
           ]
       fn x y = lodashMerge (toJSON x) y
 
