@@ -62,7 +62,8 @@ import Net.Mptcp.PathManager
 import Net.Mptcp.PathManager.Default
 import Net.Tcp
 import Net.IP
-import Net.IPv4 hiding (print)
+-- print
+-- import Net.IPv4 hiding ()
 -- import Net.IPAddress
 
 import Net.SockDiag.Constants
@@ -96,14 +97,14 @@ import qualified System.Linux.Netlink.Route as NLR
 
 import System.Process
 import System.Exit
-import Data.Word (Word16, Word32)
+import Data.Word (Word32)
 -- import qualified Data.Bits as Bits -- (shiftL, )
 -- import Data.Bits ((.|.))
 import Data.Serialize.Get (runGet)
 import Data.Serialize.Put
 -- import Data.Either (fromRight)
 import Data.ByteString (ByteString)
-import Data.ByteString.Lazy (writeFile)
+import Data.ByteString.Lazy (writeFile, readFile)
 -- import Data.ByteString.Char8 (unpack, init)
 -- import System.Posix.
 
@@ -175,19 +176,11 @@ globalMptcpSock :: MVar MptcpSocket
 globalMptcpSock = unsafePerformIO newEmptyMVar
 -- du coup cette socket n'aurait meme plus besoin d'etre globale en fait ?
 
--- TODO remove
--- globalMetricsSock :: MVar NetlinkSocket
--- globalMetricsSock = unsafePerformIO newEmptyMVar
 
 -- {-# NOINLINE globalInterfaces #-}
 -- globalInterfaces :: MVar AvailablePaths
 -- globalInterfaces = unsafePerformIO newEmptyMVar
 
-iperfClientPort :: Word16
-iperfClientPort = 5500
-
-iperfServerPort :: Word16
-iperfServerPort = 5201
 
 -- |Delay between 2 successful
 onSuccessSleepingDelayMs :: Natural
@@ -198,18 +191,7 @@ onSuccessSleepingDelayMs = 300
 onFailureSleepingDelay :: Natural
 onFailureSleepingDelay = 100
 
--- should be able to ignore based on regex
--- TODO see interfacesToIgnore 
--- interfacesToIgnore :: [String]
--- interfacesToIgnore = [
---   "virbr0"
---   , "virbr1"
---   , "nlmon0"
---   , "ppp0"
---   , "lo"
---   ]
-
--- |the path manager used in the 
+-- |the default path manager
 pathManager :: PathManager
 pathManager = meshPathManager
 
@@ -220,32 +202,15 @@ data MyState = MyState {
   , connections :: Map.Map MptcpToken (ThreadId, MVar MptcpConnection)
   -- |Arguments passed to the program
   , cliArguments :: CLIArguments
+
+  -- |Connections to accept, loaded via cli's --filter
+  , filteredConnections :: Maybe [TcpConnection]
 }
 
 -- https://stackoverflow.com/questions/51407547/how-to-update-a-field-of-a-json-object
 addJsonKey :: Data.Text.Text -> Value -> Value -> Value
 addJsonKey key val (Object xs) = Object $ HM.insert key val xs
 addJsonKey _ _ xs = xs
-
-authorizedCon1 :: TcpConnection
-authorizedCon1 = TcpConnection {
-        srcIp = fromIPv4 $ Net.IPv4.ipv4 192 168 0 128
-        , dstIp = fromIPv4 $ Net.IPv4.ipv4 202 214 86 51
-        , srcPort = iperfClientPort
-        , dstPort = iperfServerPort
-        , priority = Nothing
-        , subflowInterface = Nothing
-        , localId = 0
-        , remoteId = 0
-    }
-
-authorizedCon2 :: TcpConnection
-authorizedCon2 = authorizedCon1 { srcIp = fromIPv4 $ Net.IPv4.ipv4 192 168 0 130 }
-
-filteredConnections :: [TcpConnection]
-filteredConnections = [
-    authorizedCon1
-    ]
 
 
 -- inspired by CtrlPacket
@@ -263,8 +228,6 @@ filteredConnections = [
 -- TODO are they generated
 dumpCommand :: MptcpGenlEvent -> String
 dumpCommand x = show x ++ " = " ++ show (fromEnum x)
--- dumpCommand MPTCP_CMD_UNSPEC  = " MPTCP_CMD_UNSPEC  0"
--- dumpCommand MPTCP_EVENT_SUB_ERROR = show MPTCP_EVENT_SUB_ERROR + show fromEnum MPTCP_EVENT_SUB_ERROR
 
 dumpMptcpCommands :: MptcpGenlEvent -> String
 dumpMptcpCommands MPTCP_CMD_EXIST = dumpCommand MPTCP_CMD_EXIST
@@ -275,14 +238,17 @@ dumpMptcpCommands x = dumpCommand x ++ "\n" ++ dumpMptcpCommands (succ x)
 data CLIArguments = CLIArguments {
   -- | useless
   -- TODO we should be able to filter
-  command    :: String
-  , serverIP     :: IPv4
+  -- command    :: String
+  -- , serverIP     :: IPv4
 
   -- | Path to a program in charge of generating congestion window limits on a 
   -- per path basis
   -- The program will be called with a json file as input and must echo on stdout
   -- an array of the form [ 10, 30, 40]
-  , optimizer    :: Maybe FilePath
+  optimizer    :: Maybe FilePath
+
+  -- | to filter
+  , filter    :: Maybe FilePath
 
   -- | Folder where to log files
   , out    :: FilePath
@@ -319,22 +285,28 @@ dumpSystemInterfaces = do
 -- ByteString
 sample :: Parser CLIArguments
 sample = CLIArguments
-      <$> argument str
-          ( metavar "CMD"
-         <> help "What to do" )
-      -- TODO should accept hostname etc
-      <*> argument (eitherReader $ \x -> case (Net.IPv4.decodeString x) of
-                                            Nothing -> Left "could not parse"
-                                            Just ip -> Right ip)
-        ( metavar "ServerIP"
-         <> help "ServerIP to let through (e.g.: 202.214.86.51 )" )
-      <*> (optional $ strOption
+      -- <$> argument str
+      --     ( metavar "CMD"
+      --    <> help "What to do" )
+      -- -- TODO should accept hostname etc
+      -- <*> argument (eitherReader $ \x -> case (Net.IPv4.decodeString x) of
+      --                                       Nothing -> Left "could not parse"
+      --                                       Just ip -> Right ip)
+      --   ( metavar "ServerIP"
+      --    <> help "ServerIP to let through (e.g.: 202.214.86.51 )" )
+      <$> (optional $ strOption
           ( long "optimizer"
           <> short 'p'
          <> help "Path to the userspace program"
          <> showDefault
          <> Options.Applicative.value "fake_solver"
          <> metavar "PROGRAM" ))
+      <*> (optional $ strOption
+          ( long "filter"
+         <> help "Path to a json file describing a TCP connection"
+         -- <> showDefault
+         -- <> Options.Applicative.value "fake_solver"
+         <> metavar "Filter" ))
       <*> strOption
           ( long "out"
           <> short 'o'
@@ -650,8 +622,11 @@ dispatchPacketForKnownConnection mptcpSock con event attributes availablePaths =
 
 -- |Filter connections
 -- This should be configurable in some way
-acceptConnection :: TcpConnection -> Bool
-acceptConnection subflow = subflow `notElem` filteredConnections
+acceptConnection :: TcpConnection -> Maybe [TcpConnection] -> Bool
+acceptConnection subflow mFilteredConnections =
+  case mFilteredConnections of
+      Nothing -> True
+      Just filtered -> subflow `notElem` filtered
 -- acceptConnection subflow = True
 
 -- |
@@ -665,24 +640,12 @@ mapSubflowToInterfaceIdx ip = do
 
 
 
--- TODO reestablish later on
--- open additionnal subflows
--- createNewSubflows :: MptcpSocket -> MptcpConnection -> IO ()
--- createNewSubflows mptcpSock mptcpConn = do
---     availablePaths <- readMVar globalInterfaces
---     let (MptcpSocket mptcpSockRaw fid) = mptcpSock
---     let pkts = (onMasterEstablishement pathManager) mptcpSock mptcpConn availablePaths
-
---     putStrLn "List of requests made on new master:"
---     mapM_ (sendPacket $ mptcpSockRaw) pkts
-
-
 -- Maybe
 registerMptcpConnection :: MyState -> MptcpToken -> TcpConnection -> IO MyState
 registerMptcpConnection oldState token subflow = let
-        (MyState mptcpSock conns cliArgs) = oldState
+        (MyState mptcpSock conns cliArgs filtered) = oldState
     in
-    if acceptConnection subflow == False
+    if acceptConnection subflow filtered == False
         then do
             putStrLn $ "filtered out connection" ++ show subflow
             return oldState
@@ -716,7 +679,7 @@ registerMptcpConnection oldState token subflow = let
 dispatchPacket :: MyState -> MptcpPacket -> IO MyState
 dispatchPacket oldState (Packet hdr (GenlData genlHeader NoData) attributes) = let
         cmd = toEnum $ fromIntegral $ genlCmd genlHeader
-        (MyState mptcpSock conns _) = oldState
+        (MyState mptcpSock conns _ _) = oldState
         (MptcpSocket mptcpSockRaw fid) = mptcpSock
 
         -- i suppose token is always available right ?
@@ -1078,7 +1041,20 @@ main = do
   mapM_ Prelude.print mcastMptcpGroups
 
   let mptcpSocket = (MptcpSocket sock fid)
-  let globalState = MyState mptcpSocket Map.empty options
+
+  filteredConns <- case Main.filter options of
+      Nothing -> return Nothing
+      Just filename -> do
+          infoM "main" ("Loading connections whitelist from " ++ filename ++ "...")
+          filteredConnectionsStr <- Data.ByteString.Lazy.readFile filename
+          case Data.Aeson.eitherDecode filteredConnectionsStr of
+          -- case Data.Aeson.eitherDecode "[]" of
+            Left errMsg -> error ("Failed loading " ++ filename ++ ":\n" ++ errMsg)
+            Right list -> return list
+
+  infoM "main" ("Loading connections whitelisted connections..." ++ (show filteredConns))
+
+  let globalState = MyState mptcpSocket Map.empty options filteredConns
 
   mapM_ (listenToEvents globalState) mcastMptcpGroups
   -- putStrLn $ " Groups: " ++ unwords ( map grpName mcastMptcpGroups )

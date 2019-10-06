@@ -3,7 +3,7 @@ function buildNrun() {
 	cabal build -v mptcp-pm
 	if [ $? -eq 0 ]; then
     # with our changes sudo should not be necessaery anymore
-    cabal run mptcp-pm daemon $@
+    cabal run mptcp-pm -- $@
 		# ./daemon daemon $@
 	fi
 }

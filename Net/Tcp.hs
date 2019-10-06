@@ -19,8 +19,7 @@ import Data.Aeson
 import Data.Word (Word8, Word16, Word32)
 import GHC.Generics
 
-{-
-  Hold informations
+{- Describe a TCP connection, possibly an Mptcp subflow
   The equality implementation ignores several fields
 -}
 data TcpConnection = TcpConnection {
