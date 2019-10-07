@@ -1,7 +1,7 @@
+This is a userspace path manager for the linux multipath TCP kernel, starting
+from version v0.95.
 
-This is a rewrite in haskell of the python netlink module.
-nix-shell -p 'haskellPackages.ghcWithHoogle(p: with p; [netlink optparse-applicative ])'
-
+The software
 
 The netlink module asks for GENL_ADMIN_PERM => The operation requires the CAP_NET_ADMIN privilege
 
@@ -76,6 +76,10 @@ reload_mod() {
 
 }
 ```
+
+
+# FAQ
+error decoding InetDiagInfo
 
 
 # Testsuite

@@ -153,9 +153,14 @@ import System.Log.Logger (
     , Priority(DEBUG)
     , Priority(INFO)
     , setLevel, updateGlobalLogger
+    , setHandlers
+    , rootLoggerName
+    -- , saveGlobalLogger
+    -- , addHandler
     )
 import System.Log.Handler.Simple (
-    streamHandler
+    -- , streamHandler
+    verboseStreamHandler
     -- , GenericHandler
     )
 -- for writeUTF8File
@@ -255,7 +260,9 @@ data CLIArguments = CLIArguments {
 
   -- , clientIP      :: IPv4
   , quiet      :: Bool
-  , enthusiasm :: Int
+
+  -- Priority
+  , logLevel :: Priority
   }
 
 
@@ -269,7 +276,7 @@ dumpSystemInterfaces :: IO()
 dumpSystemInterfaces = do
   putStrLn "Dumping interfaces"
   -- isEmptyMVar globalInterfaces
-  res <- tryReadMVar globalInterfaces 
+  res <- tryReadMVar globalInterfaces
   case res of
     Nothing -> putStrLn "No interfaces"
     Just interfaces -> Prelude.print interfaces
@@ -319,11 +326,11 @@ sample = CLIArguments
          <> short 'v'
          <> help "Whether to be quiet" )
       <*> option auto
-          ( long "enthusiasm"
-         <> help "How enthusiastically to greet"
+          ( long "log-level"
+         <> help "Log level"
          <> showDefault
-         <> Options.Applicative.value 1
-         <> metavar "INT" )
+         <> Options.Applicative.value INFO
+         <> metavar "LOG_LEVEL" )
 
 
 opts :: ParserInfo CLIArguments
@@ -410,14 +417,14 @@ startMonitorConnection cliArgs elapsed mptcpSock sockMetrics mConn = do
     -- Get updated metrics
     lastMetrics <- mapM (updateSubflowMetrics sockMetrics) (Set.toList $ subflows mptcpConn)
 
-    putStrLn "Running mptcpnumerics"
-
     duration <- case optimizer cliArgs of
       Nothing -> return onSuccessSleepingDelayMs
       Just program -> do
           let filename = tmpdir ++ "/" ++ "mptcp_" ++ (show $ connectionToken mptcpConn) ++ "_" ++ (show elapsed) ++ ".json"
 
-          logStatistics filename mptcpConn lastMetrics
+          infoM "main" "Running mptcpnumerics"
+
+          logStatistics filename elapsed mptcpConn lastMetrics
           cwnds_m <- getCapsForConnection filename program mptcpConn lastMetrics
           -- rename to waitingTime ? delay
           case cwnds_m of
@@ -426,7 +433,7 @@ startMonitorConnection cliArgs elapsed mptcpSock sockMetrics mConn = do
                   return onFailureSleepingDelay
               Just cwnds -> do
 
-                  putStrLn $ "Requesting to set cwnds..." ++ show cwnds
+                  debugM "main" $ "Requesting to set cwnds..." ++ show cwnds
                   -- TODO fix
                   -- KISS for now (capCwndPkt mptcpSock )
                   let cwndPackets  = map (\(cwnd, sf) -> capCwndPkt mptcpSock mptcpConn cwnd sf) (zip cwnds (Set.toList $ subflows mptcpConn))
@@ -434,30 +441,33 @@ startMonitorConnection cliArgs elapsed mptcpSock sockMetrics mConn = do
                   mapM_ (sendPacket sock) cwndPackets
 
                   return onSuccessSleepingDelayMs
-    putStrLn $ "Finished monitoring token. Waiting " ++ show duration
+    debugM "main" $ "Finished monitoring token. Waiting " ++ show duration
     sleepMs duration
 
     -- call ourself again
     startMonitorConnection cliArgs (elapsed + duration) mptcpSock sockMetrics mConn
 
 
-
 {- Logs to a json file the results of sockDiag
   -}
 logStatistics :: FilePath
+              -- |Current delay
+              -> Natural
               -> MptcpConnection
-              -- |Test
               -> [SockDiagMetrics]
               -> IO ()
-logStatistics filename mptcpConn metrics = do
+logStatistics filename delay mptcpConn metrics = do
     let jsonConn = (toJSON mptcpConn)
-    let merged = lodashMerge jsonConn (object [ "subflows" .= metrics ])
+    let merged = lodashMerge jsonConn (object [
+          "delay" .= delay,
+          "subflows" .= metrics
+          ])
 
     let jsonBs = encodePretty merged
     let subflowCount = length $ subflows mptcpConn
     infoM "main" $ "Saving to " ++ filename
 
-    -- throws i ncase of error
+    -- throws in case of error
     Data.ByteString.Lazy.writeFile filename jsonBs
 
 {-
@@ -472,19 +482,15 @@ getCapsForConnection :: FilePath     -- ^Statistics file
                         -> [SockDiagMetrics]
                         -> IO (Maybe [Word32])
 getCapsForConnection filename program mptcpConn metrics = do
-    -- let jsonConn = (toJSON mptcpConn)
-    -- let merged = lodashMerge jsonConn (object [ "subflows" .= metrics ])
 
-    -- let jsonBs = encodePretty merged
     let subflowCount = length $ subflows mptcpConn
 
     -- Data.ByteString.Lazy.writeFile filename jsonBs
 
-    -- TODO to keep it simple it should return a list of CWNDs to apply
     -- readProcessWithExitCode  binary / args / stdin
     (exitCode, stdout, stderrContent) <- readProcessWithExitCode program [filename, show subflowCount] ""
 
-    putStrLn $ "exitCode: " ++ show exitCode
+    infoM "main" $ "exitCode: " ++ show exitCode
     putStrLn $ "stdout:\n" ++ stdout
     -- http://hackage.haskell.org/package/base/docs/Text-Read.html
     let values = (case exitCode of
@@ -494,7 +500,6 @@ getCapsForConnection filename program mptcpConn metrics = do
                       )
     return values
 
--- type Attributes = Map Int ByteString
 -- the library contains showAttrs / showNLAttrs
 showAttributes :: Attributes -> String
 showAttributes attrs =
@@ -506,8 +511,6 @@ showAttributes attrs =
 putW32 :: Word32 -> ByteString
 putW32 x = runPut (putWord32host x)
 
--- removeSubflow :: MptcpSocket -> MptcpToken -> LocId -> IO [GenlPacket NoData]
--- removeSubflow (MptcpSocket socket fid) token locId = let
 
 -- I want to override the GenlHeader version
 newtype GenlHeaderMptcp = GenlHeaderMptcp GenlHeader
@@ -519,7 +522,7 @@ instance Show GenlHeaderMptcp where
 inspectAnswers :: [GenlPacket NoData] -> IO ()
 inspectAnswers packets = do
   mapM_ inspectAnswer packets
-  putStrLn "Finished inspecting answers"
+  debugM "main" "Finished inspecting answers"
 
 -- showPacketCustom :: GenlPacket NoData -> String
 -- showPacketCustom pkt = let
@@ -533,7 +536,7 @@ inspectAnswer :: GenlPacket NoData -> IO ()
 inspectAnswer (Packet _ (GenlData hdr NoData) attributes) = let
     cmd = genlCmd hdr
   in
-    putStrLn $ "Inspecting answer custom:\n" ++ showHeaderCustom hdr
+    debugM "main" $ "Inspecting answer custom:\n" ++ showHeaderCustom hdr
             ++ "Supposing it's a mptcp command: " ++ dumpCommand ( toEnum $ fromIntegral cmd)
 
 inspectAnswer pkt = putStrLn $ "Inspecting answer:\n" ++ showPacket pkt
@@ -550,17 +553,7 @@ queryAddrs = NL.Packet
 
 -- |Deal with events for already registered connections
 -- Warn: MPTCP_EVENT_ESTABLISHED registers a "null" interface
--- TODO return a Maybe ?
 -- or a list of packets to send
--- TODO return the MVar ?
---
--- availablePaths <- readMVar globalInterfaces
--- TODO put globalInterfaces in MyState ?
-    -- let (MptcpSocket mptcpSockRaw fid) = mptcpSock
-    -- let pkts = (onMasterEstablishement pathManager) mptcpSock mptcpConn availablePaths
-
-    -- putStrLn "List of requests made on new master:"
-    -- mapM_ (sendPacket $ mptcpSockRaw) pkts
 
 
 -- TODO maybe the path manager should be part of the MptcpConnection
@@ -569,8 +562,6 @@ dispatchPacketForKnownConnection :: MptcpSocket
                                     -> MptcpGenlEvent
                                     -> Attributes
                                     -> AvailablePaths
-                                    -- -> Map.Map MptcpAttr MptcpAttribute
-                                    -- -> MptcpConnection
                                     -> (Maybe MptcpConnection, [MptcpPacket])
 dispatchPacketForKnownConnection mptcpSock con event attributes availablePaths = let
         token = connectionToken con
@@ -590,7 +581,6 @@ dispatchPacketForKnownConnection mptcpSock con event attributes availablePaths =
       MPTCP_EVENT_ANNOUNCED -> let
           -- what if it's local
             remId = remoteIdFromAttributes attributes
-            -- TODO 
             -- newConn = mptcpConnAddRemoteId con remId
             newConn = con
           in
@@ -626,7 +616,8 @@ acceptConnection :: TcpConnection -> Maybe [TcpConnection] -> Bool
 acceptConnection subflow mFilteredConnections =
   case mFilteredConnections of
       Nothing -> True
-      Just filtered -> subflow `notElem` filtered
+      -- or notElem
+      Just filtered -> subflow `elem` filtered
 -- acceptConnection subflow = True
 
 -- |
@@ -647,9 +638,10 @@ registerMptcpConnection oldState token subflow = let
     in
     if acceptConnection subflow filtered == False
         then do
-            putStrLn $ "filtered out connection" ++ show subflow
+            infoM "main" $ "filtered out connection:" ++ show subflow
             return oldState
         else (do
+                putStrLn $ "accepted connection :" ++ show subflow
                 -- should we add the subflow yet ? it doesn't have the correct interface idx
                 mappedInterface <- mapSubflowToInterfaceIdx (srcIp subflow)
                 let fixedSubflow = subflow { subflowInterface = mappedInterface }
@@ -931,6 +923,9 @@ instance ToJSON SockDiagExtension where
       , "pacing" .= tcpi_pacing_rate tcpInfo
       , "delivery_rate" .= tcpi_delivery_rate tcpInfo
       , "min_rtt" .= tcpi_min_rtt tcpInfo
+      , "mtu" .= tcpi_pmtu tcpInfo
+      -- TODO try converting it to str
+      , "ca_state" .= tcpi_ca_state tcpInfo
 
       -- bytes_sent
       -- needs kernel patching
@@ -1005,11 +1000,15 @@ main :: IO ()
 main = do
 
   -- SETUP LOGGING (https://gist.github.com/ijt/1052896)
-  myStreamHandler <- streamHandler stderr INFO
+  -- streamHandler vs verboseStreamHandler
+  myStreamHandler <- verboseStreamHandler stderr INFO
+  -- saveGlobalLogger myStreamHandler
   -- let myStreamHandler' = withFormatter myStreamHandler
   -- let rootLog = rootLoggerName
   -- updateGlobalLogger rootLog (setLevel INFO)
-  updateGlobalLogger "main" (setLevel DEBUG)
+  updateGlobalLogger rootLoggerName (setLevel DEBUG . setHandlers [myStreamHandler])
+  -- updateGlobalLogger "main" ()
+  -- saveGlobalLogger myStreamHandler
 
   infoM "main" "Parsing command line..."
   options <- execParser opts

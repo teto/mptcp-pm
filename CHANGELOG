@@ -1,5 +1,6 @@
 0.0.3-dev:
 - add --filter flag to filter connections from a json file
+- add a --log-level flag
 
 0.0.2:
 - saves to .json (--out argument)
