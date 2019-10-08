@@ -150,6 +150,7 @@ import System.Log.Logger (
     -- rootLoggerName
     infoM
     , debugM
+    , errorM
     , Priority(DEBUG)
     , Priority(INFO)
     , setLevel, updateGlobalLogger
@@ -169,11 +170,6 @@ import System.Log.Handler.Simple (
 -- import System.Log.Handler (setFormatter)
 
 -- STM = State Thread Monad ST monad
--- import Data.IORef
--- MVar can be empty contrary to IORef !
--- globalMptcpSock :: IORef MptcpSocket
--- from unordered containers
--- import qualified Data.HashMap.Lazy as HML
 import qualified Data.HashMap.Strict as HM
 
 {-# NOINLINE globalMptcpSock #-}
@@ -182,12 +178,8 @@ globalMptcpSock = unsafePerformIO newEmptyMVar
 -- du coup cette socket n'aurait meme plus besoin d'etre globale en fait ?
 
 
--- {-# NOINLINE globalInterfaces #-}
--- globalInterfaces :: MVar AvailablePaths
--- globalInterfaces = unsafePerformIO newEmptyMVar
 
-
--- |Delay between 2 successful
+-- |Delay between 2 successful loggings
 onSuccessSleepingDelayMs :: Natural
 onSuccessSleepingDelayMs = 300
 
@@ -225,7 +217,6 @@ addJsonKey _ _ xs = xs
 --       mptcpHeader     :: Header
 --     , mptcpGeHeader   :: GenlHeader
 --     , mptcpData   :: MptcpData
-
 -- data MptcpData = MptcpData {
 --     mptcpAttributes :: [MptcpAttr]
 --   } deriving (Eq)
@@ -263,6 +254,9 @@ data CLIArguments = CLIArguments {
 
   -- Priority
   , logLevel :: Priority
+
+  -- |
+  -- , updateFrequency :: Priority
   }
 
 
@@ -305,8 +299,6 @@ sample = CLIArguments
           ( long "optimizer"
           <> short 'p'
          <> help "Path to the userspace program"
-         <> showDefault
-         <> Options.Applicative.value "fake_solver"
          <> metavar "PROGRAM" ))
       <*> (optional $ strOption
           ( long "filter"
@@ -416,20 +408,20 @@ startMonitorConnection cliArgs elapsed mptcpSock sockMetrics mConn = do
 
     -- Get updated metrics
     lastMetrics <- mapM (updateSubflowMetrics sockMetrics) (Set.toList $ subflows mptcpConn)
+    let filename = tmpdir ++ "/" ++ "mptcp_" ++ (show $ connectionToken mptcpConn) ++ "_" ++ (show elapsed) ++ ".json"
+    logStatistics filename elapsed mptcpConn lastMetrics
 
     duration <- case optimizer cliArgs of
       Nothing -> return onSuccessSleepingDelayMs
       Just program -> do
-          let filename = tmpdir ++ "/" ++ "mptcp_" ++ (show $ connectionToken mptcpConn) ++ "_" ++ (show elapsed) ++ ".json"
 
-          infoM "main" "Running mptcpnumerics"
+          debugM "main" "Calling third party program"
 
-          logStatistics filename elapsed mptcpConn lastMetrics
           cwnds_m <- getCapsForConnection filename program mptcpConn lastMetrics
           -- rename to waitingTime ? delay
           case cwnds_m of
               Nothing -> do
-                  putStrLn "Couldn't fetch the values"
+                  errorM "main" "Couldn't fetch the values"
                   return onFailureSleepingDelay
               Just cwnds -> do
 
