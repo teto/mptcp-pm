@@ -903,8 +903,8 @@ instance ToJSON SockDiagExtension where
     in
       object [
       "rttvar" .= tcpi_rttvar tcpInfo
-      , "rtt_ms" .= tcpi_rtt tcpInfo
-      , "rto_ms" .= tcpi_rto tcpInfo
+      , "rtt_us" .= tcpi_rtt tcpInfo
+      , "rto_us" .= tcpi_rto tcpInfo
       , "snd_cwnd" .= tcpi_snd_cwnd tcpInfo
       , "snd_ssthresh" .= tcpi_snd_ssthresh tcpInfo
       , "reordering"  .= tcpi_reordering tcpInfo
