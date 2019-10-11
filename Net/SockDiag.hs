@@ -359,10 +359,10 @@ data SockDiagExtension =
   , tcpi_bowd :: Word32
 
 } | DiagExtensionMemInfo {
-  idiag_rmem :: Word32
-, idiag_wmem :: Word32
-, idiag_fmem :: Word32
-, idiag_tmem :: Word32
+  idiag_rmem :: Word32  -- ^ Amount of data in the receive queue.
+, idiag_wmem :: Word32  -- ^ amount of data that is queued by TCP but not yet sent.
+, idiag_fmem :: Word32  -- ^ amount of memory scheduled for future use
+, idiag_tmem :: Word32  -- ^ amount of data in send queue.
 } |
   -- | Not exclusive to Vegas unlike the name indicates, mirrors tcpvegas_info
   TcpVegasInfo {

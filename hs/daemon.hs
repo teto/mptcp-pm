@@ -895,9 +895,6 @@ data SockDiagMetrics = SockDiagMetrics {
 
 -- type SockDiagExtension2 = SockDiagExtension 
 instance ToJSON SockDiagExtension where
-  -- tcpi_rtt / tcpi_rttvar / tcpi_snd_ssthresh / tcpi_snd_cwnd 
-  -- tcpi_state , tcpi_rto
-  -- rename arg to tcp_info
   toJSON (tcpInfo@DiagTcpInfo {} )  = let
       -- rtt = tcpi_rtt tcpInfo
       tcpState = toEnum $ fromIntegral ( tcpi_state tcpInfo) :: TcpState
@@ -905,15 +902,20 @@ instance ToJSON SockDiagExtension where
 
     in
       object [
-      "rttvar_ms" .= tcpi_rttvar tcpInfo
+      "rttvar" .= tcpi_rttvar tcpInfo
       , "rtt_ms" .= tcpi_rtt tcpInfo
       , "rto_ms" .= tcpi_rto tcpInfo
       , "snd_cwnd" .= tcpi_snd_cwnd tcpInfo
       , "snd_ssthresh" .= tcpi_snd_ssthresh tcpInfo
       , "reordering"  .= tcpi_reordering tcpInfo
-      , "state" .= show tcpState
+      , "tcp_state" .= show tcpState
       , "pacing" .= tcpi_pacing_rate tcpInfo
       , "delivery_rate" .= tcpi_delivery_rate tcpInfo
+      , "app_limited" .= tcpi_delivery_rate_app_limited tcpInfo
+      -- there is also a delivered_ce ?
+      , "delivered" .= tcpi_delivered tcpInfo
+      , "lost" .= tcpi_lost tcpInfo
+      , "retrans" .= tcpi_retrans tcpInfo
       , "min_rtt" .= tcpi_min_rtt tcpInfo
       , "mtu" .= tcpi_pmtu tcpInfo
       -- TODO try converting it to str
