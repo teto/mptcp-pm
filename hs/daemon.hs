@@ -906,6 +906,7 @@ instance ToJSON SockDiagExtension where
       , "rtt_us" .= tcpi_rtt tcpInfo
       , "rto_us" .= tcpi_rto tcpInfo
       , "snd_cwnd" .= tcpi_snd_cwnd tcpInfo
+      , "snd_cwnd_clamp" .= tcpi_snd_cwnd_clamp tcpInfo
       , "snd_ssthresh" .= tcpi_snd_ssthresh tcpInfo
       , "reordering"  .= tcpi_reordering tcpInfo
       , "tcp_state" .= show tcpState

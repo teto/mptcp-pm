@@ -355,6 +355,7 @@ data SockDiagExtension =
   , tcpi_reord_seen :: Word32
 
   -- Extended version, hoping it doesn't break too much stuff
+  , tcpi_snd_cwnd_clamp :: Word32
   , tcpi_fowd :: Word32
   , tcpi_bowd :: Word32
 
@@ -439,7 +440,7 @@ getDiagTcpInfo = DiagTcpInfo <$> getWord8 <*> getWord8 <*> getWord8 <*> getWord8
 
   -- My custom addition to read the owds, it's an extra that should be removed 
   -- for a vanilla kernel
-  <*> getWord32host <*> getWord32host
+  <*> getWord32host <*> getWord32host <*> getWord32host
 
 -- Sends a SockDiagRequest
 -- expects INetDiag
