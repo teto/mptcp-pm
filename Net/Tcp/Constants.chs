@@ -22,10 +22,8 @@ import Data.Bits ()
 -- For anonymous C enums, we can use , Bits
 {#enum TCP_ESTABLISHED as TcpState {underscoreToCase} deriving (Eq, Show)#}
 
--- tcp_ca_state
-
--- to get tcp_info
+-- tcp_ca_state is a bitfield see
+-- http://www.yonch.com/tech/linux-tcp-congestion-control-internals
 #include <linux/tcp.h>
 
 {#enum TCP_CA_Open as TcpCAState {underscoreToCase} deriving (Eq, Show)#}
--- tcp_info
