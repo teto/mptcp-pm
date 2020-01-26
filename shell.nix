@@ -1,15 +1,19 @@
 # from https://github.com/NixOS/nixpkgs/blob/master/doc/languages-frameworks/haskell.section.md
 {
 
-  nixpkgs ? import ./pinned_nixpkgs.nix
+  nixpkgs
+  ? import ./pinned_nixpkgs.nix
   # nixpkgs ? import <nixpkgs> {}
   , compilerName ? "ghc865"
 }:
 
-  let
-    compiler = pkgs.haskell.packages."${compilerName}";
-    pkgs = nixpkgs.pkgs;
-  in
+let
+  compiler = pkgs.haskell.packages."${compilerName}";
+  pkgs = nixpkgs.pkgs;
+  # https://github.com/hercules-ci/ghcide-nix
+  #  (import (builtins.fetchTarball "https://github.com/hercules-ci/ghcide-nix/tarball/master") {}).ghcide-ghc865
+  ghcide-nix = import (builtins.fetchTarball "https://github.com/hercules-ci/ghcide-nix/tarball/master") {};
+in
 
   compiler.shellFor {
   # the dependencies of packages listed in `packages`, not the
@@ -23,7 +27,12 @@
   ;
   withHoogle = true;
   nativeBuildInputs = with pkgs; [
-    haskellPackages.all-hies.versions."${compilerName}"
+
+    # HASKELL IDE ENGINE
+    # haskellPackages.all-hies.versions."${compilerName}"
+
+    # or ghcide
+    ghcide-nix."ghcide-${compilerName}"
 
     haskellPackages.cabal-install
     haskellPackages.hasktags

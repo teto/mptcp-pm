@@ -1053,4 +1053,3 @@ main = do
   mapM_ (listenToEvents globalState) mcastMptcpGroups
   -- putStrLn $ " Groups: " ++ unwords ( map grpName mcastMptcpGroups )
   putStrLn "finished"
-

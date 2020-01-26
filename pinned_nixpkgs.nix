@@ -46,10 +46,12 @@ let
   };
 
   # pinned nixpkgs before cabal 3 becomes the default else hie fails
-  nixpkgs = import (builtins.fetchTarball {
-      name = "unstable-before-cabal-3";
-      url = "https://github.com/nixos/nixpkgs/archive/b8f9e09ad17eac2fb4c13105638a86d98281f546.tar.gz";
-      sha256 = "16pd2fr0l446yjfyqkp492fpkd810lv0lddfziwpw2av31ha7srf";
-  }) {  overlays = [ overlay]; config = {allowBroken = true;}; };
+  nixpkgs = import <nixpkgs> 
+  # nixpkgs = import (builtins.fetchTarball {
+  #     name = "unstable-before-cabal-3";
+  #     url = "https://github.com/nixos/nixpkgs/archive/e1eedf29e5d22e6824e614d75449b75a2e3455d6.tar.gz";
+  #     sha256 = "1v237cgfkd8sb5f1r08sms1rxygjav8a1i1jjjxyqgiszzpiwdx7";
+  # }) 
+  {  overlays = [ overlay]; config = {allowBroken = true;}; };
 in
   nixpkgs

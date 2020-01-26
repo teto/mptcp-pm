@@ -57,8 +57,9 @@ common shared-properties
 
     if flag(Dev)
         build-depends: netlink>= 1.1.1.1
-    -- for the generated.hsc , c2hs seems good to generate headers
-    Build-tools:       hsc2hs, c2hs
+    -- for the .chs => c2hs
+    -- Build-tools:       hsc2hs, c2hs
+    Build-tool-depends:   c2hs:c2hs
     -- apparently this just helps getting a better error messages
     Includes:          tcp_states.h, linux/sock_diag.h, linux/inet_diag.h, linux/mptcp.h
     Other-modules:     Net.SockDiag, Net.Tcp, Net.Mptcp, Net.IPAddress,
