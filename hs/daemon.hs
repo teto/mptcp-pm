@@ -44,7 +44,6 @@ Aeson tutorials:
 Useful functions in Map
 - member / elemes / keys / assocs / keysSet / toList
 -}
-{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
@@ -53,7 +52,11 @@ module Main where
 import Prelude hiding (concat, init)
 import Options.Applicative hiding (value, ErrorMsg, empty)
 import qualified Options.Applicative (value)
-
+-- has lift too
+-- import Control.Monad.Trans.Class (lift)
+import Control.Monad.Trans (liftIO)
+import Control.Monad.Trans.State (State, StateT, put, get,
+        execStateT)
 -- For TcpState, FFI generated
 import Net.SockDiag
 import Net.Mptcp
@@ -72,13 +75,13 @@ import Net.Mptcp.Constants
 
 
 -- for readList
-import Text.Read
+import Text.Read (readMaybe)
 -- pack
 import Data.Text ()
 
 -- for replicateM
 import Control.Monad (foldM)
--- fromMaybe, 
+-- fromMaybe,
 import Data.Maybe (catMaybes)
 -- import Data.Foldable (concat)
 import Foreign.C.Types (CInt)
@@ -203,6 +206,9 @@ data MyState = MyState {
   -- |Connections to accept, loaded via cli's --filter
   , filteredConnections :: Maybe [TcpConnection]
 }
+
+ -- https://stackoverflow.com/questions/3640120/combine-state-with-io-actions
+type GState a = State MyState a
 
 -- https://stackoverflow.com/questions/51407547/how-to-update-a-field-of-a-json-object
 addJsonKey :: Data.Text.Text -> Value -> Value -> Value
@@ -624,39 +630,46 @@ mapSubflowToInterfaceIdx ip = do
 
 
 -- Maybe
-registerMptcpConnection :: MyState -> MptcpToken -> TcpConnection -> IO MyState
-registerMptcpConnection oldState token subflow = let
-        (MyState mptcpSock conns cliArgs filtered) = oldState
-    in
+-- mapSubflowToInterfaceIdx
+--IO ())
+registerMptcpConnection :: MptcpToken -> TcpConnection -> StateT MyState IO ()
+registerMptcpConnection token subflow = (do
+    oldState <- get
+    let (MyState mptcpSock conns cliArgs filtered) = oldState
     if acceptConnection subflow filtered == False
-        then do
-            infoM "main" $ "filtered out connection:" ++ show subflow
-            return oldState
-        else (do
-                putStrLn $ "accepted connection :" ++ show subflow
-                -- should we add the subflow yet ? it doesn't have the correct interface idx
-                mappedInterface <- mapSubflowToInterfaceIdx (srcIp subflow)
-                let fixedSubflow = subflow { subflowInterface = mappedInterface }
-                -- let newMptcpConn = (MptcpConnection token [] Set.empty Set.empty)
-                let newMptcpConn = mptcpConnAddSubflow (
-                      MptcpConnection token Set.empty Set.empty Set.empty (optimizer cliArgs)
-                      ) fixedSubflow
+    then do
+        -- infoM "main" $ "filtered out connection:" ++ show subflow
+        -- return ()
+        -- liftIO (oldState)
+        return ()
+-- runState $ testState ()
+    else (do
+            -- putStrLn $ "accepted connection :" ++ show subflow
+            -- should we add the subflow yet ? it doesn't have the correct interface idx
+            mappedInterface <- liftIO $ mapSubflowToInterfaceIdx (srcIp subflow)
+            let fixedSubflow = subflow { subflowInterface = mappedInterface }
+            -- let newMptcpConn = (MptcpConnection token [] Set.empty Set.empty)
+            let newMptcpConn = mptcpConnAddSubflow (
+                    MptcpConnection token Set.empty Set.empty Set.empty (optimizer cliArgs)
+                    ) fixedSubflow
 
-                newConn <- newMVar newMptcpConn
-                putStrLn $ "Connection established !!\n"
+            newConn <- liftIO $ newMVar newMptcpConn
+            -- putStrLn $ "Connection established !!\n"
 
-                -- create a new
-                sockMetrics <- makeMetricsSocket
-                -- start monitoring connection
-                threadId <- forkOS (
-                    startMonitorConnection cliArgs 0 mptcpSock sockMetrics newConn
-                    )
+        -- create a new
+            sockMetrics <- liftIO $ makeMetricsSocket
+        -- start monitoring connection
+            threadId <- liftIO $ forkOS (startMonitorConnection cliArgs 0 mptcpSock sockMetrics newConn)
 
-                putStrLn $ "Inserting new MVar "
-                let newState = oldState {
-                    connections = Map.insert token (threadId, newConn) (connections oldState)
-                }
-                return newState)
+            -- putStrLn $ "Inserting new MVar "
+            -- let newState = oldState {
+            --     connections = Map.insert token (threadId, newConn) (connections oldState)
+            -- }
+            -- return newState 
+            put (oldState {
+                connections = Map.insert token (threadId, newConn) (connections oldState)
+            })
+            ))
 
 -- |Treat MPTCP events depending on if the connection is known or not
 --
@@ -683,14 +696,18 @@ dispatchPacket oldState (Packet hdr (GenlData genlHeader NoData) attributes) = l
                 case cmd of
 
                   MPTCP_EVENT_ESTABLISHED -> do
-                      putStrLn "Ignoring Creating EVENT"
+                      -- putStrLn "Ignoring Creating EVENT"
                                   -- let newMptcpConn = (MptcpConnection token [] Set.empty Set.empty)
                       return oldState
 
                   MPTCP_EVENT_CREATED -> let
                       subflow = subflowFromAttributes attributes
                     in
-                      registerMptcpConnection oldState token subflow
+                      -- StateT MyState IO ()
+                      -- on veut retourner un stateT
+                      -- return evalStateT
+                      execStateT (registerMptcpConnection token subflow) oldState
+                      -- return $ runState oldState (registerMptcpConnection token subflow)
                   _ -> return oldState
 
             Just (threadId, mvarConn) -> do
