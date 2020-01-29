@@ -540,4 +540,3 @@ loadExtension key value = let
           Right x -> Just $ x
           Left err -> error $ "error decoding " ++ show eExtId ++ ":\n" ++ err
 
-

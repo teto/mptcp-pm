@@ -4,45 +4,15 @@ Maintainer  : matt
 Stability   : testing
 Portability : Linux
 
-Monitors new MPTCP connections and runs a specific monitor instance
+The daemon main thread has 2 roles:
+- monitors interface change (network interface addition/deletion)
+- listens to
 
+Monitors new MPTCP connections and runs a specific monitor instance
 To interact
 GENL_ADMIN_PERM
 The operation requires the CAP_NET_ADMIN privilege
-
-Helpful links:
-
-- inspired by https://stackoverflow.com/questions/6009384/exception-handling-in-haskell
-- super nice tutorial on optparse applicative: https://github.com/pcapriotti/optparse-applicative#regular-options
-- How to use Map https://lotz84.github.io/haskellbyexample/ex/maps
-= How to update a single field https://stackoverflow.com/questions/14955627/shorthand-way-for-assigning-a-single-field-in-a-record-while-copying-the-rest-o
-- get tcp stats via netlink https://www.vividcortex.com/blog/2014/09/22/using-netlink-to-optimize-socket-statistics/
-eNETLINK_INET_DIAG
-
-
-Concurrent values
-- https://www.oreilly.com/library/view/parallel-and-concurrent/9781449335939/ch07.html
-- https://stackoverflow.com/questions/22171895/using-tchan-with-timeout
-- https://www.reddit.com/r/haskellquestions/comments/5rh1d4/concurrency_and_shared_state/
-
-Mutable states:
-- https://blog.jakuba.net/2014/07/20/Mutable-State-in-Haskell/
-- http://mainisusuallyafunction.blogspot.com/2011/10/safe-top-level-mutable-variables-for.html
-
-http://kristrev.github.io/2013/07/26/passive-monitoring-of-sockets-on-linux
-
 iproute2/misc/ss.c to see how `ss` utility interacts with the kernel
--- https://downloads.haskell.org/~ghc/latest/docs/html/libraries/process-1.6.5.0/System-Process.html
-
-Aeson tutorials:
--- https://haskell.fpcomplete.com/library/aeson
-- https://lotz84.github.io/haskellbyexample/ex/timers
-
-- https://lotz84.github.io/haskellbyexample/ex/maps
-
-
-Useful functions in Map
-- member / elemes / keys / assocs / keysSet / toList
 -}
 {-# LANGUAGE OverloadedStrings #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
@@ -65,25 +35,17 @@ import Net.Mptcp.PathManager
 import Net.Mptcp.PathManager.Default
 import Net.Tcp
 import Net.IP
--- print
--- import Net.IPv4 hiding ()
--- import Net.IPAddress
 
 import Net.SockDiag.Constants
 import Net.Tcp.Constants
 import Net.Mptcp.Constants
 
-
--- for readList
 import Text.Read (readMaybe)
 -- pack
 import Data.Text ()
 
--- for replicateM
 import Control.Monad (foldM)
--- fromMaybe,
 import Data.Maybe (catMaybes)
--- import Data.Foldable (concat)
 import Foreign.C.Types (CInt)
 -- for eOK, ePERM
 import Foreign.C.Error
@@ -127,7 +89,6 @@ import Debug.Trace
 import Control.Concurrent
 -- import Control.Exception (assert)
 -- import Control.Concurrent.Chan
--- import Data.IORef
 -- import Control.Concurrent.Async
 import System.IO.Unsafe
 import System.IO.Temp ()
@@ -216,18 +177,6 @@ addJsonKey key val (Object xs) = Object $ HM.insert key val xs
 addJsonKey _ _ xs = xs
 
 
--- inspired by CtrlPacket
-  -- token :: MptcpToken
--- MptcpNewConnection
--- data MptcpPacket = MptcpPacket {
---       mptcpHeader     :: Header
---     , mptcpGeHeader   :: GenlHeader
---     , mptcpData   :: MptcpData
--- data MptcpData = MptcpData {
---     mptcpAttributes :: [MptcpAttr]
---   } deriving (Eq)
-
--- TODO are they generated
 dumpCommand :: MptcpGenlEvent -> String
 dumpCommand x = show x ++ " = " ++ show (fromEnum x)
 
@@ -540,7 +489,6 @@ inspectAnswer (Packet _ (GenlData hdr NoData) attributes) = let
 inspectAnswer pkt = putStrLn $ "Inspecting answer:\n" ++ showPacket pkt
 
 
-
 -- should have this running in parallel
 queryAddrs :: NLR.RoutePacket
 queryAddrs = NL.Packet
@@ -604,7 +552,6 @@ dispatchPacketForKnownConnection mptcpSock con event attributes availablePaths =
               (Just newCon, [])
 
       -- MPTCP_CMD_EXIST -> con
-
       _ -> error $ "should not happen " ++ show event
 
 
@@ -616,7 +563,6 @@ acceptConnection subflow mFilteredConnections =
       Nothing -> True
       -- or notElem
       Just filtered -> subflow `elem` filtered
--- acceptConnection subflow = True
 
 -- |
 mapSubflowToInterfaceIdx :: IP -> IO (Maybe Word32)
@@ -629,9 +575,6 @@ mapSubflowToInterfaceIdx ip = do
 
 
 
--- Maybe
--- mapSubflowToInterfaceIdx
---IO ())
 registerMptcpConnection :: MptcpToken -> TcpConnection -> StateT MyState IO ()
 registerMptcpConnection token subflow = (do
     oldState <- get
@@ -639,10 +582,7 @@ registerMptcpConnection token subflow = (do
     if acceptConnection subflow filtered == False
     then do
         -- infoM "main" $ "filtered out connection:" ++ show subflow
-        -- return ()
-        -- liftIO (oldState)
         return ()
--- runState $ testState ()
     else (do
             -- putStrLn $ "accepted connection :" ++ show subflow
             -- should we add the subflow yet ? it doesn't have the correct interface idx
@@ -656,23 +596,18 @@ registerMptcpConnection token subflow = (do
             newConn <- liftIO $ newMVar newMptcpConn
             -- putStrLn $ "Connection established !!\n"
 
-        -- create a new
+            -- create a new
             sockMetrics <- liftIO $ makeMetricsSocket
-        -- start monitoring connection
+            -- start monitoring connection
             threadId <- liftIO $ forkOS (startMonitorConnection cliArgs 0 mptcpSock sockMetrics newConn)
 
             -- putStrLn $ "Inserting new MVar "
-            -- let newState = oldState {
-            --     connections = Map.insert token (threadId, newConn) (connections oldState)
-            -- }
-            -- return newState 
             put (oldState {
                 connections = Map.insert token (threadId, newConn) (connections oldState)
             })
             ))
 
 -- |Treat MPTCP events depending on if the connection is known or not
---
 dispatchPacket :: MyState -> MptcpPacket -> IO MyState
 dispatchPacket oldState (Packet hdr (GenlData genlHeader NoData) attributes) = let
         cmd = toEnum $ fromIntegral $ genlCmd genlHeader
@@ -703,11 +638,7 @@ dispatchPacket oldState (Packet hdr (GenlData genlHeader NoData) attributes) = l
                   MPTCP_EVENT_CREATED -> let
                       subflow = subflowFromAttributes attributes
                     in
-                      -- StateT MyState IO ()
-                      -- on veut retourner un stateT
-                      -- return evalStateT
                       execStateT (registerMptcpConnection token subflow) oldState
-                      -- return $ runState oldState (registerMptcpConnection token subflow)
                   _ -> return oldState
 
             Just (threadId, mvarConn) -> do
@@ -811,22 +742,17 @@ inspectResult myState result = case result of
 doDumpLoop :: MyState -> IO MyState
 doDumpLoop myState = do
     let (MptcpSocket simpleSock fid) = socket myState
-
     results <- recvOne' simpleSock ::  IO [Either String MptcpPacket]
-
     -- TODO retrieve packets
     -- here we should update the state according
     -- mapM_ (inspectResult myState) results
     -- (Foldable t, Monad m) => (b -> a -> m b) -> b -> t a -> m b
     modifiedState <- foldM inspectResult myState results
-
     doDumpLoop modifiedState
 
--- regarder dans query/joinMulticastGroup/recvOne
+
 listenToEvents :: MyState -> CtrlAttrMcastGroup -> IO ()
 listenToEvents state my_group = do
-  -- joinMulticastGroup  returns IO ()
-  -- TODO should check it works correctly !
   joinMulticastGroup sock (grpId my_group)
   putStrLn $ "Joined grp " ++ grpName my_group
   _ <- doDumpLoop state
@@ -852,20 +778,6 @@ createLogger :: IO LoggerSet
 createLogger = newStdoutLoggerSet defaultBufSize
 
 
--- for big endian
--- https://mail.haskell.org/pipermail/beginners/2010-October/005571.html
--- foldl' :: (b -> a -> b) -> b -> Maybe a -> b
--- fromOctetsBE :: [Word8] -> Word32
--- fromOctetsBE = foldl' accum 0
---   where
---     accum a o = (a `Bits.shiftL` 8) .|. fromIntegral o
---     -- maybe I could use putIArrayOf instead
-
--- fromOctetsLE :: [Word8] -> Word32
--- fromOctetsLE = fromOctetsBE . reverse
-
-
-
 dumpExtensionAttribute :: Int -> ByteString -> SockDiagExtension
 dumpExtensionAttribute attrId value = let
         eExtId = (toEnum attrId :: SockDiagExtensionId)
@@ -879,7 +791,6 @@ dumpExtensionAttribute attrId value = let
 loadExtensionsFromAttributes :: Attributes -> [SockDiagExtension]
 loadExtensionsFromAttributes attrs =
     let
-        -- $ loadExtension
         mapped = Map.foldrWithKey (\k v -> ([dumpExtensionAttribute k v] ++ )) [] attrs
     in
         mapped
@@ -910,7 +821,7 @@ data SockDiagMetrics = SockDiagMetrics {
   , sockdiagMetrics :: [SockDiagExtension]
 }
 
--- type SockDiagExtension2 = SockDiagExtension 
+-- type SockDiagExtension2 = SockDiagExtension
 instance ToJSON SockDiagExtension where
   toJSON (tcpInfo@DiagTcpInfo {} )  = let
       -- rtt = tcpi_rtt tcpInfo

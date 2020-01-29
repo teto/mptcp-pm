@@ -39,16 +39,11 @@ import Net.IPAddress
 import Net.IPv4
 import Net.IPv6
 import Net.Mptcp.Constants
--- import Data.Text
--- import Data.Set ()
 import qualified Data.Set as Set
--- in package Unique-0.4.7.6
--- import Data.List.Unique
 import Data.Aeson
 import GHC.Generics
--- import Data.Default
+import Control.Monad.Trans.State (State, StateT, put, get)
 
--- how can I retreive the word16 without pattern matching ?
 data MptcpSocket = MptcpSocket NetlinkSocket Word16
 instance Show MptcpSocket where
   show sock = let (MptcpSocket nlSock fid) = sock in ("Mptcp netlink socket: " ++ show fid)
@@ -83,8 +78,6 @@ data RemoteId = RemoteId {
 }
 
 
--- data MptcpAttributes = Map.Map MptcpAttr MptcpAttribute
-
 
 remoteIdFromAttributes :: Attributes -> RemoteId
 remoteIdFromAttributes attrs = let
@@ -116,33 +109,13 @@ instance ToJSON MptcpConnection where
     ]
 
 
---
--- instance ToJSON SubflowWithMetrics where
---   toJSON sf = object [
---     (pack (nameFromTcpConnection $ subflowSubflow sf) .= object [
-
---       "cwnd" .= toJSON (20 :: Int),
---       -- for now hardcode mss ? we could set it to one to make
---       "mss" .= toJSON (1500 :: Int),
---       "var" .= toJSON (10 :: Int),
---       "fowd" .= toJSON (10 :: Int),
---       "bowd" .= toJSON (10 :: Int),
---       "loss" .= toJSON (0.5 :: Float)
---       -- This is an user preference, that should be pushed when calling mptcpnumerics
---       -- , "contribution": 0.5
---     ])
---     ]
-
-
 -- |Adds a subflow to the connection
--- use sets instead ?
 -- TODO compose with mptcpConnAddLocalId
 mptcpConnAddSubflow :: MptcpConnection -> TcpConnection -> MptcpConnection
 mptcpConnAddSubflow mptcpConn sf =
   -- trace ("Adding subflow" ++ show sf)
     mptcpConnAddLocalId
         (mptcpConnAddRemoteId
-            -- (mptcpConn { subflows = sf : subflows mptcpConn })
             (mptcpConn { subflows = Set.insert sf (subflows mptcpConn) })
             (remoteId sf)
         )
@@ -161,7 +134,6 @@ mptcpConnAddLocalId con locId = con { localIds = Set.insert (locId) (localIds co
 
 
 -- |Add remote id
--- Le remote id doit etre associee a une addresse / TODO test protocol
 mptcpConnAddRemoteId :: MptcpConnection
                        -> Word8 -- ^Remote id to add
                        -> MptcpConnection
@@ -374,21 +346,9 @@ e2M :: Either a b -> Maybe b
 e2M (Right x) = Just x
 e2M _ = Nothing
 
--- un peu bidon
--- convertAttributesIntoList :: Attributes -> [MptcpAttribute]
--- convertAttributesIntoList attrs = let
---       customMakeAttribute key val accum = [fromJust (makeAttribute key val)] ++ accum
---   in 
---       -- foldrWithKey." => (k -> a -> b -> b) -> b -> Map k a -> b
---       Map.foldrWithKey (customMakeAttribute) [] attrs
-
 convertAttributesIntoMap :: Attributes -> Map.Map MptcpAttr MptcpAttribute
 convertAttributesIntoMap attrs = let
--- traverseWithKey
--- fromJust
       customFn k val = fromJust (makeAttribute k val)
-      -- fromJust $ makeAttribute
-      -- (k -> a -> b) -> Map k a -> Map k b
       newMap = Map.mapWithKey (customFn) attrs
   in
       Map.mapKeys (toEnum) newMap
@@ -468,14 +428,11 @@ resetConnectionPkt (MptcpSocket sock fid) attrs = let
     assert (hasLocAddr attrs) $ genMptcpRequest fid MPTCP_CMD_REMOVE False attrs
 
 
--- TODO map an IP to an interface
 -- pass token ?
--- TODO can we retreive ips as well ?!
 subflowAttrs :: TcpConnection -> [MptcpAttribute]
 subflowAttrs con = [
     LocalLocatorId $ localId con
     , RemoteLocatorId $ remoteId con
-    -- TODO adapt
     , SubflowFamily $ getAddressFamily (dstIp con)
     , SubflowDestAddress $ dstIp con
     , SubflowDestPort $ dstPort con
@@ -487,7 +444,6 @@ subflowAttrs con = [
   ]
 
 -- |Generate a request to create a new subflow
--- TODO
 capCwndPkt :: MptcpSocket -> MptcpConnection
               -> Word32  -- ^Limit to apply to congestion window
               -> TcpConnection -> MptcpPacket
@@ -495,9 +451,6 @@ capCwndPkt (MptcpSocket sock fid) mptcpCon limit sf =
     assert (hasFamily attrs) pkt
     where
         oldPkt = genMptcpRequest fid MPTCP_CMD_SND_CLAMP_WINDOW False attrs
-        -- TODO maybe cleanup interface after that: try to update Header
-        -- messageSeqNum =
-        -- messagePID
         pkt = oldPkt { packetHeader = (packetHeader oldPkt) { messagePID = 42 } }
         attrs = connectionAttrs mptcpCon
               ++ [ SubflowMaxCwnd limit ]
@@ -508,9 +461,6 @@ connectionAttrs :: MptcpConnection -> [MptcpAttribute]
 connectionAttrs con = [ MptcpAttrToken $ connectionToken con ]
 
 -- sport/backup/intf are optional
--- family /loc id/remid/daddr/dport
--- TODO pass new subflow ?
--- should get rid of MptcpSocket  [MptcpAttribute] ->
 newSubflowPkt :: MptcpSocket -> MptcpConnection -> TcpConnection -> MptcpPacket
 newSubflowPkt (MptcpSocket sock fid) mptcpCon sf = let
     cmd = MPTCP_CMD_SUB_CREATE
@@ -518,7 +468,4 @@ newSubflowPkt (MptcpSocket sock fid) mptcpCon sf = let
     pkt = genMptcpRequest fid MPTCP_CMD_SUB_CREATE False attrs
   in
     assert (hasFamily attrs) pkt
-
--- announceLocalIdPkt ::
--- announceLocalIdPkt = 
 
