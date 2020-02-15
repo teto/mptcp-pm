@@ -6,12 +6,12 @@ license-file: LICENSE
 build-type: Simple
 Maintainer:  teto
 Category:   Network
-Synopsis: A work in progress Multipath TCP path manager
+Synopsis: A Multipath TCP path manager
 Homepage:   https://github.com/teto/netlink_pm
 Description:
   Multipath TCP (www.multipath-tcp.org) starting from version 0.95 provides a 
-  netlink path manager module. This package implements the userspace part to allow
-  userspace daemons to control MPTCP behavior.
+  netlink path manager module. This package implements the userspace component 
+  in charge of controlling MPTCP subflow establishement and various behaviors.
 Extra-source-files:
   headers/*.h README.md CHANGELOG
 
@@ -26,11 +26,7 @@ Flag Dev {
 }
 
 
--- iproute/network-info bad
--- bitset, very interesting but broken
 -- aeson to (de)serialize to json
--- brittany for formatting (does not work)
--- use containers for Data.Set ?
 -- text is used to convert from string and in aeson
 -- http://hackage.haskell.org/package/bitset-1.4.8/docs/Data-BitSet-Word.html
 common shared-properties
@@ -51,10 +47,8 @@ common shared-properties
        -- to create temp folder/files
        , temporary
        , filepath
-       -- haddocset lookds kinda unmaintained, won't work with ghc 8.5
-       -- , haddocset
-       -- , bitset
-       -- haskus-binary
+       -- , bitset  -- bitset, interesting but broken
+
     default-language: Haskell2010
     -- -fno-warn-unused-imports 
     -- -fforce-recomp  makes it build twice
@@ -83,16 +77,6 @@ executable mptcp-pm
     -- ghc-options: -prof
     main-is: hs/daemon.hs
     hs-source-dirs: .
-
---  MyCustomLibrary
--- library
---     Build-tools:       hsc2hs, c2hs
---     ghc-options: -Wall -fno-warn-unused-binds -fno-warn-unused-matches
---     default-language: Haskell2010
---     -- apparently this just helps getting a better error messages
---     Includes:          tcp_states.h, linux/sock_diag.h, linux/inet_diag.h
---     include-dirs: . , headers
-
 
 Test-Suite test
 --   -- 2 types supported, exitcode is based on ... exit codes ....

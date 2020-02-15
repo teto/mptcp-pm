@@ -13,7 +13,7 @@ let
 
           ip = dontCheck hold.ip;
           c2hsc = dontCheck hold.c2hsc;
-          wide-word = doJailbreak (hold.wide-word);
+          # wide-word = doJailbreak (hold.wide-word);
 
           netlink = (overrideSrc hold.netlink {
             # src = builtins.fetchGit {

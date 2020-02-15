@@ -4,6 +4,13 @@ Maintainer  : matt
 Stability   : testing
 Portability : Linux
 
+This userspace program is a complement to the linux MPTCP kernel developed at
+https://github.com/multipath-tcp/mptcp
+
+The main daemon monitors MPTCP connections and for each new connection assigns a thread
+to mino.
+
+
 The daemon main thread has 2 roles:
 - monitors interface change (network interface addition/deletion)
 - listens to
@@ -22,15 +29,11 @@ module Main where
 import Prelude hiding (concat, init)
 import Options.Applicative hiding (value, ErrorMsg, empty)
 import qualified Options.Applicative (value)
--- has lift too
--- import Control.Monad.Trans.Class (lift)
 import Control.Monad.Trans (liftIO)
 import Control.Monad.Trans.State (State, StateT, put, get,
         execStateT)
--- For TcpState, FFI generated
 import Net.SockDiag
 import Net.Mptcp
---  hiding(mapIPtoInterfaceIdx)
 import Net.Mptcp.PathManager
 import Net.Mptcp.PathManager.Default
 import Net.Tcp
@@ -70,48 +73,32 @@ import Data.Serialize.Put
 -- import Data.Either (fromRight)
 import Data.ByteString (ByteString)
 import Data.ByteString.Lazy (writeFile, readFile)
--- import Data.ByteString.Char8 (unpack, init)
--- import System.Posix.
 
--- import qualified Data.ByteString.Char8 as BSC
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 
 import qualified Data.Text
 import Data.Bits (Bits(..))
 
--- https://hackage.haskell.org/package/bytestring-conversion-0.1/candidate/docs/Data-ByteString-Conversion.html#t:ToByteString
--- contains ToByteString / FromByteString
--- import Data.ByteString.Conversion
 import Debug.Trace
--- import Control.Exception
 
 import Control.Concurrent
--- import Control.Exception (assert)
--- import Control.Concurrent.Chan
--- import Control.Concurrent.Async
 import System.IO.Unsafe
 import System.IO.Temp ()
--- for takeFilename
 import System.FilePath ()
 import Numeric.Natural
-
--- , Handle
 import System.IO (stderr)
 import Data.Aeson
 -- to merge MptcpConnection export and Metrics
 import Data.Aeson.Extra.Merge  (lodashMerge)
 
 import Data.Aeson.Encode.Pretty (encodePretty)
--- import GHC.Generics
 
 -- for getEnvDefault, to get TMPDIR value.
 -- we could pass it as an argument
 -- import System.Environment.Blank(getEnvDefault)
 
--- trying hslogger
 import System.Log.Logger (
-    -- rootLoggerName
     infoM
     , debugM
     , errorM
@@ -124,22 +111,16 @@ import System.Log.Logger (
     -- , addHandler
     )
 import System.Log.Handler.Simple (
-    -- , streamHandler
     verboseStreamHandler
-    -- , GenericHandler
     )
--- for writeUTF8File
--- import Distribution.Simple.Utils
--- import Distribution.Utils.Generic
--- import System.Log.Handler (setFormatter)
 
 -- STM = State Thread Monad ST monad
 import qualified Data.HashMap.Strict as HM
 
 {-# NOINLINE globalMptcpSock #-}
-globalMptcpSock :: MVar MptcpSocket
-globalMptcpSock = unsafePerformIO newEmptyMVar
--- du coup cette socket n'aurait meme plus besoin d'etre globale en fait ?
+-- globalMptcpSock :: MVar MptcpSocket
+-- globalMptcpSock = unsafePerformIO newEmptyMVar
+{-| The MptcpSocket doesn't need to be global -}
 
 
 
@@ -185,12 +166,7 @@ dumpMptcpCommands MPTCP_CMD_EXIST = dumpCommand MPTCP_CMD_EXIST
 dumpMptcpCommands x = dumpCommand x ++ "\n" ++ dumpMptcpCommands (succ x)
 
 
--- todo use it as a filter
 data CLIArguments = CLIArguments {
-  -- | useless
-  -- TODO we should be able to filter
-  -- command    :: String
-  -- , serverIP     :: IPv4
 
   -- | Path to a program in charge of generating congestion window limits on a 
   -- per path basis
@@ -209,14 +185,8 @@ data CLIArguments = CLIArguments {
 
   -- Priority
   , logLevel :: Priority
-
-  -- |
-  -- , updateFrequency :: Priority
   }
 
-
--- TODO use 3rd party library levels
--- data Verbosity = Normal | Debug
 
 loggerName :: String
 loggerName = "main"
@@ -233,23 +203,8 @@ dumpSystemInterfaces = do
   putStrLn "End of dump"
 
 
--- TODO register subcommands instead
--- see https://stackoverflow.com/questions/31318643/optparse-applicative-how-to-handle-no-arguments-situation-in-arrow-syntax
---  ( command "add" (info addOptions ( progDesc "Add a file to the repository" ))
- -- <> command "commit" (info commitOptions ( progDesc "Record changes to the repository" ))
--- can use several constructors depending on the PM ?
--- ByteString
 sample :: Parser CLIArguments
 sample = CLIArguments
-      -- <$> argument str
-      --     ( metavar "CMD"
-      --    <> help "What to do" )
-      -- -- TODO should accept hostname etc
-      -- <*> argument (eitherReader $ \x -> case (Net.IPv4.decodeString x) of
-      --                                       Nothing -> Left "could not parse"
-      --                                       Just ip -> Right ip)
-      --   ( metavar "ServerIP"
-      --    <> help "ServerIP to let through (e.g.: 202.214.86.51 )" )
       <$> (optional $ strOption
           ( long "optimizer"
           <> short 'p'
@@ -258,8 +213,6 @@ sample = CLIArguments
       <*> (optional $ strOption
           ( long "filter"
          <> help "Path to a json file describing a TCP connection"
-         -- <> showDefault
-         -- <> Options.Applicative.value "fake_solver"
          <> metavar "Filter" ))
       <*> strOption
           ( long "out"
@@ -302,13 +255,8 @@ makeMptcpSocket = do
     Just fid -> return  (MptcpSocket sock (trace ("family id"++ show fid ) fid))
 
 
--- Used tuples
--- sock <- makeSocket
 makeMetricsSocket :: IO NetlinkSocket
-makeMetricsSocket = do
-    -- NETLINK_SOCK_DIAG == NETLINK_INET_DIAG
-  sock <- makeSocketGeneric eNETLINK_SOCK_DIAG
-  return sock
+makeMetricsSocket = return $ makeSocketGeneric eNETLINK_SOCK_DIAG
 
 
 -- A utility function - threadDelay takes microseconds, which is slightly annoying.
@@ -910,44 +858,23 @@ inspectIdiagAnswers :: [Packet SockDiagMsg] -> [Maybe SockDiagMetrics]
 inspectIdiagAnswers packets =
   map inspectIDiagAnswer packets
 
-{-| The MptcpSocket doesn't need to be global
--}
--- withFormatter :: GenericHandler Handle -> GenericHandler Handle
--- withFormatter handler = setFormatter handler formatter
---     -- http://hackage.haskell.org/packages/archive/hslogger/1.1.4/doc/html/System-Log-Formatter.html
---     where formatter = simpleLogFormatter "[$time $loggername $prio] $msg"
 
--- s'inspirer de
--- https://github.com/vdorr/linux-live-netinfo/blob/24ead3dd84d6847483aed206ec4b0e001bfade02/System/Linux/NetInfo.hs
 main :: IO ()
 main = do
 
   -- SETUP LOGGING (https://gist.github.com/ijt/1052896)
   -- streamHandler vs verboseStreamHandler
   myStreamHandler <- verboseStreamHandler stderr INFO
-  -- saveGlobalLogger myStreamHandler
-  -- let myStreamHandler' = withFormatter myStreamHandler
-  -- let rootLog = rootLoggerName
-  -- updateGlobalLogger rootLog (setLevel INFO)
   updateGlobalLogger rootLoggerName (setLevel DEBUG . setHandlers [myStreamHandler])
-  -- updateGlobalLogger "main" ()
-  -- saveGlobalLogger myStreamHandler
 
   infoM "main" "Parsing command line..."
   options <- execParser opts
-
   infoM "main" "Creating MPTCP netlink socket..."
 
 
-  -- let jsonConn = toJSON $ MptcpConnection 32 Set.empty Set.empty Set.empty
-  -- let objToMerge = object [ "toto" .= toJSON ("value" :: Value) ]
-  -- let merged = lodashMerge jsonConn objToMerge
-  -- let bs = Data.Aeson.encode $ merged
-  -- putStrLn $ show bs
-
   -- add the socket too to an MVar ?
-  (MptcpSocket sock  fid) <- makeMptcpSocket
-  putMVar globalMptcpSock (MptcpSocket sock  fid)
+  -- (MptcpSocket sock  fid) <- makeMptcpSocket
+  -- putMVar globalMptcpSock (MptcpSocket sock  fid)
 
   infoM "main" "Now Tracking system interfaces..."
   putMVar globalInterfaces Map.empty
