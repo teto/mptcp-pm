@@ -15,6 +15,8 @@ let
           c2hsc = dontCheck hold.c2hsc;
           # wide-word = doJailbreak (hold.wide-word);
 
+         quickcheck-classes = hold.quickcheck-classes_0_6_4_0;
+
           netlink = (overrideSrc hold.netlink {
             # src = builtins.fetchGit {
             #   # url = https://github.com/ongy/netlink-hs;
