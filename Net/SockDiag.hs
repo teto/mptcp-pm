@@ -124,7 +124,6 @@ data SockDiagMsg = SockDiagMsg {
   , idiag_inode :: Word32
 } deriving (Eq, Show)
 
--- see https://stackoverflow.com/questions/8633470/illegal-instance-declaration-when-declaring-instance-of-isstring
 {-# LANGUAGE FlexibleInstances #-}
 
 -- TODO this generates the  error "Orphan instance: instance Convertable [TcpState]"
