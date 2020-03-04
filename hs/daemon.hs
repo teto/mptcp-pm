@@ -117,13 +117,6 @@ import System.Log.Handler.Simple (
 -- STM = State Thread Monad ST monad
 import qualified Data.HashMap.Strict as HM
 
-{-# NOINLINE globalMptcpSock #-}
--- globalMptcpSock :: MVar MptcpSocket
--- globalMptcpSock = unsafePerformIO newEmptyMVar
-{-| The MptcpSocket doesn't need to be global -}
-
-
-
 -- |Delay between 2 successful loggings
 onSuccessSleepingDelayMs :: Natural
 onSuccessSleepingDelayMs = 300
@@ -872,20 +865,11 @@ main = do
   infoM "main" "Creating MPTCP netlink socket..."
 
 
-  -- add the socket too to an MVar ?
-  -- (MptcpSocket sock  fid) <- makeMptcpSocket
-  -- putMVar globalMptcpSock (MptcpSocket sock  fid)
-
   infoM "main" "Now Tracking system interfaces..."
   putMVar globalInterfaces Map.empty
   routeNl <- forkIO trackSystemInterfaces
 
   debugM "main" "socket created. MPTCP Family id "
-  -- >> Prelude.print fid
-  -- putStr "socket created. tcp_metrics Family id " >> print fidMetrics
-  -- That's what I should use in fact !! (Word16, [CtrlAttrMcastGroup])
-  -- (mid, mcastGroup ) <- getFamilyWithMulticasts sock mptcpGenlEvGrpName
-  -- Each netlink family has a set of 32 multicast groups
   mcastMptcpGroups <- getMulticastGroups sock fid
   mapM_ Prelude.print mcastMptcpGroups
 

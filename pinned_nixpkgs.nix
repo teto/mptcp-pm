@@ -2,10 +2,6 @@ let
   overlay = self: prev: {
       haskell = prev.haskell // {
         packageOverrides = hnew: hold: with prev.haskell.lib;{
-          # hspec = hold.hspec_2_7_1;
-          # hspec-core = hold.hspec-core_2_7_1;
-          # hspec-discover = hold.hspec-discover_2_7_1;
-          # QuickCheck = hold.QuickCheck_2_13_1;
 
           # from nixpkgs-stackage overlay
           # ip = pkgs.haskell.lib.dontCheck hold.ip;
@@ -13,9 +9,14 @@ let
 
           ip = dontCheck hold.ip;
           c2hsc = dontCheck hold.c2hsc;
-          # wide-word = doJailbreak (hold.wide-word);
 
-         quickcheck-classes = hold.quickcheck-classes_0_6_4_0;
+          # can be released on more recent nixplks
+          # wide-word = doJailbreak (hold.wide-word);
+          quickcheck-classes = hold.quickcheck-classes_0_6_4_0;
+
+          # for newer nixpkgs (March 2020)
+          # base-compat = doJailbreak (hold.base-compat);
+          # time-compat = doJailbreak (hold.time-compat);
 
           netlink = (overrideSrc hold.netlink {
             # src = builtins.fetchGit {
@@ -40,7 +41,6 @@ let
           # };
 
           # ip = pkgs.haskell.packages.stackage.lts-1321.ip;
-          # QuickCheck = haskellPackagesOld.QuickCheck_2_13_1;
           # ip_1_5_0 = haskellPackagesOld.ip_1_5_0.override { };
         };
       };
@@ -48,12 +48,12 @@ let
   };
 
   # pinned nixpkgs before cabal 3 becomes the default else hie fails
-  nixpkgs = import <nixpkgs> 
-  # nixpkgs = import (builtins.fetchTarball {
-  #     name = "unstable-before-cabal-3";
-  #     url = "https://github.com/nixos/nixpkgs/archive/e1eedf29e5d22e6824e614d75449b75a2e3455d6.tar.gz";
-  #     sha256 = "1v237cgfkd8sb5f1r08sms1rxygjav8a1i1jjjxyqgiszzpiwdx7";
-  # }) 
+  # nixpkgs = import <nixpkgs>
+  nixpkgs = import (builtins.fetchTarball {
+      name = "before-libc-update";
+      url = "https://github.com/nixos/nixpkgs/archive/fa7445532900f2555435076c1e7dce0684daa01a.tar.gz";
+      sha256 = "1hbf7kmbxmd19hj3kz9lglnyi4g20jjychmlhcz4bx1limfv3c3r";
+  })
   {  overlays = [ overlay]; config = {allowBroken = true;}; };
 in
   nixpkgs
