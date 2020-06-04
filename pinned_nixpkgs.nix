@@ -3,20 +3,36 @@ let
       haskell = prev.haskell // {
         packageOverrides = hnew: hold: with prev.haskell.lib;{
 
-          # from nixpkgs-stackage overlay
-          # ip = pkgs.haskell.lib.dontCheck hold.ip;
-          all-hies = import (fetchTarball "https://github.com/infinisil/all-hies/tarball/master") {};
-
           ip = dontCheck hold.ip;
-          c2hsc = dontCheck hold.c2hsc;
+
+          # ip = dontCheck overrideSrc hold.ip {
+          #   src = prev.fetchFromGitHub {
+          #     owner = "andrewthad";
+          #     repo = "haskell-ip";
+          #     rev = "1.7.2";
+          #     # sha256 = 
+          #     sha256 = "sha256-OL5KkVsoGAZskfwj8HAq2aBh60F2TW+WnAUfTjiekNc=";
+          #     # sha256 = "sha256-QGpMskYOcUR4o/IC30etrTEAkdvevpOOi4chWbEw5Ik=";
+          #   };
+          # };
+
+
+          # c2hsc = appendConfigureFlag hold.c2hsc "--with-gcc=${prev.gcc}/bin/gcc";
+          c2hsc = appendPatch hold.c2hsc (prev.fetchpatch {
+            url = "https://github.com/jwiegley/c2hsc/commit/490ecab202e0de7fc995eedf744ad3cb408b53cc.patch";
+            # sha256 = "12g462qmj8c7if797gnyvf8h0cddmm3xy0pjldw48w8f8sr4qsj0";
+            # sha256 = "sha256-QGpMskYOcUR4o/IC30etrTEAkdvevpOOi4chWbEw5Ik=";
+            sha256 = "sha256-B0OcZkVrLTBCCBJL+b4vfxSTBDfTT5lKYOie3Pe187A=";
+
+          });
 
           # can be released on more recent nixplks
           # wide-word = doJailbreak (hold.wide-word);
           # quickcheck-classes = hold.quickcheck-classes_0_6_4_0;
 
           # for newer nixpkgs (March 2020)
-          base-compat = doJailbreak (hold.base-compat);
-          time-compat = doJailbreak (hold.time-compat);
+          # base-compat = doJailbreak (hold.base-compat);
+          # time-compat = doJailbreak (hold.time-compat);
 
           netlink = (overrideSrc hold.netlink {
             # src = builtins.fetchGit {
@@ -40,11 +56,8 @@ let
           #   };
           # };
 
-          # ip = pkgs.haskell.packages.stackage.lts-1321.ip;
-          # ip_1_5_0 = haskellPackagesOld.ip_1_5_0.override { };
         };
       };
-    allowBroken = true;
   };
 
   # pinned nixpkgs before cabal 3 becomes the default else hie fails

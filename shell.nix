@@ -1,10 +1,9 @@
 # from https://github.com/NixOS/nixpkgs/blob/master/doc/languages-frameworks/haskell.section.md
 {
-
-  nixpkgs
-  ? import ./pinned_nixpkgs.nix
+  nixpkgs ? import ./pinned_nixpkgs.nix
   # nixpkgs ? import <nixpkgs> {}
-  , compilerName ? "ghc865"
+  # , compilerName ? "ghc8101" # not supported yet
+  , compilerName ? "ghc883"
 }:
 
 let
@@ -12,7 +11,7 @@ let
   pkgs = nixpkgs.pkgs;
   # https://github.com/hercules-ci/ghcide-nix
   #  (import (builtins.fetchTarball "https://github.com/hercules-ci/ghcide-nix/tarball/master") {}).ghcide-ghc865
-  ghcide-nix = import (builtins.fetchTarball "https://github.com/hercules-ci/ghcide-nix/tarball/master") {};
+  ghcide-nix = import (builtins.fetchTarball "https://github.com/cachix/ghcide-nix/tarball/master") {};
   my_pkg = (import ./. );
 in
   (my_pkg.envFunc { withHoogle = true; }).overrideAttrs (oa: {
@@ -20,7 +19,7 @@ in
     nativeBuildInputs = oa.nativeBuildInputs ++ (with pkgs; [
 
       # HASKELL IDE ENGINE
-      haskellPackages.all-hies.versions."${compilerName}"
+      # haskellPackages.all-hies.versions."${compilerName}"
 
       # or ghcide
       ghcide-nix."ghcide-${compilerName}"
@@ -51,6 +50,4 @@ in
     echo "to run the daemon "
     echo "buildNrun"
   '';
-
-
   })
