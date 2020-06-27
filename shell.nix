@@ -11,8 +11,9 @@ let
   pkgs = nixpkgs.pkgs;
   # https://github.com/hercules-ci/ghcide-nix
   #  (import (builtins.fetchTarball "https://github.com/hercules-ci/ghcide-nix/tarball/master") {}).ghcide-ghc865
-  ghcide-nix = import (builtins.fetchTarball "https://github.com/cachix/ghcide-nix/tarball/master") {};
-  my_pkg = (import ./. );
+  # ghcide-nix = import (builtins.fetchTarball "https://github.com/cachix/ghcide-nix/tarball/master") {};
+
+  my_pkg = (import ./. { inherit compiler; } );
 in
   (my_pkg.envFunc { withHoogle = true; }).overrideAttrs (oa: {
 
@@ -22,7 +23,8 @@ in
       # haskellPackages.all-hies.versions."${compilerName}"
 
       # or ghcide
-      ghcide-nix."ghcide-${compilerName}"
+      # ghcide-nix."ghcide-${compilerName}"
+      haskellPackages.ghcide
 
       haskellPackages.cabal-install
       haskellPackages.hasktags

@@ -83,7 +83,7 @@ import Data.Bits (Bits(..))
 import Debug.Trace
 
 import Control.Concurrent
-import System.IO.Unsafe
+-- import System.IO.Unsafe
 import System.IO.Temp ()
 import System.FilePath ()
 import Numeric.Natural
@@ -249,7 +249,7 @@ makeMptcpSocket = do
 
 
 makeMetricsSocket :: IO NetlinkSocket
-makeMetricsSocket = return $ makeSocketGeneric eNETLINK_SOCK_DIAG
+makeMetricsSocket = makeSocketGeneric eNETLINK_SOCK_DIAG
 
 
 -- A utility function - threadDelay takes microseconds, which is slightly annoying.
@@ -279,8 +279,7 @@ updateSubflowMetrics sockMetrics subflow = do
 FilePath -- ^Path towards the program to get cwnd limits
 -}
 startMonitorConnection :: CLIArguments
-                          -- |elapsed time since starting the thread
-                          -- (very coarse approximation)
+                          --  | elapsed time since starting the thread (very coarse approximation)
                           -> Natural
                           -> MptcpSocket
                           -> NetlinkSocket
@@ -339,8 +338,7 @@ startMonitorConnection cliArgs elapsed mptcpSock sockMetrics mConn = do
 {- Logs to a json file the results of sockDiag
   -}
 logStatistics :: FilePath
-              -- |Current delay
-              -> Natural
+              -> Natural             -- ^ Current delay
               -> MptcpConnection
               -> [SockDiagMetrics]
               -> IO ()
@@ -366,7 +364,6 @@ logStatistics filename delay mptcpConn metrics = do
 getCapsForConnection :: FilePath     -- ^Statistics file
                         -> FilePath  -- ^Path towards the PM optimizer
                         -> MptcpConnection
-                        -- |Test
                         -> [SockDiagMetrics]
                         -> IO (Maybe [Word32])
 getCapsForConnection filename program mptcpConn metrics = do
@@ -870,10 +867,12 @@ main = do
   routeNl <- forkIO trackSystemInterfaces
 
   debugM "main" "socket created. MPTCP Family id "
+
+  mptcpSocket <- makeMptcpSocket
+  let (MptcpSocket sock fid) = mptcpSocket
   mcastMptcpGroups <- getMulticastGroups sock fid
   mapM_ Prelude.print mcastMptcpGroups
 
-  let mptcpSocket = (MptcpSocket sock fid)
 
   filteredConns <- case Main.filter options of
       Nothing -> return Nothing
