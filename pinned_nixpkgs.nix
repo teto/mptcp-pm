@@ -4,6 +4,7 @@ let
         packageOverrides = hnew: hold: with prev.haskell.lib;{
 
           ip = dontCheck hold.ip;
+          bytebuild = dontCheck hold.bytebuild;
 
           # ip = dontCheck overrideSrc hold.ip {
           #   src = prev.fetchFromGitHub {
