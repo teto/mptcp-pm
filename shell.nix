@@ -3,7 +3,7 @@
   nixpkgs ? import ./pinned_nixpkgs.nix
   # nixpkgs ? import <nixpkgs> {}
   # , compilerName ? "ghc8101" # not supported yet
-  , compilerName ? "ghc883"
+  , compilerName ? "ghc884"
 }:
 
 let
