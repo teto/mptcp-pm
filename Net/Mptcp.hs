@@ -277,7 +277,7 @@ genV4SubflowAddress attr ip = (fromEnum attr, runPut $ putWord32be w32)
     w32 = getIPv4 ip
 
 genV6SubflowAddress :: MptcpAttr -> IPv6 -> (Int, ByteString)
-genV6SubflowAddress addr = undefined
+genV6SubflowAddress _addr = undefined
 
 mptcpListToAttributes :: [MptcpAttribute] -> Attributes
 mptcpListToAttributes attrs = Map.fromList $Prelude.map attrToPair attrs
@@ -422,8 +422,8 @@ hasFamily = Prelude.any (isAttribute (SubflowFamily eAF_INET))
 -- REQUIRES: LOC_ID / TOKEN
 -- TODO pass TcpConnection 
 resetConnectionPkt :: MptcpSocket -> [MptcpAttribute] -> MptcpPacket
-resetConnectionPkt (MptcpSocket sock fid) attrs = let
-    cmd = MPTCP_CMD_REMOVE
+resetConnectionPkt (MptcpSocket _sock fid) attrs = let
+    _cmd = MPTCP_CMD_REMOVE
   in
     assert (hasLocAddr attrs) $ genMptcpRequest fid MPTCP_CMD_REMOVE False attrs
 
@@ -447,7 +447,7 @@ subflowAttrs con = [
 capCwndPkt :: MptcpSocket -> MptcpConnection
               -> Word32  -- ^Limit to apply to congestion window
               -> TcpConnection -> MptcpPacket
-capCwndPkt (MptcpSocket sock fid) mptcpCon limit sf =
+capCwndPkt (MptcpSocket _ fid) mptcpCon limit sf =
     assert (hasFamily attrs) pkt
     where
         oldPkt = genMptcpRequest fid MPTCP_CMD_SND_CLAMP_WINDOW False attrs
@@ -462,8 +462,8 @@ connectionAttrs con = [ MptcpAttrToken $ connectionToken con ]
 
 -- sport/backup/intf are optional
 newSubflowPkt :: MptcpSocket -> MptcpConnection -> TcpConnection -> MptcpPacket
-newSubflowPkt (MptcpSocket sock fid) mptcpCon sf = let
-    cmd = MPTCP_CMD_SUB_CREATE
+newSubflowPkt (MptcpSocket _ fid) mptcpCon sf = let
+    _cmd = MPTCP_CMD_SUB_CREATE
     attrs = connectionAttrs mptcpCon ++ subflowAttrs sf
     pkt = genMptcpRequest fid MPTCP_CMD_SUB_CREATE False attrs
   in
