@@ -37,7 +37,7 @@ import Net.Mptcp
 import Net.Mptcp.PathManager
 import Net.Mptcp.PathManager.Default
 import Net.Tcp
-import Net.IP
+-- import Net.IP
 
 import Net.SockDiag.Constants
 import Net.Tcp.Constants
@@ -72,7 +72,7 @@ import Data.Serialize.Get (runGet)
 import Data.Serialize.Put
 -- import Data.Either (fromRight)
 import Data.ByteString (ByteString)
-import Data.ByteString.Lazy (writeFile, readFile)
+import Data.ByteString.Lazy as BL
 
 import qualified Data.Map as Map
 import qualified Data.Set as Set
@@ -114,8 +114,6 @@ import System.Log.Handler.Simple (
     verboseStreamHandler
     )
 
--- STM = State Thread Monad ST monad
-import qualified Data.HashMap.Strict as HM
 
 -- |Delay between 2 successful loggings
 onSuccessSleepingDelayMs :: Natural
@@ -146,9 +144,9 @@ data MyState = MyState {
 type GState a = State MyState a
 
 -- https://stackoverflow.com/questions/51407547/how-to-update-a-field-of-a-json-object
-addJsonKey :: Data.Text.Text -> Value -> Value -> Value
-addJsonKey key val (Object xs) = Object $ HM.insert key val xs
-addJsonKey _ _ xs = xs
+-- addJsonKey :: Data.Text.Text -> Value -> Value -> Value
+-- addJsonKey key val (Object xs) = Object $ HM.insert key val xs
+-- addJsonKey _ _ xs = xs
 
 
 dumpCommand :: MptcpGenlEvent -> String
@@ -335,26 +333,6 @@ startMonitorConnection cliArgs elapsed mptcpSock sockMetrics mConn = do
     startMonitorConnection cliArgs (elapsed + duration) mptcpSock sockMetrics mConn
 
 
-{- Logs to a json file the results of sockDiag
-  -}
-logStatistics :: FilePath
-              -> Natural             -- ^ Current delay
-              -> MptcpConnection
-              -> [SockDiagMetrics]
-              -> IO ()
-logStatistics filename delay mptcpConn metrics = do
-    let jsonConn = (toJSON mptcpConn)
-    let merged = lodashMerge jsonConn (object [
-          "delay" .= delay,
-          "subflows" .= metrics
-          ])
-
-    let jsonBs = encodePretty merged
-    let subflowCount = length $ subflows mptcpConn
-    infoM "main" $ "Saving to " ++ filename
-
-    -- throws in case of error
-    Data.ByteString.Lazy.writeFile filename jsonBs
 
 {-
   | This should return a list of cwnd to respect a certain scenario
@@ -878,7 +856,7 @@ main = do
       Nothing -> return Nothing
       Just filename -> do
           infoM "main" ("Loading connections whitelist from " ++ filename ++ "...")
-          filteredConnectionsStr <- Data.ByteString.Lazy.readFile filename
+          filteredConnectionsStr <- BL.readFile filename
           case Data.Aeson.eitherDecode filteredConnectionsStr of
           -- case Data.Aeson.eitherDecode "[]" of
             Left errMsg -> error ("Failed loading " ++ filename ++ ":\n" ++ errMsg)
