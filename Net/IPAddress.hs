@@ -1,8 +1,4 @@
 -- |
--- Module      :  Ip
--- Copyright   :  teto 2019
--- License     :  GPL3
---
 -- Description
 --
 {-# OPTIONS_GHC -fno-warn-orphans #-}
@@ -13,25 +9,11 @@ import Net.IPv4
 import Net.IPv6
 import Data.Serialize.Get
 import Data.Serialize.Put
--- import Data.Word (Word32)
-import Data.ByteString (ByteString)
--- import Data.Either (fromRight)
+import Data.ByteString
 import System.Linux.Netlink.Constants as NLC
 
--- for replicateM
 import Control.Monad
 
-
--- check ip link / localhost seems to be 1
--- global interface index
--- TODO should remove
--- localhostIntfIdx :: Word32
--- localhostIntfIdx = 1
-
--- TODO should consult
--- getInterfaceIdFromIP :: IP -> Word32
--- getInterfaceIdFromIP ip =
---   1
 
 getIPv4FromByteString :: ByteString -> Either String IPv4
 getIPv4FromByteString val =

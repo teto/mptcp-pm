@@ -42,11 +42,11 @@ import Net.Mptcp.Constants
 import qualified Data.Set as Set
 import Data.Aeson
 import GHC.Generics
-import Control.Monad.Trans.State (State, StateT, put, get)
+import Control.Monad.Trans.State ()
 
 data MptcpSocket = MptcpSocket NetlinkSocket Word16
 instance Show MptcpSocket where
-  show sock = let (MptcpSocket nlSock fid) = sock in ("Mptcp netlink socket: " ++ show fid)
+  show sock = let (MptcpSocket _ fid) = sock in ("Mptcp netlink socket: " ++ show fid)
 
 type MptcpPacket = GenlPacket NoData
 
@@ -82,7 +82,7 @@ data RemoteId = RemoteId {
 remoteIdFromAttributes :: Attributes -> RemoteId
 remoteIdFromAttributes attrs = let
     (SubflowDestPort dport) = fromJust $ makeAttributeFromMaybe MPTCP_ATTR_DPORT attrs
-    (SubflowFamily family) = fromJust $ makeAttributeFromMaybe MPTCP_ATTR_FAMILY attrs
+    -- (SubflowFamily _) = fromJust $ makeAttributeFromMaybe MPTCP_ATTR_FAMILY attrs
     SubflowDestAddress destIp = ipFromAttributes False attrs
 
     -- (SubflowDestPort dport) = fromJust $ makeAttributeFromMaybe MPTCP_ATTR_DPORT attrs
@@ -158,7 +158,7 @@ getPort val =
 -- The message type/ flag / sequence number / pid  (0 => from the kernel)
 -- https://elixir.bootlin.com/linux/latest/source/include/uapi/linux/netlink.h#L54
 fixHeader :: MptcpSocket -> Bool -> MptcpPacket -> MptcpPacket
-fixHeader (MptcpSocket _ fid) dump pkt = let
+fixHeader _ dump pkt = let
     myHeader = Header 0 (flags .|. fNLM_F_ACK) 0 0
     flags = if dump then fNLM_F_REQUEST .|. fNLM_F_MATCH .|. fNLM_F_ROOT else fNLM_F_REQUEST
   in
