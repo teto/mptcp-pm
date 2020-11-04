@@ -37,10 +37,10 @@ import Net.Mptcp
 import Net.Mptcp.PathManager
 import Net.Mptcp.PathManager.Default
 import Net.Tcp
+-- import Net.Tcp.Constants
 -- import Net.IP
 
 import Net.SockDiag.Constants
-import Net.Tcp.Constants
 import Net.Mptcp.Constants
 
 import Text.Read (readMaybe)
