@@ -27,13 +27,6 @@ in
     # echo " let g:airline_section_y = airline#section#create_right(['lsp_status'])" > .nvimrc
     # echo "set statusline=%!StatusLSP()" > .nvimrc
     shellHook = ''
-      # check if it's still needed ?
-      export NVIM_LOG_FILE=/tmp/log
-
-      export ASAN_OPTIONS="log_path=./test.log:abort_on_error=1"
-      export UBSAN_OPTIONS=print_stacktrace=1
-      export VIMRUNTIME=/home/teto/neovim3/runtime
-
     '';
   }
 
