@@ -8,7 +8,7 @@ let
   compiler = pkgs.haskell.packages."${compilerName}";
   pkgs = nixpkgs.pkgs;
 
-  my_pkg = (import ./. { inherit compiler; } );
+  # my_pkg = (import ./. { inherit compiler; } );
 in
   pkgs.mkShell {
     name = "mptcppm";
@@ -19,10 +19,13 @@ in
       haskellPackages.stylish-haskell
       haskellPackages.hlint
       haskellPackages.haskell-language-server
+      haskellPackages.hasktags
     ];
 
     # ASAN_OPTIONS=abort_on_error=1
     # halt_on_error=0"
+    # echo " let g:airline_section_y = airline#section#create_right(['lsp_status'])" > .nvimrc
+    # echo "set statusline=%!StatusLSP()" > .nvimrc
     shellHook = ''
       # check if it's still needed ?
       export NVIM_LOG_FILE=/tmp/log
@@ -30,17 +33,10 @@ in
       export ASAN_OPTIONS="log_path=./test.log:abort_on_error=1"
       export UBSAN_OPTIONS=print_stacktrace=1
       export VIMRUNTIME=/home/teto/neovim3/runtime
+
     '';
   }
 
-  # (my_pkg.envFunc { withHoogle = true; }).overrideAttrs (oa: {
-  #   nativeBuildInputs = oa.nativeBuildInputs ++ (with pkgs; [
-  #     haskellPackages.ghcide
-  #     haskellPackages.cabal-install
-  #     haskellPackages.hasktags
-  #     # haskellPackages.nvim-hs-ghcid # too old, won't support nvim-hs-contrib 2
-  #     # haskellPackages.gutenhasktags  # taken from my overlay
-  #   ]);
   # # export HIE_HOOGLE_DATABASE=$NIX_GHC_DOCDIR as DOCDIR doesn't exist it won't work
   # # or an interesting
   # # shellHook = "eval $(grep export ${ghc}/bin/ghc)";
@@ -56,7 +52,3 @@ in
   #   echo "make headers_install in the linux kernel"
   #   echo "cabal clean"
   #   echo "cabal configure --extra-include-dirs=/home/teto/mptcp/build/usr/include -v3"
-  #   echo "to run the daemon "
-  #   echo "buildNrun"
-  # '';
-  # })

@@ -38,7 +38,7 @@ import Net.Mptcp.PathManager
 import Net.Mptcp.PathManager.Default
 import Net.Tcp
 -- import Net.Tcp.Constants
--- import Net.IP
+import Net.IP
 
 import Net.SockDiag.Constants
 import Net.Mptcp.Constants
@@ -72,12 +72,12 @@ import Data.Serialize.Get (runGet)
 import Data.Serialize.Put
 -- import Data.Either (fromRight)
 import Data.ByteString (ByteString)
-import Data.ByteString.Lazy as BL
+import qualified Data.ByteString.Lazy as BL
 
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 
-import qualified Data.Text
+-- import qualified Data.Text
 import Data.Bits (Bits(..))
 
 import Debug.Trace
@@ -91,8 +91,6 @@ import System.IO (stderr)
 import Data.Aeson
 -- to merge MptcpConnection export and Metrics
 import Data.Aeson.Extra.Merge  (lodashMerge)
-
-import Data.Aeson.Encode.Pretty (encodePretty)
 
 -- for getEnvDefault, to get TMPDIR value.
 -- we could pass it as an argument
@@ -246,6 +244,7 @@ makeMptcpSocket = do
     Just fid -> return  (MptcpSocket sock (trace ("family id"++ show fid ) fid))
 
 
+
 makeMetricsSocket :: IO NetlinkSocket
 makeMetricsSocket = makeSocketGeneric eNETLINK_SOCK_DIAG
 
@@ -260,11 +259,13 @@ updateSubflowMetrics :: NetlinkSocket -> TcpConnection -> IO SockDiagMetrics
 updateSubflowMetrics sockMetrics subflow = do
     putStrLn "Updating subflow metrics"
     let queryPkt = genQueryPacket (Right subflow) [TcpListen, TcpEstablished]
+
          [InetDiagCong, InetDiagInfo, InetDiagMeminfo]
     sendPacket sockMetrics queryPkt
-    putStrLn "Sent the TCP SS request"
 
+    putStrLn "Sent the TCP SS request"
     putStrLn "Starting inspecting answers"
+
     answers <- recvMulti sockMetrics
     let metrics_m = inspectIdiagAnswers answers
     -- filter ? keep only valud ones ?
@@ -283,7 +284,7 @@ startMonitorConnection :: CLIArguments
                           -> NetlinkSocket
                           -> MVar MptcpConnection -> IO ()
 startMonitorConnection cliArgs elapsed mptcpSock sockMetrics mConn = do
-    let (MptcpSocket sock familyId) = mptcpSock
+    let (MptcpSocket sock _) = mptcpSock
     myId <- myThreadId
     putStr $ show myId ++ ": monitoring connection at *time* " ++ (show elapsed) ++ " ..."
     -- as long as conn is not empty we keep going ?

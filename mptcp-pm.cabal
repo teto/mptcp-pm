@@ -20,10 +20,10 @@ Source-repository head
   location:   https://github.com/teto/mptcp-pm
 
 
-Flag Dev {
-  Description: Develop with a local netlink library
-  Default:     True
-}
+-- Flag Dev {
+--   Description: Develop with a local netlink library
+--   Default:     True
+-- }
 
 
 common shared-properties
