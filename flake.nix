@@ -7,18 +7,12 @@
   };
 
   outputs = { self, nixpkgs, flake-utils }:
-    flake-utils.lib.eachDefaultSystem (system: rec {
-
-    # haskell.compiler."ghc"
-    packages.mptcppm = nixpkgs.legacyPackages."${system}".haskellPackages.callCabal2nix "mptcp-pm" ./. {};
-
-    defaultPackage = packages.mptcppm;
-  }) // {
-    overlay = self: prev: {
+    let
+      haskellOverlay = self: prev: {
       haskell = prev.haskell // {
         packageOverrides = hnew: hold: with prev.haskell.lib;{
 
-          ip = markUnbroken (dontCheck hold.ip);
+          ip = unmarkBroken (dontCheck hold.ip);
           bytebuild = dontCheck hold.bytebuild;
 
           # ip = dontCheck overrideSrc hold.ip {
@@ -68,5 +62,32 @@
         };
       };
     };
+    in
+    flake-utils.lib.eachDefaultSystem (system: rec {
+
+    # haskell.compiler."ghc"
+    packages.mptcppm = nixpkgs.legacyPackages."${system}".haskellPackages.developPackage {
+      root = ./.;
+      name = "mptcp-pm";
+      returnShellEnv = false;
+      withHoogle = true;
+      overrides = haskellOverlay;
+      modifier = drv:
+        pkgs.haskell.lib.addBuildTools drv (with pkgs.haskellPackages;
+        [
+          # ghcid
+          haskellPackages.cabal-install
+          haskellPackages.c2hs
+          haskellPackages.stylish-haskell
+          haskellPackages.hlint
+          haskellPackages.haskell-language-server
+          haskellPackages.hasktags
+        ]);
+    };
+
+    defaultPackage = packages.mptcppm;
+    # devShell = 
+  }) // {
+    # overlay = ;
   };
 }
