@@ -15,7 +15,8 @@ module Net.Tcp.Constants
 where
 
 import Data.Bits ()
-import Data.Word (Word32)
+import Data.Word ()
+import GHC.Generics (Generic)
 
 -- copy from include/net/tcp_states since it's not part of the user API
 #include <tcp_states.h>
@@ -35,7 +36,7 @@ import Data.Word (Word32)
 
 data TcpFlag = TcpFlagFin | TcpFlagSyn | TcpFlagRst | TcpFlagPsh
     | TcpFlagAck | TcpFlagUrg | TcpFlagEcn | TcpFlagCwr | TcpFlagNonce
-        deriving (Eq, Show, Bounded)
+        deriving (Eq, Show, Bounded, Generic)
 
 -- values are power of 2 of the flag
 instance Enum TcpFlag where
