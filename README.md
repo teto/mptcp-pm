@@ -110,4 +110,6 @@ ss package sends by default
 -- #define TIPC_SS_CONN ((1<<SS_ESTABLISHED)|(1<<SS_LISTEN)|(1<<SS_CLOSE))
 
 
+# Acknowledgements
 
+This work is sponsored by NGI
