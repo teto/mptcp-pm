@@ -1,6 +1,6 @@
 cabal-version: 3.0
 name: mptcp-pm
-version: 0.0.4
+version: 0.0.3
 license: GPL-3.0-only
 license-file: LICENSE
 build-type: Simple
@@ -30,7 +30,7 @@ common shared-properties
     default-language: Haskell2010
     -- -fno-warn-unused-imports
     -- -fforce-recomp  makes it build twice
-    ghc-options: -Wall -fno-warn-unused-binds -fno-warn-unused-matches -fprof-auto
+    ghc-options: -Wall -fno-warn-unused-binds -fno-warn-unused-matches
     build-depends: netlink >= 1.1.2.0
 
 
@@ -44,7 +44,7 @@ library
     include-dirs:    headers
     default-extensions: DeriveGeneric
     autogen-modules: Net.Mptcp.Constants, Net.SockDiag.Constants, Net.Tcp.Constants
-    build-depends: base >= 4.12 ,
+    build-depends: base >= 4.12 && < 4.17,
       containers
         , bytestring
        -- , fast-logger
@@ -91,7 +91,7 @@ executable mptcp-manager
         aeson
        , aeson-pretty
        , aeson-extra
-       , base >= 4.12
+       , base >= 4.12 && < 4.17
        , bytestring
        , containers
        , mptcp-pm
@@ -111,7 +111,7 @@ executable mptcp-manager
     default-extensions: DeriveGeneric
     main-is: daemon.hs
     hs-source-dirs: hs/
-    ghc-options: -threaded -fprof-auto -rtsopts
+    ghc-options: -threaded -rtsopts
 
 Test-Suite test-tcp
   -- 2 types supported, exitcode is based on ... exit codes ....
@@ -119,7 +119,7 @@ Test-Suite test-tcp
   default-language: Haskell2010
   main-is:            Main.hs
   hs-source-dirs:     test
-  ghc-options: -threaded -fprof-auto -rtsopts
+  ghc-options: -threaded -rtsopts
   build-depends:      base >=4.12
                      , HUnit
                      , mptcp-pm
