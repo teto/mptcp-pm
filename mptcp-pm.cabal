@@ -19,11 +19,15 @@ Source-repository head
   type:       git
   location:   https://github.com/teto/mptcp-pm
 
+Flag WithPolysemy {
+  Description: Add polysemy plugin
+  Default:     True
+}
 
--- Flag Dev {
---   Description: Develop with a local netlink library
---   Default:     True
--- }
+Flag Dev {
+  Description: Relax constraints
+  Default:     True
+}
 
 
 common shared-properties
@@ -31,7 +35,33 @@ common shared-properties
     -- -fno-warn-unused-imports
     -- -fforce-recomp  makes it build twice
     ghc-options: -Wall -fno-warn-unused-binds -fno-warn-unused-matches
-    build-depends: netlink >= 1.1.2.0
+    build-depends:
+      -- TODO remove that boundary
+      netlink >= 1.1.1.0
+      , co-log
+      , co-log-core
+      , co-log-polysemy
+      , formatting
+      , readable
+      , polysemy
+      , polysemy-log
+      , polysemy-log-co
+
+    default-extensions:
+        FlexibleContexts
+        , StrictData
+        , DataKinds
+        , FlexibleContexts
+        , GADTs
+        , LambdaCase
+        -- , OverloadedStrings
+        , PolyKinds
+        , RankNTypes
+        , ScopedTypeVariables
+        , TemplateHaskell
+        , TypeApplications
+        , TypeOperators
+        , TypeFamilies
 
 
 library
@@ -46,9 +76,8 @@ library
     autogen-modules: Net.Mptcp.Constants, Net.SockDiag.Constants, Net.Tcp.Constants
     build-depends: base >= 4.12 && < 4.17,
       containers
-        , bytestring
-       -- , fast-logger
-       , katip
+      , readable
+      , bytestring
        , process
        , cereal
        , enumset
@@ -56,6 +85,7 @@ library
        , bytestring-conversion
        , text
        -- todo get rid of it
+      -- for liftIO
        , mtl
        -- for merge
        , aeson
@@ -65,7 +95,7 @@ library
        , unordered-containers
        -- to create temp folder/files
        , transformers
-    hs-source-dirs: .
+    hs-source-dirs: src/
     build-tool-depends: c2hs:c2hs
     Exposed-Modules:
       Net.SockDiag
@@ -86,7 +116,6 @@ library
 executable mptcp-manager
     import: shared-properties
     default-language: Haskell2010
-    -- ghc-options: -prof
     build-depends:
         aeson
        , aeson-pretty
@@ -98,7 +127,7 @@ executable mptcp-manager
        , optparse-applicative
        , transformers
        -- , fast-logger
-       , hslogger
+       -- , hslogger
        , ip
        , text
        , mtl
@@ -107,11 +136,12 @@ executable mptcp-manager
        , temporary
        , filepath
        -- to use Simple module. Try to do without
-       , netlink >= 1.1.2.0
+       , netlink >= 1.1.1.0
     default-extensions: DeriveGeneric
-    main-is: daemon.hs
-    hs-source-dirs: hs/
+    main-is: Main.hs
+    hs-source-dirs: src/app
     ghc-options: -threaded -rtsopts
+
 
 Test-Suite test-tcp
   -- 2 types supported, exitcode is based on ... exit codes ....
