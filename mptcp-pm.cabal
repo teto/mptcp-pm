@@ -35,7 +35,32 @@ common shared-properties
     -- -fno-warn-unused-imports
     -- -fforce-recomp  makes it build twice
     ghc-options: -Wall -fno-warn-unused-binds -fno-warn-unused-matches
-    build-depends: netlink >= 1.1.2.0
+    build-depends:
+      -- TODO remove that boundary
+      netlink >= 1.1.2.0
+      , co-log
+      , co-log-core
+      , co-log-polysemy
+      , co-log-polysemy-formatting
+      , formatting
+      , readable
+      , polysemy
+
+    default-extensions:
+        FlexibleContexts
+        , StrictData
+        , DataKinds
+        , FlexibleContexts
+        , GADTs
+        , LambdaCase
+        -- , OverloadedStrings
+        , PolyKinds
+        , RankNTypes
+        , ScopedTypeVariables
+        , TemplateHaskell
+        , TypeApplications
+        , TypeOperators
+        , TypeFamilies
 
 
 library
