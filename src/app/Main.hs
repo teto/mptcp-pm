@@ -84,26 +84,27 @@ import Data.Aeson
 -- to merge MptcpConnection export and Metrics
 import Data.Aeson.Extra.Merge  (lodashMerge)
 import GHC.List (init)
+import Polysemy.Trace
 
 -- for getEnvDefault, to get TMPDIR value.
 -- we could pass it as an argument
 -- import System.Environment.Blank(getEnvDefault)
 
-import System.Log.Logger (
-    infoM
-    , debugM
-    , errorM
-    , Priority(DEBUG)
-    , Priority(INFO)
-    , setLevel, updateGlobalLogger
-    , setHandlers
-    , rootLoggerName
-    -- , saveGlobalLogger
-    -- , addHandler
-    )
-import System.Log.Handler.Simple (
-    verboseStreamHandler
-    )
+-- import System.Log.Logger (
+--     infoM
+--     , debugM
+--     , errorM
+--     , Priority(DEBUG)
+--     , Priority(INFO)
+--     , setLevel, updateGlobalLogger
+--     , setHandlers
+--     , rootLoggerName
+--     -- , saveGlobalLogger
+--     -- , addHandler
+--     )
+-- import System.Log.Handler.Simple (
+--     verboseStreamHandler
+--     )
 
 
 -- |Delay between 2 successful loggings
@@ -836,24 +837,27 @@ inspectIdiagAnswers packets =
   map inspectIDiagAnswer packets
 
 
-main :: IO ()
+main :: HasCallstack => IO ()
 main = do
 
   -- SETUP LOGGING (https://gist.github.com/ijt/1052896)
   -- streamHandler vs verboseStreamHandler
   myStreamHandler <- verboseStreamHandler stderr INFO
-  updateGlobalLogger rootLoggerName (setLevel DEBUG . setHandlers [myStreamHandler])
+  runLogAction @IO richMessageAction program
 
-  infoM "main" "Parsing command line..."
+program :: (WithLog r, Member Trace r) => Sem r ()
+program = do
+
+  logInfo "Parsing command line..."
   options <- execParser opts
-  infoM "main" "Creating MPTCP netlink socket..."
+  logInfo "Creating MPTCP netlink socket..."
 
 
-  infoM "main" "Now Tracking system interfaces..."
+  logInfo "Now Tracking system interfaces..."
   putMVar globalInterfaces Map.empty
   routeNl <- forkIO trackSystemInterfaces
 
-  debugM "main" "socket created. MPTCP Family id "
+  logDebug "socket created. MPTCP Family id "
 
   mptcpSocket <- makeMptcpSocket
   let (MptcpSocket sock fid) = mptcpSocket
@@ -864,14 +868,14 @@ main = do
   filteredConns <- case Main.filter options of
       Nothing -> return Nothing
       Just filename -> do
-          infoM "main" ("Loading connections whitelist from " ++ filename ++ "...")
+          logInfo ("Loading connections whitelist from " ++ filename ++ "...")
           filteredConnectionsStr <- BL.readFile filename
           case Data.Aeson.eitherDecode filteredConnectionsStr of
           -- case Data.Aeson.eitherDecode "[]" of
             Left errMsg -> error ("Failed loading " ++ filename ++ ":\n" ++ errMsg)
             Right list -> return list
 
-  infoM "main" ("Loading connections whitelisted connections..." ++ (show filteredConns))
+  logInfo ("Loading connections whitelisted connections..." ++ (show filteredConns))
 
   let globalState = MyState mptcpSocket Map.empty options filteredConns
 
