@@ -23,6 +23,11 @@ iproute2/misc/ss.c to see how `ss` utility interacts with the kernel
 -}
 {-# LANGUAGE OverloadedStrings #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
+{-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE StandaloneDeriving #-}
+-- {-# LANGUAGE DeriveGeneric         #-}
+-- {-# LANGUAGE DerivingStrategies         #-}
+-- {-# LANGUAGE DerivingVia         #-}
 
 module Main where
 
@@ -35,15 +40,16 @@ import           Net.SockDiag
 import           Net.SockDiag.Constants
 import           Net.Tcp
 
+import Control.Monad.Trans (liftIO)
 import           Control.Monad                          (foldM)
 -- import           Control.Monad.Trans                    (liftIO)
 import           Control.Monad.Trans.State              (State, StateT, execStateT, get, put)
 import           Data.Maybe                             (catMaybes)
-import           Data.Text                              ()
+import           Data.Text                              (Text)
 import           Foreign.C.Types                        (CInt)
 import           Options.Applicative                    hiding (ErrorMsg, empty, value)
 import qualified Options.Applicative                    (value)
-import           Prelude                                hiding (concat, init)
+import           Prelude                                hiding (concat, init, log)
 import           Text.Read                              (readMaybe)
 -- for eOK, ePERM
 import           Foreign.C.Error
@@ -83,12 +89,22 @@ import           System.IO.Temp                         ()
 -- to merge MptcpConnection export and Metrics
 import           Data.Aeson.Extra.Merge                 (lodashMerge)
 import           GHC.List                               (init)
-import           Colog.Polysemy
-import           Colog
+import           Colog.Core.Severity ()
+-- import Colog.Core.IO (logStringStdout)
+-- import Colog (logTextStdout)
+-- import Colog.Polysemy (runLogAction)
+
 import Polysemy
 import           Polysemy.Trace
+-- import qualified Polysemy.Log as log
+-- import qualified Polysemy.Log.Data.Log as Log
+-- import Polysemy.Log.Colog (interpretDataLogColog, interpretLogStdout)
 -- import           Polysemy.Embed
 -- import Colog.Actions
+import Polysemy.Log (Log)
+import qualified Polysemy.Log as Log
+import Polysemy.Log.Colog (interpretLogStdout)
+-- import Polysemy.Log.Colog
 
 -- for getEnvDefault, to get TMPDIR value.
 -- we could pass it as an argument
@@ -157,12 +173,12 @@ data CLIArguments = CLIArguments {
   , quiet    :: Bool
 
   -- Priority
-  , logLevel :: Severity
+  , logLevel :: Log.Severity
   }
 
 
-loggerName :: String
-loggerName = "main"
+-- loggerName :: String
+-- loggerName = "main"
 
 dumpSystemInterfaces :: IO()
 dumpSystemInterfaces = do
@@ -202,8 +218,17 @@ sample = CLIArguments
           ( long "log-level"
          <> help "Log level"
          <> showDefault
-         <> Options.Applicative.value Info
-         <> metavar "LOG_LEVEL" )
+         <> Options.Applicative.value Log.Info
+         <> metavar "LOG_LEVEL"
+        )
+
+deriving instance Read Log.Severity
+
+readConnectionRole :: ReadM Log.Severity
+readConnectionRole = eitherReader $ \arg -> case reads arg of
+  [(a, "")] -> return $ a
+  -- [("client", "")] -> return $ RoleClient
+  _ -> Left $ "readConnectionRole: cannot parse value `" ++ arg ++ "`"
 
 
 opts :: ParserInfo CLIArguments
@@ -280,8 +305,9 @@ recvMulti sock = do
   Maybe should expect a pathManager instance (and logger
 FilePath -- ^Path towards the program to get cwnd limits
 -}
-startMonitorConnection :: (Members '[Log String, Trace, Embed IO ] r)
-  => CLIArguments
+startMonitorConnection ::
+  (Members '[Log, Trace, Embed IO ] r) =>
+  CLIArguments
   --  | elapsed time since starting the thread (very coarse approximation)
   -> Natural
   -> MptcpSocket
@@ -295,8 +321,8 @@ startMonitorConnection cliArgs elapsed mptcpSock sockMetrics mConn = do
     -- for this connection
     -- query metrics for the whole MPTCP connection
     mptcpConn <- embed $ readMVar mConn
-    trace "Showing MPTCP connection"
-    trace $ show mptcpConn ++ "..."
+    Log.trace "Showing MPTCP connection"
+    Log.trace $ tshow mptcpConn <> "..."
     let _token = connectionToken mptcpConn
     let tmpdir = out cliArgs
 
@@ -313,17 +339,17 @@ startMonitorConnection cliArgs elapsed mptcpSock sockMetrics mConn = do
       Nothing -> return onSuccessSleepingDelayMs
       Just prog -> do
 
-          logDebug "Calling third party program"
+          Log.debug "Calling third party program"
 
           cwnds_m <- embed $ getCapsForConnection filename prog mptcpConn lastMetrics
           -- rename to waitingTime ? delay
           case cwnds_m of
               Nothing -> do
-                  logError "Couldn't fetch the values"
+                  Log.error "Couldn't fetch the values"
                   return onFailureSleepingDelay
               Just cwnds -> do
 
-                  logInfo $ "Requesting to set cwnds..." <> tshow cwnds
+                  Log.info $ "Requesting to set cwnds..." <> tshow cwnds
                   -- TODO fix
                   -- KISS for now (capCwndPkt mptcpSock )
                   let cwndPackets  = map (\(cwnd, sf) -> capCwndPkt mptcpSock mptcpConn cwnd sf) (zip cwnds (Set.toList $ subflows mptcpConn))
@@ -331,7 +357,7 @@ startMonitorConnection cliArgs elapsed mptcpSock sockMetrics mConn = do
                   embed $ mapM_ (sendPacket sock) cwndPackets
 
                   return onSuccessSleepingDelayMs
-    logDebug $ "Finished monitoring token. Waiting " <> tshow duration
+    Log.debug $ "Finished monitoring token. Waiting " <> tshow duration
     embed $ sleepMs duration
 
     -- call ourself again
@@ -358,7 +384,8 @@ getCapsForConnection filename prog mptcpConn metrics = do
     -- readProcessWithExitCode  binary / args / stdin
     (exitCode, stdout, stderrContent) <- readProcessWithExitCode prog [filename, show subflowCount] ""
 
-    logInfo $ "exitCode: " <> tshow exitCode
+    -- Info
+    putStrLn $ "exitCode: " ++ show exitCode
     putStrLn $ "stdout:\n" ++ stdout
     -- http://hackage.haskell.org/package/base/docs/Text-Read.html
     let values = (case exitCode of
@@ -390,7 +417,6 @@ instance Show GenlHeaderMptcp where
 inspectAnswers :: [GenlPacket NoData] -> IO ()
 inspectAnswers packets = do
   mapM_ inspectAnswer packets
-  logDebug "Finished inspecting answers"
 
 -- showPacketCustom :: GenlPacket NoData -> String
 -- showPacketCustom pkt = let
@@ -404,7 +430,7 @@ inspectAnswer :: GenlPacket NoData -> IO ()
 inspectAnswer (Packet _ (GenlData hdr NoData) attributes) = let
     cmd = genlCmd hdr
   in
-    logDebug $ tshow ("Inspecting answer custom:\n" ++ showHeaderCustom hdr
+    putStrLn $ show ("Inspecting answer custom:\n" ++ showHeaderCustom hdr
             ++ "Supposing it's a mptcp command: " ++ dumpCommand ( toEnum $ fromIntegral cmd))
 
 inspectAnswer pkt = putStrLn $ "Inspecting answer:\n" ++ showPacket pkt
@@ -520,7 +546,12 @@ registerMptcpConnection token subflow = (do
             -- create a new
             sockMetrics <- liftIO $ makeMetricsSocket
             -- start monitoring connection
-            threadId <- liftIO $ forkOS (startMonitorConnection cliArgs 0 mptcpSock sockMetrics newConn)
+            -- let threadId = undefined
+            threadId <- liftIO $ forkOS (
+            --   -- runLogAction @IO (contramap message logTextStdout) $ interpretDataLogColog @Message $ progData
+              runM $ traceToIO $ interpretLogStdout$
+                startMonitorConnection cliArgs 0 mptcpSock sockMetrics newConn
+              )
 
             -- putStrLn $ "Inserting new MVar "
             put (oldState {
@@ -579,7 +610,7 @@ dispatchPacket oldState (Packet hdr (GenlData genlHeader NoData) attributes) = l
                         -- TODO update state
 
                         putStrLn "List of requests made on new master:"
-                        mapM_ (\pkt -> sendPacket mptcpSockRaw (trace ("TOTO" ++ show pkt) pkt)) pkts
+                        mapM_ (\pkt -> sendPacket mptcpSockRaw pkt) pkts
                         let newState = oldState {
                             connections = Map.insert token (threadId, mvarConn) (connections oldState)
                         }
@@ -835,26 +866,27 @@ main = do
   -- streamHandler vs verboseStreamHandler
   -- myStreamHandler <- verboseStreamHandler stderr INFO
 
-  -- $ P.embedToFinal . P.runEmbedded lift
-  -- $ P.traceToIO
   putStrLn "Starting program"
 
-  runEmbedded $ runLogAction @IO richMessageAction program
+  -- logTextStdout
+  -- logStringStdout
+  -- _ <- runM $ traceToIO $ runLogAction @IO richMessageAction program
+  _ <- runM $ traceToIO $ interpretLogStdout program
   putStrLn "finished"
 
-program :: Members '[Log String, Trace, Embed IO] r => Sem r ()
+program :: (Members '[Log, Trace, Embed IO] r) => Sem r ()
 program = do
 
-  logInfo "Parsing command line..."
+  -- Log.info "Parsing command line..." :: TS.Text
   options <- embed $ execParser opts
-  logInfo "Creating MPTCP netlink socket..."
+  Log.info ("Creating MPTCP netlink socket..." :: Text)
 
 
-  logInfo "Now Tracking system interfaces..."
+  Log.info "Now Tracking system interfaces..."
   embed $ putMVar globalInterfaces Map.empty
   routeNl <- embed $ forkIO trackSystemInterfaces
 
-  logDebug "socket created. MPTCP Family id "
+  Log.debug "socket created. MPTCP Family id "
 
   mptcpSocket <- embed makeMptcpSocket
   let (MptcpSocket sock fid) = mptcpSocket
@@ -862,17 +894,18 @@ program = do
   embed $ mapM_ Prelude.print mcastMptcpGroups
 
 
+  -- use fmap instead
   filteredConns <- case Main.filter options of
       Nothing -> return Nothing
       Just filename -> do
-          logInfo ("Loading connections whitelist from " ++ filename ++ "...")
+          Log.info ("Loading connections whitelist from " <> tshow filename <> "...")
           filteredConnectionsStr <- embed $ BL.readFile filename
           case Data.Aeson.eitherDecode filteredConnectionsStr of
           -- case Data.Aeson.eitherDecode "[]" of
             Left errMsg -> error ("Failed loading " ++ filename ++ ":\n" ++ errMsg)
             Right list  -> return list
 
-  logInfo ("Loading connections whitelisted connections..." <> (tshow filteredConns))
+  Log.info ("Loading connections whitelisted connections..." <> (tshow filteredConns))
 
   let globalState = MyState mptcpSocket Map.empty options filteredConns
 

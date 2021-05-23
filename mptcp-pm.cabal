@@ -37,14 +37,15 @@ common shared-properties
     ghc-options: -Wall -fno-warn-unused-binds -fno-warn-unused-matches
     build-depends:
       -- TODO remove that boundary
-      netlink >= 1.1.2.0
+      netlink >= 1.1.1.0
       , co-log
       , co-log-core
       , co-log-polysemy
-      , co-log-polysemy-formatting
       , formatting
       , readable
       , polysemy
+      , polysemy-log
+      , polysemy-log-co
 
     default-extensions:
         FlexibleContexts
@@ -75,13 +76,8 @@ library
     autogen-modules: Net.Mptcp.Constants, Net.SockDiag.Constants, Net.Tcp.Constants
     build-depends: base >= 4.12 && < 4.17,
       containers
-      , co-log-core
-      , co-log-polysemy
       , readable
-      , polysemy
       , bytestring
-       -- , fast-logger
-       , katip
        , process
        , cereal
        , enumset
@@ -89,6 +85,7 @@ library
        , bytestring-conversion
        , text
        -- todo get rid of it
+      -- for liftIO
        , mtl
        -- for merge
        , aeson
@@ -133,7 +130,7 @@ executable mptcp-manager
        -- , hslogger
        , ip
        , text
-       -- , mtl
+       , mtl
        , cereal
        , process
        , temporary

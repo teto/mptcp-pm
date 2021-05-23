@@ -1,3 +1,5 @@
+[![Hackage][hk-img]][hk]
+
 This is a userspace path manager for the [linux multipath TCP
 kernel][mptcp-fork], starting from version v0.95.
 
@@ -51,5 +53,7 @@ header, which could be added/modifier later instead ! (to increase purity in the
 
 This work is sponsored by [NGI][ngi].
 
+[hk-img]: https://img.shields.io/hackage/v/mptcp-pm.svg?logo=haskell
+[hk]: https://hackage.haskell.org/package/mptcp-pm
 [mptcp-fork]: http://multipath-tcp.org/
 [ngi]: https://www.ngi.eu/

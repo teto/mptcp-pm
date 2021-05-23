@@ -26,14 +26,14 @@
 
           co-log-polysemy = doJailbreak (hold.co-log-polysemy);
 
-          # netlink = (overrideSrc hold.netlink {
-          #   src = pkgs.fetchFromGitHub {
-          #     owner = "teto";
-          #     repo = "netlink-hs";
-          #     rev = "090a48ebdbc35171529c7db1bd420d227c19b76d";
-          #     sha256 = "sha256-qopa1ED4Bqk185b1AXZ32BG2s80SHDSkCODyoZfnft0=";
-          #   };
-          # });
+          netlink = (overrideSrc hold.netlink {
+            src = pkgs.fetchFromGitHub {
+              owner = "teto";
+              repo = "netlink-hs";
+              rev = "090a48ebdbc35171529c7db1bd420d227c19b76d";
+              sha256 = "sha256-qopa1ED4Bqk185b1AXZ32BG2s80SHDSkCODyoZfnft0=";
+            };
+          });
         };
       in rec {
 
