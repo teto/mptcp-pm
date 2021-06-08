@@ -275,7 +275,7 @@ updateSubflowMetrics sockMetrics subflow = do
     putStrLn "Sent the TCP SS request"
     putStrLn "Starting inspecting answers"
 
-    answers <- recvMulti sockMetrics
+    answers <- Main.recvMulti sockMetrics
     let metrics_m = inspectIdiagAnswers answers
     -- filter ? keep only valud ones ?
     return $ head (catMaybes metrics_m)
@@ -292,7 +292,7 @@ recvMulti sock = do
         then if isDone (last pkts)
              -- This is fine because first would have complained before
              then return $ init pkts
-             else (pkts ++) <$> recvMulti sock
+             else (pkts ++) <$> Main.recvMulti sock
         else return pkts
   where
     isMulti = isFlagSet fNLM_F_MULTI . messageFlags . packetHeader
