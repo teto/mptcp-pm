@@ -1,10 +1,16 @@
 source-repository-package
   type: git
   location: https://github.com/Ongy/netlink-hs
+  tag: b0f3ab9a4766a3da7b26991e404695154ee74556
+  --sha256:sha256-x3DqqNhevWHV13yRRcjIiBguCGst5olb7tQzPyshduE=
 
+
+-- https://input-output-hk.github.io/haskell.nix/tutorials/source-repository-hashes/#handling-git-repositories-in-projects
 source-repository-package
   type: git
-  location: https://github.com/kowainik/co-log.git
+  location: https://github.com/teto/co-log.git
   subdir: co-log-polysemy
+  tag: 5aecf831b52ee3debc58dc12b3f699fba37ee964
+  --sha256:sha256-7Z79t9XBBGata6r1bzGH95ro2UcIhdxJnFtbXBIRDQQ=
 
 packages: .

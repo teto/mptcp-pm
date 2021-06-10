@@ -87,17 +87,9 @@ import           System.IO.Temp                         ()
 import           Data.Aeson.Extra.Merge                 (lodashMerge)
 import           GHC.List                               (init)
 import           Colog.Core.Severity ()
--- import Colog.Core.IO (logStringStdout)
--- import Colog (logTextStdout)
--- import Colog.Polysemy (runLogAction)
 
 import Polysemy
 import           Polysemy.Trace
--- import qualified Polysemy.Log as log
--- import qualified Polysemy.Log.Data.Log as Log
--- import Polysemy.Log.Colog (interpretDataLogColog, interpretLogStdout)
--- import           Polysemy.Embed
--- import Colog.Actions
 import Polysemy.Log (Log)
 import qualified Polysemy.Log as Log
 import Polysemy.Log.Colog (interpretLogStdout)
