@@ -755,7 +755,7 @@ data SockDiagMetrics = SockDiagMetrics {
   sockDiagMsg       :: SockDiagMsg
   -- subflowSubflow :: TcpConnection
   , sockdiagMetrics :: [SockDiagExtension]
-}
+} deriving Generic
 
 -- type SockDiagExtension2 = SockDiagExtension
 instance ToJSON SockDiagExtension where

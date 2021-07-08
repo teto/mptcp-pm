@@ -1,7 +1,4 @@
 {-|
-    ipSrc <- IPAddress . pack <$> replicateM (4*8) getWord8
-    -- ipSrc = IPAddress . pack <$> replicateM (4*8) getWord8
-    ipDst <- IPAddress . pack <$> replicateM (4*8) getWord8 
 Module      : IDiag
 Description : Implementation of mptcp netlink path manager
 Maintainer  : matt
@@ -83,7 +80,7 @@ data InetDiagSockId  = InetDiagSockId  {
   , idiag_intf :: Word32    -- ^Interface id
   , idiag_cookie :: Word64  -- ^To specifically request an sockid
 
-} deriving (Eq, Show)
+} deriving (Eq, Show, Generic)
 
 {-# OPTIONS_GHC -Wno-incomplete-patterns #-}
 
@@ -122,7 +119,7 @@ data SockDiagMsg = SockDiagMsg {
   , idiag_wqueue :: Word32
   , idiag_uid :: Word32
   , idiag_inode :: Word32
-} deriving (Eq, Show)
+} deriving (Eq, Show, Generic)
 
 {-# LANGUAGE FlexibleInstances #-}
 
@@ -202,8 +199,8 @@ connectionFromDiag :: SockDiagMsg
 connectionFromDiag msg =
   let sockid = idiag_sockid msg in
   TcpConnection {
-    srcIp = fromRight (error "no default") (getIPFromByteString (idiag_family msg) (idiag_src sockid))
-    , dstIp = fromRight (error "no default") (getIPFromByteString (idiag_family msg) (idiag_dst sockid))
+    srcIp = fromRight (error "no default for srcIp") (getIPFromByteString (idiag_family msg) (idiag_src sockid))
+    , dstIp = fromRight (error "no default for destIp") (getIPFromByteString (idiag_family msg) (idiag_dst sockid))
     , srcPort = idiag_sport sockid
     , dstPort = idiag_dport sockid
     , priority = Nothing
@@ -510,23 +507,10 @@ loadExtension key value = let
     -- InetDiagNone -> Nothing
     InetDiagInfo -> Just getDiagTcpInfo
     InetDiagVegasinfo -> Just getTcpVegasInfo
-    -- InetDiagTos -> Nothing
-    -- InetDiagTclass -> Nothing
-    -- InetDiagSkmeminfo -> Nothing
     InetDiagShutdown -> Just getShutdown
     InetDiagMeminfo  -> Just getMemInfo
-    -- InetDiagDctcpinfo -> Nothing
-    -- InetDiagProtocol -> Nothing
-    -- InetDiagSkv6only -> Nothing
-    -- InetDiagLocals -> Nothing
-    -- InetDiagPeers -> Nothing
-    -- InetDiagPad -> Nothing
     -- requires CAP_NET_ADMIN
     InetDiagMark -> Just getDiagMark
-    -- InetDiagBbrinfo -> Nothing
-    -- InetDiagClassId -> Nothing
-    -- InetDiagMd5sig -> Nothing
-    -- InetDiagMax -> Nothing
     _ -> Nothing
     -- _ -> case decode value of
                         -- Right x -> Just x
