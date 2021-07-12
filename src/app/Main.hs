@@ -93,6 +93,7 @@ import           Polysemy.Trace
 import Polysemy.Log (Log)
 import qualified Polysemy.Log as Log
 import Polysemy.Log.Colog (interpretLogStdout)
+import GHC.Generics (Generic)
 
 -- for getEnvDefault, to get TMPDIR value.
 -- we could pass it as an argument

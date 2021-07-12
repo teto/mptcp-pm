@@ -37,7 +37,7 @@ Enter the development shell and start the daemon:
 
 ```
 $ nix develop
-$ cabal run daemon
+$ cabal run mptcp-manager
 ```
 
 # TODO
