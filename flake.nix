@@ -8,7 +8,7 @@
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
     flake-utils.url = "github:numtide/flake-utils";
-    hls.url = "github:haskell/haskell-language-server";
+    hls.url = "github:haskell/haskell-language-server/fix-nix-flake";
     haskellNix.url = "github:input-output-hk/haskell.nix";
   };
 

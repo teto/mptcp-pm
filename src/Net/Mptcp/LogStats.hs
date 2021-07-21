@@ -1,4 +1,6 @@
-module Net.MpTcp.LogStats
+module Net.MpTcp.LogStats (
+  logStatistics
+)
 where
 
 import FilePath

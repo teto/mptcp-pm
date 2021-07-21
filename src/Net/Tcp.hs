@@ -1,6 +1,6 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 {-|
-Module      : TCP
+Module      : Net.Tcp
 Description : Implementation of mptcp netlink path manager
 Maintainer  : matt
 Stability   : testing

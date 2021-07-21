@@ -1,3 +1,11 @@
+{-|
+Module      : Net.Tcp.Definitions
+Description : Implementation of mptcp netlink path manager
+Maintainer  : matt
+Stability   : testing
+Portability : Linux
+
+-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
 module Net.Tcp.Definitions (

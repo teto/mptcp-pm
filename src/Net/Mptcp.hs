@@ -1,5 +1,5 @@
 {-|
-Module      : MPTCP
+Module      : Net.Mptcp
 Description : Implementation of mptcp netlink path manager
 Maintainer  : matt
 Stability   : testing
@@ -9,7 +9,21 @@ OverloadedStrings allows Aeson to convert
 -}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE OverloadedStrings #-}
-module Net.Mptcp
+module Net.Mptcp (
+  -- * Types
+  MptcpConnection (..)
+  , MptcpPacket
+  , MptcpSocket (..)
+  , MptcpToken
+  , dumpAttribute
+  , mptcpConnAddSubflow
+  , mptcpConnRemoveSubflow
+  , newSubflowPkt
+  , capCwndPkt
+  , subflowFromAttributes
+  , readToken
+  , remoteIdFromAttributes
+)
 where
 
 import Net.SockDiag ()
@@ -188,12 +202,9 @@ genMptcpRequest fid cmd dump attrs =
   in
     assert hasTokenAttr pkt
 
-readToken :: Maybe ByteString -> MptcpToken
-readToken maybeVal = case maybeVal of
-  Nothing -> error "Missing token"
-  Just val -> case ( runGet getWord32host val) of
-    Left err -> error "could not decode"
-    Right mptcpToken -> mptcpToken
+-- | TODO change / return Either 
+readToken :: ByteString -> Either String MptcpToken
+readToken val = runGet getWord32host val
 
 -- LocId => Word8
 readLocId :: Maybe ByteString -> LocId
@@ -367,7 +378,11 @@ makeAttribute :: Int -- ^ MPTCP_ATTR_TOKEN value
                   -> Maybe MptcpAttribute
 makeAttribute i val =
   case toEnum i of
-    MPTCP_ATTR_TOKEN -> Just (MptcpAttrToken $ readToken $ Just val)
+    MPTCP_ATTR_TOKEN ->
+      case readToken val of 
+        Left err -> error "could not decode"
+        Right mptcpToken -> Just $ MptcpAttrToken mptcpToken
+
     -- TODO fix
     MPTCP_ATTR_FAMILY ->
         case runGet getWord16host val of
