@@ -1,5 +1,5 @@
 {-|
-Module      : IDiag
+Module      : Net.SockDiag
 Description : Implementation of mptcp netlink path manager
 Maintainer  : matt
 Stability   : testing

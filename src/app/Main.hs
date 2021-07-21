@@ -94,6 +94,7 @@ import Polysemy.Log (Log)
 import qualified Polysemy.Log as Log
 import Polysemy.Log.Colog (interpretLogStdout)
 import GHC.Generics (Generic)
+import Data.Either (fromRight)
 
 -- for getEnvDefault, to get TMPDIR value.
 -- we could pass it as an argument
@@ -556,10 +557,13 @@ dispatchPacket oldState (Packet hdr (GenlData genlHeader NoData) attributes) = l
         (MptcpSocket mptcpSockRaw fid) = mptcpSock
 
         -- i suppose token is always available right ?
-        token = readToken $ Map.lookup (fromEnum MPTCP_ATTR_TOKEN) attributes
+        token :: MptcpToken
+        token = case Map.lookup (fromEnum MPTCP_ATTR_TOKEN) attributes of
+          Nothing -> error "Could not retreive token "
+          Just bstr -> fromRight (error "could not retreive token") (readToken bstr)
         maybeMatch = Map.lookup token (connections oldState)
     in do
-        putStrLn $ "Fetching available paths"
+        putStrLn "Fetching available paths"
         availablePaths <- readMVar globalInterfaces
 
         putStrLn $ "dispatch cmd " ++ show cmd ++ " for token " ++ show token
@@ -583,10 +587,10 @@ dispatchPacket oldState (Packet hdr (GenlData genlHeader NoData) attributes) = l
                   _ -> return oldState
 
             Just (threadId, mvarConn) -> do
-                putStrLn $ "MATT: Received request for a known connection "
+                putStrLn "MATT: Received request for a known connection "
                 mptcpConn <- takeMVar mvarConn
 
-                putStrLn $ "Forwarding to dispatchPacketForKnownConnection "
+                putStrLn "Forwarding to dispatchPacketForKnownConnection "
                 case dispatchPacketForKnownConnection mptcpSock mptcpConn cmd attributes availablePaths of
                   (Nothing, _) -> do
                         putStrLn $ "Killing thread " ++ show threadId
