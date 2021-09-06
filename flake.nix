@@ -8,11 +8,11 @@
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
     flake-utils.url = "github:numtide/flake-utils";
-    hls.url = "github:haskell/haskell-language-server/fix-nix-flake";
-    haskellNix.url = "github:input-output-hk/haskell.nix";
+    hls.url = "github:haskell/haskell-language-server?rev=1ba88ab9eca1da29cd4fee7d2084eba4074fbe47";
+    # haskellNix.url = "github:input-output-hk/haskell.nix";
   };
 
-  outputs = { self, haskellNix, nixpkgs, flake-utils, hls }:
+  outputs = { self, nixpkgs, flake-utils, hls }:
     flake-utils.lib.eachSystem ["x86_64-linux"] (system: let
 
       compilerVersion = "8104";
@@ -24,14 +24,14 @@
       };
 
       overlays = [
-        haskellNix.overlay
+        # haskellNix.overlay
         (final: prev: {
           # This overlay adds our project to pkgs
-          mptcp-pm =
-            final.haskell-nix.project' {
-              src = ./.;
-              compiler-nix-name = "ghc${compilerVersion}";
-            };
+          # mptcp-pm =
+          #   final.haskell-nix.project' {
+          #     src = ./.;
+          #     compiler-nix-name = "ghc${compilerVersion}";
+          #   };
         })
       ];
       flake = pkgs.mptcp-pm.flake {};
@@ -40,6 +40,8 @@
           bytebuild = unmarkBroken (dontCheck hold.bytebuild);
           wide-word = unmarkBroken (dontCheck hold.wide-word);
           co-log-polysemy = unmarkBroken (doJailbreak (hold.co-log-polysemy));
+          polysemy = unmarkBroken (doJailbreak (hold.polysemy));
+          contiguous = unmarkBroken (doJailbreak (hold.contiguous));
           # cryptohash-md5 = doJailbreak (hold.cryptohash-md5);
           # cryptohash-sha1 = doJailbreak (hold.cryptohash-sha1);
           netlink = (overrideSrc hold.netlink {
@@ -54,24 +56,25 @@
 
       in rec {
     # haskell.compiler."ghc"
-    packages.mptcp-pm = flake.packages."mptcp-pm:exe:mptcp-manager";
-    # packages.mptcppm = pkgs.haskellPackages.callCabal2nix "mptcp-pm" ./. {
+    # packages.mptcp-pm = flake.packages."mptcp-pm:exe:mptcp-manager";
+
+    packages.mptcp-pm = pkgs.haskellPackages.callCabal2nix "mptcp-pm" ./. {
       # returnShellEnv = false;
       # withHoogle = true;
-      # overrides = haskellOverlay;
-      # modifier = drv:
-      #   pkgs.haskell.lib.addBuildTools drv (with pkgs;
-      #   [
-      #     # ghcid
-      #     haskellPackages.cabal-install
-      #     haskellPackages.c2hs
-      #     haskellPackages.stylish-haskell
-      #     haskellPackages.hlint
-      #     # haskellPackages.haskell-language-server
-      #     haskellPackages.hasktags
-      #     hls.packages."${system}"."haskell-language-server-${compilerVersion}"
-      #   ]);
-    # };
+      overrides = haskellOverlay;
+      modifier = drv:
+        pkgs.haskell.lib.addBuildTools drv (with pkgs;
+        [
+          # ghcid
+          haskellPackages.cabal-install
+          haskellPackages.c2hs
+          haskellPackages.stylish-haskell
+          haskellPackages.hlint
+          # haskellPackages.haskell-language-server
+          haskellPackages.hasktags
+          hls.packages."${system}"."haskell-language-server-${compilerVersion}"
+        ]);
+    };
 
     defaultPackage = packages.mptcp-pm;
 
